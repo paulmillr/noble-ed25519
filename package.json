@@ -1,0 +1,29 @@
+{
+  "name": "noble-ed25519",
+  "version": "0.1.0",
+  "description": "Noble ed25519. High-security, easily auditable, 0-dep pubkey/EDDSA/scalarmult.",
+  "main": "index.js",
+  "files": [
+    "index.js",
+    "index.d.ts"
+  ],
+  "scripts": {
+    "compile": "tsc -d",
+    "test": "jest"
+  },
+  "jest": {
+    "testRegex": "/.*?\\.test.ts",
+    "transform": {
+      "^.+\\.ts$": "ts-jest"
+    }
+  },
+  "author": "Paul Miller (https://paulmillr.com)",
+  "license": "MIT",
+  "devDependencies": {
+    "@types/jest": "^24.0.15",
+    "@types/node": "^12.0.8",
+    "fast-check": "^1.15.1",
+    "jest": "^24.8.0",
+    "ts-jest": "^24.0.2"
+  }
+}
