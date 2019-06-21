@@ -17,6 +17,8 @@
 
 ## Usage
 
+> npm install noble-ed25519
+
 ```js
 import * as ed25519 from "noble-ed25519";
 
