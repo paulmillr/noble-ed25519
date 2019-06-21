@@ -1,11 +1,19 @@
 # noble-ed25519
-> **noble-crypto** — high-security, easily auditable set of contained cryptographic libraries and tools.
 
-Noble [ed25519](https://en.wikipedia.org/wiki/EdDSA), an elliptic curve that could be used for assymetric encryption and EDDSA signature scheme.
+[ed25519](https://en.wikipedia.org/wiki/EdDSA), an elliptic curve that could be used for assymetric encryption and EDDSA signature scheme.
+
+### This library belongs to *noble* crypto
+
+> **noble-crypto** — high-security, easily auditable set of contained cryptographic libraries and tools.
 
 - No dependencies, one small file
 - Easily auditable TypeScript/JS code
 - Uses es2019 bigint. Supported in Chrome, Firefox, node 10+
+- All releases are signed and trusted
+- Check out all libraries:
+  [secp256k1](https://github.com/paulmillr/noble-secp256k1),
+  [ed25519](https://github.com/paulmillr/noble-ed25519),
+  [ripemd160](https://github.com/paulmillr/noble-ripemd160)
 
 ## Usage
 
