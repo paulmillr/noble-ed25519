@@ -1,5 +1,5 @@
 "use strict";
-/*! noble-secp256k1 - MIT License (c) Paul Miller (paulmillr.com) */
+/*! noble-ed25519 - MIT License (c) Paul Miller (paulmillr.com) */
 Object.defineProperty(exports, "__esModule", { value: true });
 const ENCODING_LENGTH = 32;
 const A = -1n;

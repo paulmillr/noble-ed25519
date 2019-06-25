@@ -1,4 +1,4 @@
-/*! noble-secp256k1 - MIT License (c) Paul Miller (paulmillr.com) */
+/*! noble-ed25519 - MIT License (c) Paul Miller (paulmillr.com) */
 // https://ed25519.cr.yp.to
 // https://en.wikipedia.org/wiki/EdDSA
 // Thanks DJB!

@@ -1,4 +1,4 @@
-/*! noble-secp256k1 - MIT License (c) Paul Miller (paulmillr.com) */
+/*! noble-ed25519 - MIT License (c) Paul Miller (paulmillr.com) */
 export declare const P: bigint;
 export declare const PRIME_ORDER: bigint;
 declare type PrivKey = Uint8Array | string | bigint | number;
