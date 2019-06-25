@@ -177,18 +177,8 @@ function mod(a, b) {
     const res = a % b;
     return res >= 0 ? res : b + res;
 }
-function expmod(num, e, q) {
-    if (e === 0n) {
-        return 1n;
-    }
-    let res = mod(expmod(num, e / 2n, q) ** 2n, q);
-    if (e & 1n) {
-        res = mod(res * num, q);
-    }
-    return res;
-}
 function inversion(num) {
-    return expmod(num, exports.P - 2n, exports.P);
+    return powMod(num, exports.P - 2n, exports.P);
 }
 function add(p1, p2) {
     const x = (p1.x * p2.y + p2.x * p1.y) * inversion(1n + d * p1.x * p2.x * p1.y * p2.y);

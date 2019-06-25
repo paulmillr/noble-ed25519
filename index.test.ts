@@ -19,9 +19,6 @@ const WRONG_MESSAGE = new Uint8Array([
  194,  17, 175,  28
 ]);
 
-console.log(MESSAGE);
-console.log(WRONG_MESSAGE);
-
 describe("ed25519", () => {
   it("should verify just signed message", async () => {
     await fc.assert(fc.asyncProperty(
@@ -55,7 +52,6 @@ describe("ed25519", () => {
     );
   });
   it("should sign and verify", async () => {
-    debugger;
     const publicKey = await ed25519.getPublicKey(PRIVATE_KEY);
     const signature = await ed25519.sign(MESSAGE, PRIVATE_KEY, publicKey);
     expect(await ed25519.verify(signature, MESSAGE, publicKey)).toBe(true);

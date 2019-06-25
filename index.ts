@@ -202,19 +202,8 @@ function mod(a: bigint, b: bigint) {
   return res >= 0 ? res : b + res;
 }
 
-function expmod(num: bigint, e: bigint, q: bigint) {
-  if (e === 0n) {
-    return 1n;
-  }
-  let res = mod(expmod(num, e / 2n, q) ** 2n, q);
-  if (e & 1n) {
-    res = mod(res * num, q);
-  }
-  return res;
-}
-
 function inversion(num: bigint) {
-  return expmod(num, P - 2n, P);
+  return powMod(num, P - 2n, P);
 }
 
 function add(p1: Point, p2: Point) {
