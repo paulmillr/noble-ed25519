@@ -212,7 +212,7 @@ function add(p1: Point, p2: Point) {
   return new Point(mod(x, P), mod(y, P));
 }
 
-function multiple(point: Point, n: bigint) {
+export function multiple(point: Point, n: bigint) {
   let q = new Point(0n, 1n);
   for (let db = point; n > 0n; n >>= 1n, db = add(db, db)) {
     if ((n & 1n) === 1n) {
