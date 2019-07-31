@@ -180,11 +180,19 @@ function mod(a, b) {
 function inversion(num) {
     return powMod(num, exports.P - 2n, exports.P);
 }
+function negative(p) {
+    return new Point(p.x, -p.y);
+}
 function add(p1, p2) {
     const x = (p1.x * p2.y + p2.x * p1.y) * inversion(1n + d * p1.x * p2.x * p1.y * p2.y);
     const y = (p1.y * p2.y + p1.x * p2.x) * inversion(1n - d * p1.x * p2.x * p1.y * p2.y);
     return new Point(mod(x, exports.P), mod(y, exports.P));
 }
+exports.add = add;
+function sub(p1, p2) {
+    return add(p1, negative(p2));
+}
+exports.sub = sub;
 function multiple(point, n) {
     let q = new Point(0n, 1n);
     for (let db = point; n > 0n; n >>= 1n, db = add(db, db)) {
@@ -194,6 +202,7 @@ function multiple(point, n) {
     }
     return q;
 }
+exports.multiple = multiple;
 function encodePrivate(privateBytes) {
     const last = ENCODING_LENGTH - 1;
     const head = privateBytes.slice(0, ENCODING_LENGTH);

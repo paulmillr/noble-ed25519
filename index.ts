@@ -210,7 +210,7 @@ function negative(p: Point) {
   return new Point(p.x, -p.y);
 }
 
-function add(p1: Point, p2: Point) {
+export function add(p1: Point, p2: Point) {
   const x = (p1.x * p2.y + p2.x * p1.y) * inversion(1n + d * p1.x * p2.x * p1.y * p2.y);
   const y = (p1.y * p2.y + p1.x * p2.x) * inversion(1n - d * p1.x * p2.x * p1.y * p2.y);
   return new Point(mod(x, P), mod(y, P));
@@ -220,7 +220,7 @@ export function sub(p1: Point, p2: Point) {
   return add(p1, negative(p2));
 }
 
-function multiple(point: Point, n: bigint) {
+export function multiple(point: Point, n: bigint) {
   let q = new Point(0n, 1n);
   for (let db = point; n > 0n; n >>= 1n, db = add(db, db)) {
     if ((n & 1n) === 1n) {
