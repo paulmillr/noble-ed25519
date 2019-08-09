@@ -57,8 +57,10 @@ class Point {
     }
     add(p2) {
         const p1 = this;
-        const x = (p1.x * p2.y + p2.x * p1.y) * inversion(1n + d * p1.x * p2.x * p1.y * p2.y);
-        const y = (p1.y * p2.y + p1.x * p2.x) * inversion(1n - d * p1.x * p2.x * p1.y * p2.y);
+        const x = (p1.x * p2.y + p2.x * p1.y) *
+            inversion(1n + d * p1.x * p2.x * p1.y * p2.y);
+        const y = (p1.y * p2.y + p1.x * p2.x) *
+            inversion(1n - d * p1.x * p2.x * p1.y * p2.y);
         return new Point(mod(x, exports.P), mod(y, exports.P));
     }
     sub(p2) {
@@ -128,7 +130,6 @@ function concatTypedArrays(...args) {
     }
     return result;
 }
-;
 function numberToUint8Array(num) {
     let hex = num.toString(16);
     hex = hex.length & 1 ? `0${hex}` : hex;
@@ -158,8 +159,7 @@ function powMod(x, power, order) {
     return res;
 }
 function arrayToHex(uint8a) {
-    return Array
-        .from(uint8a)
+    return Array.from(uint8a)
         .map(c => c.toString(16).padStart(2, "0"))
         .join("");
 }
@@ -189,7 +189,9 @@ async function hashNumber(...args) {
     return mod(value, exports.PRIME_ORDER);
 }
 function getPrivateBytes(privateKey) {
-    return sha512(privateKey instanceof Uint8Array ? privateKey : numberToUint8Array(privateKey));
+    return sha512(privateKey instanceof Uint8Array
+        ? privateKey
+        : numberToUint8Array(privateKey));
 }
 function keyPrefix(privateBytes) {
     return privateBytes.slice(ENCODING_LENGTH);
@@ -231,7 +233,9 @@ function normalizePoint(point, privateKey) {
     return point;
 }
 function normalizeSignature(signature) {
-    return signature instanceof SignResult ? signature : SignResult.fromHex(signature);
+    return signature instanceof SignResult
+        ? signature
+        : SignResult.fromHex(signature);
 }
 function normalizeHash(hash) {
     return hash instanceof Uint8Array ? hash : hexToArray(hash);

@@ -44,7 +44,11 @@ export class Point {
     let hex = this.y.toString(16);
     hex = hex.length & 1 ? `0${hex}` : hex;
     const u8 = new Uint8Array(ENCODING_LENGTH);
-    for (let i = hex.length - 2, j = 0; j < ENCODING_LENGTH && i >= 0; i -= 2, j++) {
+    for (
+      let i = hex.length - 2, j = 0;
+      j < ENCODING_LENGTH && i >= 0;
+      i -= 2, j++
+    ) {
       u8[j] = parseInt(hex[i] + hex[i + 1], 16);
     }
     const mask = this.x & 1n ? 0x80 : 0;
@@ -68,8 +72,12 @@ export class Point {
 
   add(p2: Point) {
     const p1 = this;
-    const x = (p1.x * p2.y + p2.x * p1.y) * inversion(1n + d * p1.x * p2.x * p1.y * p2.y);
-    const y = (p1.y * p2.y + p1.x * p2.x) * inversion(1n - d * p1.x * p2.x * p1.y * p2.y);
+    const x =
+      (p1.x * p2.y + p2.x * p1.y) *
+      inversion(1n + d * p1.x * p2.x * p1.y * p2.y);
+    const y =
+      (p1.y * p2.y + p1.x * p2.x) *
+      inversion(1n - d * p1.x * p2.x * p1.y * p2.y);
     return new Point(mod(x, P), mod(y, P));
   }
 
@@ -91,7 +99,7 @@ export class Point {
 // https://tools.ietf.org/html/rfc8032#section-5.1
 export const BASE_POINT = new Point(
   15112221349535400772501151409588531511454012693041857206046113283949847762202n,
-  46316835694926478169428394003475163141307993866256225615783033603165251855960n,
+  46316835694926478169428394003475163141307993866256225615783033603165251855960n
 );
 
 export class SignResult {
@@ -136,16 +144,15 @@ if (typeof window == "object" && "crypto" in window) {
   throw new Error("The environment doesn't have sha512 function");
 }
 
-
 function concatTypedArrays(...args: Array<Uint8Array>): Uint8Array {
   const result = new Uint8Array(args.reduce((a, arr) => a + arr.length, 0));
-  for(let i = 0, pad = 0; i < args.length; i++) {
+  for (let i = 0, pad = 0; i < args.length; i++) {
     const arr = args[i];
     result.set(arr, pad);
     pad += arr.length;
   }
   return result;
-};
+}
 
 function numberToUint8Array(num: bigint | number): Uint8Array {
   let hex = num.toString(16);
@@ -168,19 +175,18 @@ function arrayToNumberLE(bytes: Uint8Array): bigint {
 
 function powMod(x: bigint, power: bigint, order: bigint) {
   let res = 1n;
-  while(power > 0) {
+  while (power > 0) {
     if (power & 1n) {
       res = mod(res * x, order);
     }
     power >>= 1n;
-    x = mod(x * x, order)
+    x = mod(x * x, order);
   }
   return res;
 }
 
 function arrayToHex(uint8a: Uint8Array): string {
-  return Array
-    .from(uint8a)
+  return Array.from(uint8a)
     .map(c => c.toString(16).padStart(2, "0"))
     .join("");
 }
@@ -215,7 +221,11 @@ async function hashNumber(...args: Array<Uint8Array>) {
 }
 
 function getPrivateBytes(privateKey: bigint | number | Uint8Array) {
-  return sha512(privateKey instanceof Uint8Array ? privateKey : numberToUint8Array(privateKey));
+  return sha512(
+    privateKey instanceof Uint8Array
+      ? privateKey
+      : numberToUint8Array(privateKey)
+  );
 }
 
 function keyPrefix(privateBytes: Uint8Array) {
@@ -255,7 +265,10 @@ function normalizePublicKey(publicKey: PubKey): Point {
   return publicKey instanceof Point ? publicKey : Point.fromHex(publicKey);
 }
 
-function normalizePoint(point: Point, privateKey: PrivKey): Uint8Array | string | Point {
+function normalizePoint(
+  point: Point,
+  privateKey: PrivKey
+): Uint8Array | string | Point {
   if (privateKey instanceof Uint8Array) {
     return point.encode();
   }
@@ -266,7 +279,9 @@ function normalizePoint(point: Point, privateKey: PrivKey): Uint8Array | string 
 }
 
 function normalizeSignature(signature: Signature): SignResult {
-  return signature instanceof SignResult ? signature : SignResult.fromHex(signature);
+  return signature instanceof SignResult
+    ? signature
+    : SignResult.fromHex(signature);
 }
 
 function normalizeHash(hash: Hex) {
@@ -284,8 +299,16 @@ export async function getPublicKey(privateKey: PrivKey) {
   return normalizePoint(publicKey, privateKey);
 }
 
-export function sign(hash: Uint8Array, privateKey: PrivKey, publicKey: PubKey): Promise<Uint8Array>;
-export function sign(hash: string, privateKey: PrivKey, publicKey: PubKey): Promise<string>;
+export function sign(
+  hash: Uint8Array,
+  privateKey: PrivKey,
+  publicKey: PubKey
+): Promise<Uint8Array>;
+export function sign(
+  hash: string,
+  privateKey: PrivKey,
+  publicKey: PubKey
+): Promise<string>;
 export async function sign(hash: Hex, privateKey: PrivKey, publicKey: PubKey) {
   const message = normalizeHash(hash);
   publicKey = normalizePublicKey(publicKey);
@@ -300,7 +323,11 @@ export async function sign(hash: Hex, privateKey: PrivKey, publicKey: PubKey) {
   return hash instanceof Uint8Array ? hexToArray(signature) : signature;
 }
 
-export async function verify(signature: Signature, hash: Hex, publicKey: PubKey) {
+export async function verify(
+  signature: Signature,
+  hash: Hex,
+  publicKey: PubKey
+) {
   hash = normalizeHash(hash);
   publicKey = normalizePublicKey(publicKey);
   signature = normalizeSignature(signature);
