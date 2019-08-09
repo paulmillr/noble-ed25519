@@ -52,6 +52,27 @@ class Point {
         }
         return hex;
     }
+    reverseY() {
+        return new Point(this.x, -this.y);
+    }
+    add(p2) {
+        const p1 = this;
+        const x = (p1.x * p2.y + p2.x * p1.y) * inversion(1n + d * p1.x * p2.x * p1.y * p2.y);
+        const y = (p1.y * p2.y + p1.x * p2.x) * inversion(1n - d * p1.x * p2.x * p1.y * p2.y);
+        return new Point(mod(x, exports.P), mod(y, exports.P));
+    }
+    sub(p2) {
+        return this.add(p2.reverseY());
+    }
+    multiple(n) {
+        let q = new Point(0n, 1n);
+        for (let db = this; n > 0n; n >>= 1n, db = db.add(db)) {
+            if ((n & 1n) === 1n) {
+                q = q.add(db);
+            }
+        }
+        return q;
+    }
 }
 exports.Point = Point;
 exports.BASE_POINT = new Point(15112221349535400772501151409588531511454012693041857206046113283949847762202n, 46316835694926478169428394003475163141307993866256225615783033603165251855960n);
@@ -96,7 +117,7 @@ else if (typeof process === "object" && "node" in process.versions) {
     };
 }
 else {
-    throw new Error("The environment doesn't have cryptographically secure random function");
+    throw new Error("The environment doesn't have sha512 function");
 }
 function concatTypedArrays(...args) {
     const result = new Uint8Array(args.reduce((a, arr) => a + arr.length, 0));
@@ -180,29 +201,6 @@ function mod(a, b) {
 function inversion(num) {
     return powMod(num, exports.P - 2n, exports.P);
 }
-function negative(p) {
-    return new Point(p.x, -p.y);
-}
-function add(p1, p2) {
-    const x = (p1.x * p2.y + p2.x * p1.y) * inversion(1n + d * p1.x * p2.x * p1.y * p2.y);
-    const y = (p1.y * p2.y + p1.x * p2.x) * inversion(1n - d * p1.x * p2.x * p1.y * p2.y);
-    return new Point(mod(x, exports.P), mod(y, exports.P));
-}
-exports.add = add;
-function sub(p1, p2) {
-    return add(p1, negative(p2));
-}
-exports.sub = sub;
-function multiple(point, n) {
-    let q = new Point(0n, 1n);
-    for (let db = point; n > 0n; n >>= 1n, db = add(db, db)) {
-        if ((n & 1n) === 1n) {
-            q = add(q, db);
-        }
-    }
-    return q;
-}
-exports.multiple = multiple;
 function encodePrivate(privateBytes) {
     const last = ENCODING_LENGTH - 1;
     const head = privateBytes.slice(0, ENCODING_LENGTH);
@@ -238,17 +236,11 @@ function normalizeSignature(signature) {
 function normalizeHash(hash) {
     return hash instanceof Uint8Array ? hash : hexToArray(hash);
 }
-function scalarmultBase(privateKey) {
-    const multiplier = normalizePrivateKey(privateKey);
-    const publicKey = multiple(exports.BASE_POINT, multiplier);
-    return normalizePoint(publicKey, privateKey);
-}
-exports.scalarmultBase = scalarmultBase;
 async function getPublicKey(privateKey) {
     const multiplier = normalizePrivateKey(privateKey);
     const privateBytes = await getPrivateBytes(multiplier);
     const privateInt = encodePrivate(privateBytes);
-    const publicKey = multiple(exports.BASE_POINT, privateInt);
+    const publicKey = exports.BASE_POINT.multiple(privateInt);
     return normalizePoint(publicKey, privateKey);
 }
 exports.getPublicKey = getPublicKey;
@@ -259,7 +251,7 @@ async function sign(hash, privateKey, publicKey) {
     const privateBytes = await getPrivateBytes(privateKey);
     const privatePrefix = keyPrefix(privateBytes);
     const r = await hashNumber(privatePrefix, message);
-    const R = multiple(exports.BASE_POINT, r);
+    const R = exports.BASE_POINT.multiple(r);
     const h = await hashNumber(R.encode(), publicKey.encode(), message);
     const S = mod(r + h * encodePrivate(privateBytes), exports.PRIME_ORDER);
     const signature = new SignResult(R, S).toHex();
@@ -271,8 +263,8 @@ async function verify(signature, hash, publicKey) {
     publicKey = normalizePublicKey(publicKey);
     signature = normalizeSignature(signature);
     const h = await hashNumber(signature.r.encode(), publicKey.encode(), hash);
-    const BS = multiple(exports.BASE_POINT, signature.s);
-    const RP = add(signature.r, multiple(publicKey, h));
-    return BS.x === RP.x && BS.y === RP.y;
+    const S = exports.BASE_POINT.multiple(signature.s);
+    const R = signature.r.add(publicKey.multiple(h));
+    return S.x === R.x && S.y === R.y;
 }
 exports.verify = verify;

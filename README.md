@@ -50,17 +50,6 @@ function getPublicKey(privateKey: bigint): Promise<Point>;
     * Uses **promises**, because ed25519 uses sha internally; and we're using built-in browser `window.crypto`, which returns `Promise`.
 
 ```typescript
-function scalarmultBase(privateKey: Uint8Array): Uint8Array;
-function scalarmultBase(privateKey: string): string;
-function scalarmultBase(privateKey: bigint): Point;
-```
-- `privateKey: Uint8Array | string | bigint` basically a number on which the lib will execute base point scalar multiplication.
-- Returns:
-    * `Uint8Array` if `Uint8Array` was passed
-    * `string` if hex `string` was passed
-    * `Point(x, y)` instance if `bigint` was passed
-
-```typescript
 function sign(hash: Uint8Array, privateKey: Uint8Array | bigint, k?: bigint): Promise<Uint8Array>;
 function sign(hash: string, privateKey: string | bigint, k?: bigint): Promise<string>;
 ```
@@ -91,20 +80,28 @@ ed25519.P // 2 ^ 255 - 19
 // Prime order
 ed25519.PRIME_ORDER // 2 ^ 252 - 27742317777372353535851937790883648493
 
-// Base point
-ed25519.BASE_POINT // new ed25519.Point(x, y) where
-// x = 15112221349535400772501151409588531511454012693041857206046113283949847762202n;
-// y = 46316835694926478169428394003475163141307993866256225615783033603165251855960n;
-
 // Elliptic curve point
 ed25519.Point {
+  static fromHex(hash: string);
   constructor(x: bigint, y: bigint);
   toHex(): string;
+  encode(): Uint8Array;
+  add(other: Point): Point;
+  sub(other: Point): Point;
+  multiple(scalar: bigint): Point;
 }
 secp256k1.SignResult {
   constructor(r: bigint, s: bigint);
   toHex(): string;
 }
+
+// Base point
+ed25519.BASE_POINT // new ed25519.Point(x, y) where
+// x = 15112221349535400772501151409588531511454012693041857206046113283949847762202n;
+// y = 46316835694926478169428394003475163141307993866256225615783033603165251855960n;
+
+// Example usage:
+ed25519.BASE_POINT.multiple(65537n);
 ```
 
 ## Security

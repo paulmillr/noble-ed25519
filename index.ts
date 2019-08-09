@@ -6,9 +6,9 @@ const ENCODING_LENGTH = 32;
 const A = -1n;
 const C = 1n;
 // 𝔽p
-export const P = 2n**255n - 19n;
-// Prime subgroup. 25519 is a curve with cofactor = 8, so the order is this one:
-export const PRIME_ORDER = 2n**252n + 27742317777372353535851937790883648493n;
+export const P = 2n ** 255n - 19n;
+// Prime subgroup. 25519 is a curve with cofactor = 8, so the order is:
+export const PRIME_ORDER = 2n ** 252n + 27742317777372353535851937790883648493n;
 const d = -121665n * inversion(121666n);
 const I = powMod(2n, (P - 1n) / 4n, P);
 
@@ -40,7 +40,7 @@ export class Point {
     return new Point(x, y);
   }
 
-  encode() {
+  encode(): Uint8Array {
     let hex = this.y.toString(16);
     hex = hex.length & 1 ? `0${hex}` : hex;
     const u8 = new Uint8Array(ENCODING_LENGTH);
@@ -52,7 +52,7 @@ export class Point {
     return u8;
   }
 
-  toHex() {
+  toHex(): string {
     const bytes = this.encode();
     let hex = "";
     for (let i = 0; i < bytes.length; i++) {
@@ -60,6 +60,31 @@ export class Point {
       hex = `${hex}${value.length > 1 ? value : `0${value}`}`;
     }
     return hex;
+  }
+
+  reverseY() {
+    return new Point(this.x, -this.y);
+  }
+
+  add(p2: Point) {
+    const p1 = this;
+    const x = (p1.x * p2.y + p2.x * p1.y) * inversion(1n + d * p1.x * p2.x * p1.y * p2.y);
+    const y = (p1.y * p2.y + p1.x * p2.x) * inversion(1n - d * p1.x * p2.x * p1.y * p2.y);
+    return new Point(mod(x, P), mod(y, P));
+  }
+
+  sub(p2: Point) {
+    return this.add(p2.reverseY());
+  }
+
+  multiple(n: bigint) {
+    let q = new Point(0n, 1n);
+    for (let db: Point = this; n > 0n; n >>= 1n, db = db.add(db)) {
+      if ((n & 1n) === 1n) {
+        q = q.add(db);
+      }
+    }
+    return q;
   }
 }
 
@@ -108,7 +133,7 @@ if (typeof window == "object" && "crypto" in window) {
     return Uint8Array.from(hash.digest());
   };
 } else {
-  throw new Error("The environment doesn't have cryptographically secure random function");
+  throw new Error("The environment doesn't have sha512 function");
 }
 
 
@@ -206,30 +231,6 @@ function inversion(num: bigint) {
   return powMod(num, P - 2n, P);
 }
 
-function negative(p: Point) {
-  return new Point(p.x, -p.y);
-}
-
-export function add(p1: Point, p2: Point) {
-  const x = (p1.x * p2.y + p2.x * p1.y) * inversion(1n + d * p1.x * p2.x * p1.y * p2.y);
-  const y = (p1.y * p2.y + p1.x * p2.x) * inversion(1n - d * p1.x * p2.x * p1.y * p2.y);
-  return new Point(mod(x, P), mod(y, P));
-}
-
-export function sub(p1: Point, p2: Point) {
-  return add(p1, negative(p2));
-}
-
-export function multiple(point: Point, n: bigint) {
-  let q = new Point(0n, 1n);
-  for (let db = point; n > 0n; n >>= 1n, db = add(db, db)) {
-    if ((n & 1n) === 1n) {
-      q = add(q, db);
-    }
-  }
-  return q;
-}
-
 function encodePrivate(privateBytes: Uint8Array) {
   const last = ENCODING_LENGTH - 1;
   const head = privateBytes.slice(0, ENCODING_LENGTH);
@@ -272,15 +273,6 @@ function normalizeHash(hash: Hex) {
   return hash instanceof Uint8Array ? hash : hexToArray(hash);
 }
 
-export function scalarmultBase(privateKey: Uint8Array): Uint8Array;
-export function scalarmultBase(privateKey: string): string;
-export function scalarmultBase(privateKey: bigint | number): Point;
-export function scalarmultBase(privateKey: PrivKey) {
-  const multiplier = normalizePrivateKey(privateKey);
-  const publicKey = multiple(BASE_POINT, multiplier);
-  return normalizePoint(publicKey, privateKey);
-}
-
 export function getPublicKey(privateKey: Uint8Array): Promise<Uint8Array>;
 export function getPublicKey(privateKey: string): Promise<string>;
 export function getPublicKey(privateKey: bigint | number): Promise<Point>;
@@ -288,7 +280,7 @@ export async function getPublicKey(privateKey: PrivKey) {
   const multiplier = normalizePrivateKey(privateKey);
   const privateBytes = await getPrivateBytes(multiplier);
   const privateInt = encodePrivate(privateBytes);
-  const publicKey = multiple(BASE_POINT, privateInt);
+  const publicKey = BASE_POINT.multiple(privateInt);
   return normalizePoint(publicKey, privateKey);
 }
 
@@ -301,7 +293,7 @@ export async function sign(hash: Hex, privateKey: PrivKey, publicKey: PubKey) {
   const privateBytes = await getPrivateBytes(privateKey);
   const privatePrefix = keyPrefix(privateBytes);
   const r = await hashNumber(privatePrefix, message);
-  const R = multiple(BASE_POINT, r);
+  const R = BASE_POINT.multiple(r);
   const h = await hashNumber(R.encode(), publicKey.encode(), message);
   const S = mod(r + h * encodePrivate(privateBytes), PRIME_ORDER);
   const signature = new SignResult(R, S).toHex();
@@ -313,7 +305,7 @@ export async function verify(signature: Signature, hash: Hex, publicKey: PubKey)
   publicKey = normalizePublicKey(publicKey);
   signature = normalizeSignature(signature);
   const h = await hashNumber(signature.r.encode(), publicKey.encode(), hash);
-  const BS = multiple(BASE_POINT, signature.s);
-  const RP = add(signature.r, multiple(publicKey, h));
-  return BS.x === RP.x && BS.y === RP.y;
+  const S = BASE_POINT.multiple(signature.s);
+  const R = signature.r.add(publicKey.multiple(h));
+  return S.x === R.x && S.y === R.y;
 }
