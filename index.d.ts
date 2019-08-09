@@ -12,6 +12,9 @@ export declare class Point {
     static fromHex(hash: Hex): Point;
     encode(): Uint8Array;
     toHex(): string;
+    add(other: Point): Point;
+    sub(other: Point): Point;
+    multiple(scalar: bigint): Point;
 }
 export declare const BASE_POINT: Point;
 export declare class SignResult {
@@ -21,9 +24,6 @@ export declare class SignResult {
     static fromHex(hex: Hex): SignResult;
     toHex(): string;
 }
-export declare function scalarmultBase(privateKey: Uint8Array): Uint8Array;
-export declare function scalarmultBase(privateKey: string): string;
-export declare function scalarmultBase(privateKey: bigint | number): Point;
 export declare function getPublicKey(privateKey: Uint8Array): Promise<Uint8Array>;
 export declare function getPublicKey(privateKey: string): Promise<string>;
 export declare function getPublicKey(privateKey: bigint | number): Promise<Point>;
