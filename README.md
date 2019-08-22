@@ -77,7 +77,7 @@ The library also exports helpers:
 // 𝔽p
 ed25519.P // 2 ^ 255 - 19
 
-// Prime order
+// Subgroup order
 ed25519.PRIME_ORDER // 2 ^ 252 - 27742317777372353535851937790883648493
 
 // Elliptic curve point
@@ -87,8 +87,8 @@ ed25519.Point {
   toHex(): string;
   encode(): Uint8Array;
   add(other: Point): Point;
-  sub(other: Point): Point;
-  multiple(scalar: bigint): Point;
+  subtract(other: Point): Point;
+  multiply(scalar: bigint): Point;
 }
 secp256k1.SignResult {
   constructor(r: bigint, s: bigint);
@@ -101,7 +101,7 @@ ed25519.BASE_POINT // new ed25519.Point(x, y) where
 // y = 46316835694926478169428394003475163141307993866256225615783033603165251855960n;
 
 // Example usage:
-ed25519.BASE_POINT.multiple(65537n);
+ed25519.BASE_POINT.multiply(65537n);
 ```
 
 ## Security

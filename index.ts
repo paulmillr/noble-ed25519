@@ -81,11 +81,11 @@ export class Point {
     return new Point(mod(x, P), mod(y, P));
   }
 
-  sub(p2: Point) {
+  subtract(p2: Point) {
     return this.add(p2.reverseY());
   }
 
-  multiple(n: bigint) {
+  multiply(n: bigint) {
     let q = new Point(0n, 1n);
     for (let db: Point = this; n > 0n; n >>= 1n, db = db.add(db)) {
       if ((n & 1n) === 1n) {
@@ -295,7 +295,7 @@ export async function getPublicKey(privateKey: PrivKey) {
   const multiplier = normalizePrivateKey(privateKey);
   const privateBytes = await getPrivateBytes(multiplier);
   const privateInt = encodePrivate(privateBytes);
-  const publicKey = BASE_POINT.multiple(privateInt);
+  const publicKey = BASE_POINT.multiply(privateInt);
   return normalizePoint(publicKey, privateKey);
 }
 
@@ -316,7 +316,7 @@ export async function sign(hash: Hex, privateKey: PrivKey, publicKey: PubKey) {
   const privateBytes = await getPrivateBytes(privateKey);
   const privatePrefix = keyPrefix(privateBytes);
   const r = await hashNumber(privatePrefix, message);
-  const R = BASE_POINT.multiple(r);
+  const R = BASE_POINT.multiply(r);
   const h = await hashNumber(R.encode(), publicKey.encode(), message);
   const S = mod(r + h * encodePrivate(privateBytes), PRIME_ORDER);
   const signature = new SignResult(R, S).toHex();
@@ -332,7 +332,7 @@ export async function verify(
   publicKey = normalizePublicKey(publicKey);
   signature = normalizeSignature(signature);
   const h = await hashNumber(signature.r.encode(), publicKey.encode(), hash);
-  const S = BASE_POINT.multiple(signature.s);
-  const R = signature.r.add(publicKey.multiple(h));
+  const S = BASE_POINT.multiply(signature.s);
+  const R = signature.r.add(publicKey.multiply(h));
   return S.x === R.x && S.y === R.y;
 }

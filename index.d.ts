@@ -12,9 +12,10 @@ export declare class Point {
     static fromHex(hash: Hex): Point;
     encode(): Uint8Array;
     toHex(): string;
-    add(other: Point): Point;
-    sub(other: Point): Point;
-    multiple(scalar: bigint): Point;
+    reverseY(): Point;
+    add(p2: Point): Point;
+    subtract(p2: Point): Point;
+    multiply(n: bigint): Point;
 }
 export declare const BASE_POINT: Point;
 export declare class SignResult {
