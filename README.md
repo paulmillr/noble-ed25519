@@ -35,6 +35,12 @@ const HASH_MESSSAGE = new Uint8Array([99, 100, 101, 102, 103]);
 
 ## API
 
+- [`getPublicKey(privateKey)`](#getpublickeyprivatekey)
+- [`sign(hash, privateKey)`](#signhash-privatekey)
+- [`verify(signature, hash, publicKey)`](#verifysignature-hash-publickey)
+- [Helpers & Point](#helpers--point)
+
+##### `getPublicKey(privateKey)`
 ```typescript
 function getPublicKey(privateKey: Uint8Array): Promise<Uint8Array>;
 function getPublicKey(privateKey: string): Promise<string>;
@@ -49,6 +55,7 @@ function getPublicKey(privateKey: bigint): Promise<Point>;
     * `Promise<Point(x, y)>` instance if `bigint` was passed
     * Uses **promises**, because ed25519 uses sha internally; and we're using built-in browser `window.crypto`, which returns `Promise`.
 
+##### `sign(hash, privateKey)`
 ```typescript
 function sign(hash: Uint8Array, privateKey: Uint8Array | bigint, k?: bigint): Promise<Uint8Array>;
 function sign(hash: string, privateKey: string | bigint, k?: bigint): Promise<string>;
@@ -59,6 +66,7 @@ function sign(hash: string, privateKey: string | bigint, k?: bigint): Promise<st
 - Returns DER encoded EdDSA signature. You can consume it with `SignResult.fromHex()` method:
     - `SignResult.fromHex(ed25519.sign(hash, privateKey, publicKey))`
 
+##### `verify(signature, hash, publicKey)`
 ```typescript
 function verify(
   signature: Uint8Array | string | SignResult,
@@ -71,7 +79,7 @@ function verify(
 - `publicKey: string | Uint8Array | Point` - e.g. that was generated from `privateKey` by `getPublicKey`
 - Returns `Promise<boolean>`: `Promise<true>` if `signature == hash`; otherwise `Promise<false>`
 
-The library also exports helpers:
+##### Helpers & Point
 
 ```typescript
 // 𝔽p
@@ -90,7 +98,7 @@ ed25519.Point {
   subtract(other: Point): Point;
   multiply(scalar: bigint): Point;
 }
-secp256k1.SignResult {
+ed25519.SignResult {
   constructor(r: bigint, s: bigint);
   toHex(): string;
 }
