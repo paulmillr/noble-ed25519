@@ -252,13 +252,17 @@ function encodePrivate(privateBytes: Uint8Array) {
 }
 
 function normalizePrivateKey(privateKey: PrivKey): bigint {
+  let res: bigint;
   if (privateKey instanceof Uint8Array) {
-    return arrayToNumberBE(privateKey);
+    res = arrayToNumberBE(privateKey);
+  } else if (typeof privateKey === "string") {
+    res = hexToNumber(privateKey);
+  } else {
+    res = BigInt(privateKey);
   }
-  if (typeof privateKey === "string") {
-    return hexToNumber(privateKey);
-  }
-  return BigInt(privateKey);
+  return res;
+  // TODO
+  // return res % PRIME_ORDER;
 }
 
 function normalizePublicKey(publicKey: PubKey): Point {
@@ -301,18 +305,16 @@ export async function getPublicKey(privateKey: PrivKey) {
 
 export function sign(
   hash: Uint8Array,
-  privateKey: PrivKey,
-  publicKey: PubKey
+  privateKey: PrivKey
 ): Promise<Uint8Array>;
 export function sign(
   hash: string,
-  privateKey: PrivKey,
-  publicKey: PubKey
+  privateKey: PrivKey
 ): Promise<string>;
-export async function sign(hash: Hex, privateKey: PrivKey, publicKey: PubKey) {
+export async function sign(hash: Hex, privateKey: PrivKey) {
   const message = normalizeHash(hash);
-  publicKey = normalizePublicKey(publicKey);
   privateKey = normalizePrivateKey(privateKey);
+  const publicKey = await getPublicKey(privateKey);
   const privateBytes = await getPrivateBytes(privateKey);
   const privatePrefix = keyPrefix(privateBytes);
   const r = await hashNumber(privatePrefix, message);

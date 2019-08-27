@@ -212,13 +212,17 @@ function encodePrivate(privateBytes) {
     return arrayToNumberLE(head);
 }
 function normalizePrivateKey(privateKey) {
+    let res;
     if (privateKey instanceof Uint8Array) {
-        return arrayToNumberBE(privateKey);
+        res = arrayToNumberBE(privateKey);
     }
-    if (typeof privateKey === "string") {
-        return hexToNumber(privateKey);
+    else if (typeof privateKey === "string") {
+        res = hexToNumber(privateKey);
     }
-    return BigInt(privateKey);
+    else {
+        res = BigInt(privateKey);
+    }
+    return res;
 }
 function normalizePublicKey(publicKey) {
     return publicKey instanceof Point ? publicKey : Point.fromHex(publicKey);
@@ -248,10 +252,10 @@ async function getPublicKey(privateKey) {
     return normalizePoint(publicKey, privateKey);
 }
 exports.getPublicKey = getPublicKey;
-async function sign(hash, privateKey, publicKey) {
+async function sign(hash, privateKey) {
     const message = normalizeHash(hash);
-    publicKey = normalizePublicKey(publicKey);
     privateKey = normalizePrivateKey(privateKey);
+    const publicKey = await getPublicKey(privateKey);
     const privateBytes = await getPrivateBytes(privateKey);
     const privatePrefix = keyPrefix(privateBytes);
     const r = await hashNumber(privatePrefix, message);

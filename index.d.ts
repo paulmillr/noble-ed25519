@@ -28,7 +28,7 @@ export declare class SignResult {
 export declare function getPublicKey(privateKey: Uint8Array): Promise<Uint8Array>;
 export declare function getPublicKey(privateKey: string): Promise<string>;
 export declare function getPublicKey(privateKey: bigint | number): Promise<Point>;
-export declare function sign(hash: Uint8Array, privateKey: PrivKey, publicKey: PubKey): Promise<Uint8Array>;
-export declare function sign(hash: string, privateKey: PrivKey, publicKey: PubKey): Promise<string>;
+export declare function sign(hash: Uint8Array, privateKey: PrivKey): Promise<Uint8Array>;
+export declare function sign(hash: string, privateKey: PrivKey): Promise<string>;
 export declare function verify(signature: Signature, hash: Hex, publicKey: PubKey): Promise<boolean>;
 export {};
