@@ -1,0 +1,14 @@
+{
+  "compilerOptions": {
+    "module": "commonjs",
+		"strict": true,
+    "target": "esnext",
+    "noImplicitAny": true,
+    "removeComments": true,
+    "preserveConstEnums": true,
+    "experimentalDecorators": true,
+    "outDir": "lib"
+  },
+  "include": ["**/*"],
+  "exclude": ["node_modules", "**/*.test.ts"]
+}
