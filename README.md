@@ -2,6 +2,8 @@
 
 [ed25519](https://en.wikipedia.org/wiki/EdDSA), an elliptic curve that could be used for assymetric encryption and EDDSA signature scheme.
 
+Supports [ristretto255](https://ristretto.group).
+
 ### This library belongs to *noble* crypto
 
 > **noble-crypto** — high-security, easily auditable set of contained cryptographic libraries and tools.
@@ -112,6 +114,8 @@ ed25519.BASE_POINT // new ed25519.Point(x, y) where
 // Example usage:
 ed25519.BASE_POINT.multiply(65537n);
 ```
+
+There are additional `ristretto255` helpers in `ristretto255.js` file.
 
 ## Security
 
