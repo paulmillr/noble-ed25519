@@ -56,6 +56,13 @@ export class Point {
     return u8;
   }
 
+  /**
+   * Converts point to compressed representation of its Y.
+   * ECDSA uses `04${x}${y}` to represent long form and
+   * `02${x}` / `03${x}` to represent short form,
+   * where leading bit signifies positive or negative Y.
+   * EDDSA (ed25519) uses short form.
+   */
   toHex(): string {
     const bytes = this.encode();
     let hex = "";
@@ -154,8 +161,9 @@ function concatTypedArrays(...args: Array<Uint8Array>): Uint8Array {
   return result;
 }
 
-function numberToUint8Array(num: bigint | number): Uint8Array {
+function numberToUint8Array(num: bigint | number, padding?: number): Uint8Array {
   let hex = num.toString(16);
+  if (padding) hex = hex.padStart(padding);
   hex = hex.length & 1 ? `0${hex}` : hex;
   const len = hex.length / 2;
   const u8 = new Uint8Array(len);
@@ -183,12 +191,6 @@ function powMod(x: bigint, power: bigint, order: bigint) {
     x = mod(x * x, order);
   }
   return res;
-}
-
-function arrayToHex(uint8a: Uint8Array): string {
-  return Array.from(uint8a)
-    .map(c => c.toString(16).padStart(2, "0"))
-    .join("");
 }
 
 function hexToArray(hash: string): Uint8Array {
@@ -224,7 +226,7 @@ function getPrivateBytes(privateKey: bigint | number | Uint8Array) {
   return sha512(
     privateKey instanceof Uint8Array
       ? privateKey
-      : numberToUint8Array(privateKey)
+      : numberToUint8Array(privateKey, 64)
   );
 }
 

@@ -18,7 +18,9 @@
     "testRegex": "/.*?\\.test.ts",
     "transform": {
       "^.+\\.ts$": "ts-jest"
-    }
+    },
+    "useStderr": true,
+    "bail": 2
   },
   "author": "Paul Miller (https://paulmillr.com)",
   "homepage": "https://github.com/paulmillr/noble-ed25519",

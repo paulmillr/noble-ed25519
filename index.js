@@ -130,8 +130,10 @@ function concatTypedArrays(...args) {
     }
     return result;
 }
-function numberToUint8Array(num) {
+function numberToUint8Array(num, padding) {
     let hex = num.toString(16);
+    if (padding)
+        hex = hex.padStart(padding);
     hex = hex.length & 1 ? `0${hex}` : hex;
     const len = hex.length / 2;
     const u8 = new Uint8Array(len);
@@ -191,7 +193,7 @@ async function hashNumber(...args) {
 function getPrivateBytes(privateKey) {
     return sha512(privateKey instanceof Uint8Array
         ? privateKey
-        : numberToUint8Array(privateKey));
+        : numberToUint8Array(privateKey, 64));
 }
 function keyPrefix(privateBytes) {
     return privateBytes.slice(ENCODING_LENGTH);
