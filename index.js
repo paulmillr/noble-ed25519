@@ -160,11 +160,6 @@ function powMod(x, power, order) {
     }
     return res;
 }
-function arrayToHex(uint8a) {
-    return Array.from(uint8a)
-        .map(c => c.toString(16).padStart(2, "0"))
-        .join("");
-}
 function hexToArray(hash) {
     hash = hash.length & 1 ? `0${hash}` : hash;
     const len = hash.length;
