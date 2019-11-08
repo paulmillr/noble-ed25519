@@ -26,12 +26,12 @@ Supports [ristretto255](https://ristretto.group).
 ```js
 import * as ed25519 from "noble-ed25519";
 
-const PRIVATE_KEY = 0xa665a45920422f9d417e4867ef;
+const PRIVATE_KEY = 0xa665a45920422f9d417e4867efn;
 const HASH_MESSSAGE = new Uint8Array([99, 100, 101, 102, 103]);
 
 (async () => {
   const publicKey = await ed25519.getPublicKey(PRIVATE_KEY);
-  const signature = await ed25519.sign(HASH_MESSAGE, PRIVATE_KEY, publicKey);
+  const signature = await ed25519.sign(HASH_MESSAGE, PRIVATE_KEY);
   const isMessageSigned = await ed25519.verify(signature, HASH_MESSAGE, publicKey);
 })();
 ```
@@ -56,7 +56,7 @@ function getPublicKey(privateKey: bigint): Promise<Point>;
     * `Promise<Uint8Array>` if `Uint8Array` was passed
     * `Promise<string>` if hex `string` was passed
     * `Promise<Point(x, y)>` instance if `bigint` was passed
-    * Uses **promises**, because ed25519 uses sha internally; and we're using built-in browser `window.crypto`, which returns `Promise`.
+    * Uses **promises**, because ed25519 uses SHA internally; and we're using built-in browser `window.crypto`, which returns `Promise`.
 
 ##### `sign(hash, privateKey)`
 ```typescript
@@ -65,8 +65,7 @@ function sign(hash: string, privateKey: string | bigint, k?: bigint): Promise<st
 ```
 - `hash: Uint8Array` - message hash which would be signed
 - `privateKey: Uint8Array | bigint` - private key which will sign the hash
-- `publicKey: Uint8Array | Point` - e.g. that was generated from `privateKey` by `getPublicKey`
-- Returns DER encoded EdDSA signature. You can consume it with `SignResult.fromHex()` method:
+- Returns EdDSA signature. You can consume it with `SignResult.fromHex()` method:
     - `SignResult.fromHex(ed25519.sign(hash, privateKey, publicKey))`
 
 ##### `verify(signature, hash, publicKey)`
@@ -95,7 +94,7 @@ ed25519.PRIME_ORDER // 2 ^ 252 - 27742317777372353535851937790883648493
 ed25519.Point {
   static fromHex(hash: string);
   constructor(x: bigint, y: bigint);
-  toHex(): string;
+  toHex(): string; // Compact representation of a Point
   encode(): Uint8Array;
   add(other: Point): Point;
   subtract(other: Point): Point;
