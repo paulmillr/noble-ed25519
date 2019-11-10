@@ -111,7 +111,8 @@ if (typeof window == "object" && "crypto" in window) {
     };
 }
 else if (typeof process === "object" && "node" in process.versions) {
-    const { createHash } = require("crypto");
+    const req = require;
+    const { createHash } = req("crypto");
     sha512 = async (message) => {
         const hash = createHash("sha512");
         hash.update(message);
