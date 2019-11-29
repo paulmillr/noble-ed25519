@@ -60,13 +60,13 @@ function getPublicKey(privateKey: bigint): Promise<Point>;
 
 ##### `sign(hash, privateKey)`
 ```typescript
-function sign(hash: Uint8Array, privateKey: Uint8Array | bigint, k?: bigint): Promise<Uint8Array>;
-function sign(hash: string, privateKey: string | bigint, k?: bigint): Promise<string>;
+function sign(hash: Uint8Array, privateKey: Uint8Array | bigint): Promise<Uint8Array>;
+function sign(hash: string, privateKey: string | bigint): Promise<string>;
 ```
 - `hash: Uint8Array` - message hash which would be signed
 - `privateKey: Uint8Array | bigint` - private key which will sign the hash
 - Returns EdDSA signature. You can consume it with `SignResult.fromHex()` method:
-    - `SignResult.fromHex(ed25519.sign(hash, privateKey, publicKey))`
+    - `SignResult.fromHex(ed25519.sign(hash, privateKey))`
 
 ##### `verify(signature, hash, publicKey)`
 ```typescript
