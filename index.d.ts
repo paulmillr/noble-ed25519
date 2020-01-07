@@ -9,9 +9,12 @@ export declare class Point {
     x: bigint;
     y: bigint;
     constructor(x: bigint, y: bigint);
+    static fromY(y: bigint): Point;
     static fromHex(hash: Hex): Point;
+    static fromX25519(u: bigint): Point;
     encode(): Uint8Array;
     toHex(): string;
+    toX25519(): bigint;
     reverseY(): Point;
     add(p2: Point): Point;
     subtract(p2: Point): Point;

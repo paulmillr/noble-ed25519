@@ -20,12 +20,11 @@ type Signature = Uint8Array | string | SignResult;
 export class Point {
   constructor(public x: bigint, public y: bigint) {}
 
-  static fromHex(hash: Hex) {
-    const bytes = hash instanceof Uint8Array ? hash : hexToArray(hash);
+  static fromY(y: bigint) {
+    const bytes = numberToUint8Array(y);
     const len = bytes.length - 1;
-    const normedLast = bytes[len] & ~0x80;
-    const normed = new Uint8Array([...bytes.slice(0, -1), normedLast]);
-    const y = arrayToNumberLE(normed);
+
+    y = mod(y, P);
     const sqrY = y * y;
     const sqrX = mod((sqrY - C) * inversion(C * d * sqrY - A), P);
     let x = powMod(sqrX, (P + 3n) / 8n, P);
@@ -38,6 +37,20 @@ export class Point {
       x = mod(-x, P);
     }
     return new Point(x, y);
+  }
+
+  static fromHex(hash: Hex) {
+    const bytes = hash instanceof Uint8Array ? hash : hexToArray(hash);
+    const len = bytes.length - 1;
+    const normedLast = bytes[len] & ~0x80;
+    const normed = new Uint8Array([...bytes.slice(0, -1), normedLast]);
+    const y = arrayToNumberLE(normed);
+    return Point.fromY(y);
+  }
+
+  static fromX25519(u: bigint) {
+    const y = (u - 1n) * inversion(u + 1n);
+    return Point.fromY(y);
   }
 
   encode(): Uint8Array {
@@ -71,6 +84,17 @@ export class Point {
       hex = `${hex}${value.length > 1 ? value : `0${value}`}`;
     }
     return hex;
+  }
+
+  // Converts to Montgomery; aka x coordinate of curve25519.
+  toX25519() {
+    // curve25519 is birationally equivalent to ed25519
+    // x, y: ed25519 coordinates
+    // u, v: x25519 coordinates
+    // u = (1 + y) / (1 - y)
+    // See https://blog.filippo.io/using-ed25519-keys-for-encryption
+    const res = (1n + this.y) * inversion(1n - this.y);
+    return mod(res, P);
   }
 
   reverseY() {

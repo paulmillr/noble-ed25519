@@ -98,6 +98,15 @@ describe("ed25519", () => {
     expect(publicKey.toHex()).toBe("f12cb7c43b59971395926f278ce7c2eaded9444fbce62ca717564cb508a0db1d");
   });
 
+  it("should convert to montgomery and back", async () => {
+    expect(ed25519.BASE_POINT.toX25519()).toBe(9n);
+    const pub100 = await ed25519.getPublicKey(100n);
+    expect(pub100.toX25519().toString()).toBe("10759494478904102140727809123291699727725512534302607575440466977638172069732");
+    expect(ed25519.Point.fromX25519(9n).toHex()).toBe(ed25519.BASE_POINT.toHex());
+    const ser = ed25519.Point.fromX25519(10759494478904102140727809123291699727725512534302607575440466977638172069732n).toHex();
+    expect(ser).toBe(pub100.toHex());
+  });
+
   // https://tools.ietf.org/html/rfc8032#section-7
   it("should create right signature for 0x9d and empty string", async () => {
     const privateKey = 0x9d61b19deffd5a60ba844af492ec2cc44449c5697b326919703bac031cae7f60n;

@@ -13,12 +13,10 @@ class Point {
         this.x = x;
         this.y = y;
     }
-    static fromHex(hash) {
-        const bytes = hash instanceof Uint8Array ? hash : hexToArray(hash);
+    static fromY(y) {
+        const bytes = numberToUint8Array(y);
         const len = bytes.length - 1;
-        const normedLast = bytes[len] & ~0x80;
-        const normed = new Uint8Array([...bytes.slice(0, -1), normedLast]);
-        const y = arrayToNumberLE(normed);
+        y = mod(y, exports.P);
         const sqrY = y * y;
         const sqrX = mod((sqrY - C) * inversion(C * d * sqrY - A), exports.P);
         let x = powMod(sqrX, (exports.P + 3n) / 8n, exports.P);
@@ -31,6 +29,18 @@ class Point {
             x = mod(-x, exports.P);
         }
         return new Point(x, y);
+    }
+    static fromHex(hash) {
+        const bytes = hash instanceof Uint8Array ? hash : hexToArray(hash);
+        const len = bytes.length - 1;
+        const normedLast = bytes[len] & ~0x80;
+        const normed = new Uint8Array([...bytes.slice(0, -1), normedLast]);
+        const y = arrayToNumberLE(normed);
+        return Point.fromY(y);
+    }
+    static fromX25519(u) {
+        const y = (u - 1n) * inversion(u + 1n);
+        return Point.fromY(y);
     }
     encode() {
         let hex = this.y.toString(16);
@@ -51,6 +61,10 @@ class Point {
             hex = `${hex}${value.length > 1 ? value : `0${value}`}`;
         }
         return hex;
+    }
+    toX25519() {
+        const res = (1n + this.y) * inversion(1n - this.y);
+        return mod(res, exports.P);
     }
     reverseY() {
         return new Point(this.x, -this.y);
