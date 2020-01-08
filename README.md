@@ -94,7 +94,6 @@ ed25519.PRIME_ORDER // 2 ^ 252 - 27742317777372353535851937790883648493
 ed25519.Point {
   static fromY(y: bigint);
   static fromHex(hash: string);
-  static fromX25519(x: bigint); // From montgomery
   constructor(x: bigint, y: bigint);
   toHex(): string; // Compact representation of a Point
   toX25519(): bigint; // To montgomery

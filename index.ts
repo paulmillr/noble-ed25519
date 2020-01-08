@@ -20,11 +20,12 @@ type Signature = Uint8Array | string | SignResult;
 export class Point {
   constructor(public x: bigint, public y: bigint) {}
 
-  static fromY(y: bigint) {
-    const bytes = numberToUint8Array(y);
+  static fromHex(hash: Hex) {
+    const bytes = hash instanceof Uint8Array ? hash : hexToArray(hash);
     const len = bytes.length - 1;
-
-    y = mod(y, P);
+    const normedLast = bytes[len] & ~0x80;
+    const normed = new Uint8Array([...bytes.slice(0, -1), normedLast]);
+    const y = arrayToNumberLE(normed);
     const sqrY = y * y;
     const sqrX = mod((sqrY - C) * inversion(C * d * sqrY - A), P);
     let x = powMod(sqrX, (P + 3n) / 8n, P);
@@ -37,20 +38,6 @@ export class Point {
       x = mod(-x, P);
     }
     return new Point(x, y);
-  }
-
-  static fromHex(hash: Hex) {
-    const bytes = hash instanceof Uint8Array ? hash : hexToArray(hash);
-    const len = bytes.length - 1;
-    const normedLast = bytes[len] & ~0x80;
-    const normed = new Uint8Array([...bytes.slice(0, -1), normedLast]);
-    const y = arrayToNumberLE(normed);
-    return Point.fromY(y);
-  }
-
-  static fromX25519(u: bigint) {
-    const y = (u - 1n) * inversion(u + 1n);
-    return Point.fromY(y);
   }
 
   encode(): Uint8Array {
@@ -87,6 +74,7 @@ export class Point {
   }
 
   // Converts to Montgomery; aka x coordinate of curve25519.
+  // We don't have fromX25519, because we don't know sign!
   toX25519() {
     // curve25519 is birationally equivalent to ed25519
     // x, y: ed25519 coordinates

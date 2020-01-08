@@ -13,10 +13,12 @@ class Point {
         this.x = x;
         this.y = y;
     }
-    static fromY(y) {
-        const bytes = numberToUint8Array(y);
+    static fromHex(hash) {
+        const bytes = hash instanceof Uint8Array ? hash : hexToArray(hash);
         const len = bytes.length - 1;
-        y = mod(y, exports.P);
+        const normedLast = bytes[len] & ~0x80;
+        const normed = new Uint8Array([...bytes.slice(0, -1), normedLast]);
+        const y = arrayToNumberLE(normed);
         const sqrY = y * y;
         const sqrX = mod((sqrY - C) * inversion(C * d * sqrY - A), exports.P);
         let x = powMod(sqrX, (exports.P + 3n) / 8n, exports.P);
@@ -29,18 +31,6 @@ class Point {
             x = mod(-x, exports.P);
         }
         return new Point(x, y);
-    }
-    static fromHex(hash) {
-        const bytes = hash instanceof Uint8Array ? hash : hexToArray(hash);
-        const len = bytes.length - 1;
-        const normedLast = bytes[len] & ~0x80;
-        const normed = new Uint8Array([...bytes.slice(0, -1), normedLast]);
-        const y = arrayToNumberLE(normed);
-        return Point.fromY(y);
-    }
-    static fromX25519(u) {
-        const y = (u - 1n) * inversion(u + 1n);
-        return Point.fromY(y);
     }
     encode() {
         let hex = this.y.toString(16);

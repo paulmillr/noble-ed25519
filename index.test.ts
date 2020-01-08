@@ -98,13 +98,39 @@ describe("ed25519", () => {
     expect(publicKey.toHex()).toBe("f12cb7c43b59971395926f278ce7c2eaded9444fbce62ca717564cb508a0db1d");
   });
 
-  it("should convert to montgomery and back", async () => {
+  it("should convert base point to montgomery", async () => {
     expect(ed25519.BASE_POINT.toX25519()).toBe(9n);
-    const pub100 = await ed25519.getPublicKey(100n);
-    expect(pub100.toX25519().toString()).toBe("10759494478904102140727809123291699727725512534302607575440466977638172069732");
-    expect(ed25519.Point.fromX25519(9n).toHex()).toBe(ed25519.BASE_POINT.toHex());
-    const ser = ed25519.Point.fromX25519(10759494478904102140727809123291699727725512534302607575440466977638172069732n).toHex();
-    expect(ser).toBe(pub100.toHex());
+  });
+
+  it("should convert TEST 1 to montgomery", async () => {
+    const priv = "4ccd089b28ff96da9db6c346ec114e0f5b8a319f35aba624da8cf6ed4fb8a6fb";
+    const pub = "3d4017c3e843895a92b70aa74d1b7ebc9c982ccf2ec4968cc0cd55f12af4660c";
+    const montgomery = "478dd307cdfb042d80d03e0f55227e4d982bedd1696ba700fc8ab894c504c725";
+
+    const publicKey = ed25519.Point.fromHex(pub);
+    expect(publicKey.toX25519().toString(16)).toBe(montgomery);
+  });
+
+  it("should convert TEST 2 to montgomery", async () => {
+    const priv = 12n;
+    const pub = "1262bc6d5408a3c4e025aa0c15e64f69197cdb38911be5ad344a949779df3da6";
+    const montgomery = "31c3ec9e22ce8ffd4fa9dfa1a698604b4de4921be0e09ca93f96c635bb8de1db";
+    const montgomery_bigint = BigInt('0x' + montgomery);
+
+    const publicKey = await ed25519.getPublicKey(priv);
+    expect(publicKey.toHex()).toBe(pub);
+    expect(publicKey.toX25519().toString(16)).toBe(montgomery);
+  });
+
+  it("should convert TEST 3 to montgomery", async () => {
+    const priv = 39n;
+    const pub = "d7e1ba312ceaf90c89566a9a7861316522a60edea4c2157eabf3d273169eac13";
+    const montgomery = "48d70b86a448c72a4b3960d399102d9ef401092fcbbcda8e69bc230bc73bb9d2";
+    const montgomery_bigint = BigInt('0x' + montgomery);
+
+    const publicKey = await ed25519.getPublicKey(priv);
+    expect(publicKey.toHex()).toBe(pub);
+    expect(publicKey.toX25519().toString(16)).toBe(montgomery);
   });
 
   // https://tools.ietf.org/html/rfc8032#section-7
