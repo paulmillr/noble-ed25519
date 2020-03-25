@@ -23,16 +23,25 @@ async function bench(name, counts, priv, pub) {
   const expected = '096596f308a288d1f8a8bcaca202eb6dd6da707e60e64427a2baa568eb2e31c4';
   let start = Date.now();
   let actual;
-  function time() {
+  function time(label, expected) {
     let now = Date.now();
-    console.log(now - start, {actual, expected});
+    const arg = (expected) ? {actual, expected} : '';
+    console.log(`- \`${label}\`: ${now - start}ms`, arg);
     start = now;
   }
 
   ed.utils.precompute();
-  time();
+  time('precomputation: first getPrivateKey() or utils.precompute()');
+
   actual = await ed.getPublicKey(priv);
-  time();
+  time('getPrivateKey()', expected);
+
+  const privateKey = 0x9d61b19deffd5a60ba844af492ec2cc44449c5697b326919703bac031cae7f60n;
+  const publicKey = await ed.getPublicKey(privateKey);
+  const message = '';
+  const signature = await ed.sign(message, privateKey);
+  time('sign()');
+
   // actual = await ed.getPublicKey(priv);
   // time();
 

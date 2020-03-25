@@ -83,6 +83,22 @@ function verify(
 
 ##### Helpers & Point
 
+`utils.precompute(W = 4, point = BASE_POINT)`
+
+This is done by default, no need to run it unless you want to
+disable precomputation or change window size.
+
+We're doing scalar multiplication (used in getPublicKey etc) with
+precomputed BASE_POINT values.
+
+This slows down first getPublicKey() by milliseconds (see Speed section),
+but allows to speed-up subsequent getPublicKey() calls up to 20x.
+
+The precomputation window is variable. For example, we increase W to 8
+for tests, to speed-up tests 2x.
+
+You may want to precompute values for your own point.
+
 ```typescript
 // 𝔽p
 ed25519.P // 2 ^ 255 - 19
@@ -112,11 +128,20 @@ ed25519.BASE_POINT // new ed25519.Point(x, y) where
 // x = 15112221349535400772501151409588531511454012693041857206046113283949847762202n;
 // y = 46316835694926478169428394003475163141307993866256225615783033603165251855960n;
 
-// Example usage:
-ed25519.BASE_POINT.multiply(65537n);
+// Precomputation helper
+utils.precompute(W, point);
 ```
 
 There are additional `ristretto255` helpers in `ristretto255.js` file.
+
+## Speed
+
+Measured with 2.9Ghz Coffee Lake.
+
+- precomputation: first `getPrivateKey()` or `utils.precompute()`: 480ms
+- `getPrivateKey()`: 30ms
+- `sign()`: 86ms
+- `getPrivateKey()` with `utils.precompute(8)`: 15ms
 
 ## Security
 
