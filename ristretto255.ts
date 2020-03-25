@@ -43,8 +43,7 @@ export class FieldElement {
   );
 
   // Prime subgroup. 25519 is a curve with cofactor = 8, so the order is:
-  static readonly PRIME_ORDER =
-    2n ** 252n + 27742317777372353535851937790883648493n;
+  static readonly PRIME_ORDER = 2n ** 252n + 27742317777372353535851937790883648493n;
 
   private static load8(input: Uint8Array, padding = 0) {
     return (
@@ -66,11 +65,7 @@ export class FieldElement {
     const octet4 = (this.load8(bytes, 19) >> 1n) & low51bitMask;
     const octet5 = (this.load8(bytes, 24) >> 12n) & low51bitMask;
     return new FieldElement(
-      octet1 +
-        (octet2 << 51n) +
-        (octet3 << 102n) +
-        (octet4 << 153n) +
-        (octet5 << 204n)
+      octet1 + (octet2 << 51n) + (octet3 << 102n) + (octet4 << 153n) + (octet5 << 204n)
     );
   }
 
@@ -87,7 +82,6 @@ export class FieldElement {
     return res >= 0 ? res : b + res;
   }
 
-
   public readonly value: bigint;
 
   constructor(value: bigint) {
@@ -97,7 +91,7 @@ export class FieldElement {
   toBytesBE(length: number = 0) {
     let hex = this.value.toString(16);
     hex = hex.length & 1 ? `0${hex}` : hex;
-    hex = hex.padStart(length * 2, "0");
+    hex = hex.padStart(length * 2, '0');
     const len = hex.length / 2;
     const u8 = new Uint8Array(len);
     for (let j = 0, i = 0; i < hex.length; i += 2, j++) {
@@ -216,10 +210,7 @@ export class FieldElement {
     choice = BigInt(choice) as 0n | 1n;
     const mask = choice !== 0n ? mask64Bits : choice;
     const tmp = mask & (this.value ^ other.value);
-    return [
-      new FieldElement(this.value ^ tmp),
-      new FieldElement(other.value ^ tmp)
-    ];
+    return [new FieldElement(this.value ^ tmp), new FieldElement(other.value ^ tmp)];
   }
 
   sqrtRatio(v: FieldElement) {
@@ -305,18 +296,10 @@ export class ProjectiveP2 {
   }
 
   static zero() {
-    return new ProjectiveP2(
-      FieldElement.zero(),
-      FieldElement.one(),
-      FieldElement.one()
-    );
+    return new ProjectiveP2(FieldElement.zero(), FieldElement.one(), FieldElement.one());
   }
 
-  constructor(
-    public x: FieldElement,
-    public y: FieldElement,
-    public z: FieldElement
-  ) {}
+  constructor(public x: FieldElement, public y: FieldElement, public z: FieldElement) {}
 
   double() {
     const squaredX = this.x.square();
@@ -402,12 +385,7 @@ export class ProjectiveP3 {
     const TT2 = this.T.multiply(other.T2d);
     const ZZ = this.z.multiply(other.z);
     const ZZ2 = ZZ.add(ZZ);
-    return new ProjectiveP1xP1(
-      PP.subtract(MM),
-      PP.add(MM),
-      ZZ2.add(TT2),
-      ZZ2.subtract(TT2)
-    );
+    return new ProjectiveP1xP1(PP.subtract(MM), PP.add(MM), ZZ2.add(TT2), ZZ2.subtract(TT2));
   }
 
   subtractCached(other: ProjectiveCached) {
@@ -418,12 +396,7 @@ export class ProjectiveP3 {
     const TT2 = this.T.multiply(other.T2d);
     const ZZ = this.z.multiply(other.z);
     const ZZ2 = ZZ.add(ZZ);
-    return new ProjectiveP1xP1(
-      PP.subtract(MM),
-      PP.add(MM),
-      ZZ2.subtract(TT2),
-      ZZ2.add(TT2)
-    );
+    return new ProjectiveP1xP1(PP.subtract(MM), PP.add(MM), ZZ2.subtract(TT2), ZZ2.add(TT2));
   }
 
   addAffine(other: AffineCached) {
@@ -434,12 +407,7 @@ export class ProjectiveP3 {
     const TT2 = this.T.multiply(other.T2d);
     const ZZ = this.z.multiply(this.z);
     const ZZ2 = ZZ.add(ZZ);
-    return new ProjectiveP1xP1(
-      PP.subtract(MM),
-      PP.add(MM),
-      ZZ2.add(TT2),
-      ZZ2.subtract(TT2)
-    );
+    return new ProjectiveP1xP1(PP.subtract(MM), PP.add(MM), ZZ2.add(TT2), ZZ2.subtract(TT2));
   }
 
   subtractAffine(other: AffineCached) {
@@ -450,12 +418,7 @@ export class ProjectiveP3 {
     const TT2 = this.T.multiply(other.T2d);
     const ZZ = this.z.multiply(this.z);
     const ZZ2 = ZZ.add(ZZ);
-    return new ProjectiveP1xP1(
-      PP.subtract(MM),
-      PP.add(MM),
-      ZZ2.subtract(TT2),
-      ZZ2.add(TT2)
-    );
+    return new ProjectiveP1xP1(PP.subtract(MM), PP.add(MM), ZZ2.subtract(TT2), ZZ2.add(TT2));
   }
 
   add(other: ProjectiveP3) {
@@ -486,12 +449,7 @@ export class ProjectiveP3 {
   }
 
   negative() {
-    return new ProjectiveP3(
-      this.x.negative(),
-      this.y,
-      this.z,
-      this.T.negative()
-    );
+    return new ProjectiveP3(this.x.negative(), this.y, this.z, this.T.negative());
   }
 
   multiply(n: bigint) {
@@ -571,11 +529,7 @@ export class AffineCached {
   }
 
   static one() {
-    return new AffineCached(
-      FieldElement.one(),
-      FieldElement.one(),
-      FieldElement.zero()
-    );
+    return new AffineCached(FieldElement.one(), FieldElement.one(), FieldElement.zero());
   }
 
   constructor(
@@ -601,15 +555,15 @@ export class AffineCached {
 
 export let sha512: (a: Uint8Array) => Promise<Uint8Array>;
 
-if (typeof window == "object" && "crypto" in window) {
+if (typeof window == 'object' && 'crypto' in window) {
   sha512 = async (message: Uint8Array) => {
-    const buffer = await window.crypto.subtle.digest("SHA-512", message.buffer);
+    const buffer = await window.crypto.subtle.digest('SHA-512', message.buffer);
     return new Uint8Array(buffer);
   };
-} else if (typeof process === "object" && "node" in process.versions) {
-  const { createHash } = require("crypto");
+} else if (typeof process === 'object' && 'node' in process.versions) {
+  const { createHash } = require('crypto');
   sha512 = async (message: Uint8Array) => {
-    const hash = createHash("sha512");
+    const hash = createHash('sha512');
     hash.update(message);
     return Uint8Array.from(hash.digest());
   };
@@ -622,7 +576,7 @@ function fromHexBE(hex: string) {
 }
 
 function fromBytesBE(bytes: string | Uint8Array) {
-  if (typeof bytes === "string") {
+  if (typeof bytes === 'string') {
     return fromHexBE(bytes);
   }
   let value = 0n;
@@ -651,10 +605,10 @@ export function hexToBytes(hash: string) {
 }
 
 export function toBigInt(num: string | Uint8Array | bigint | number) {
-  if (typeof num === "string") {
+  if (typeof num === 'string') {
     return fromHexBE(num);
   }
-  if (typeof num === "number") {
+  if (typeof num === 'number') {
     return BigInt(num);
   }
   if (num instanceof Uint8Array) {
@@ -696,11 +650,9 @@ export function concatTypedArrays(...args: Uint8Array[]) {
   return result;
 }
 
-
 const ENCODING_LENGTH = 32;
 
 export class RistrettoPoint {
-
   static one() {
     return new RistrettoPoint(ProjectiveP3.one());
   }
@@ -719,7 +671,7 @@ export class RistrettoPoint {
   private static elligatorRistrettoFlavor(r0: FieldElement) {
     const one = FieldElement.one();
     const oneMinusDSq = one.subtract(FieldElement.D.square());
-    const dMinusOneSq = (FieldElement.D.subtract(one)).square();
+    const dMinusOneSq = FieldElement.D.subtract(one).square();
     const r = FieldElement.SQRT_M1.multiply(r0.square());
     const NS = r.add(one).multiply(oneMinusDSq);
     let c = one.negative();
@@ -730,13 +682,16 @@ export class RistrettoPoint {
     sPrime = sPrime.condNegative(sPrimeIsPos);
     S = S.select(sPrime, isNotZeroSquare);
     c = c.select(r, isNotZeroSquare);
-    const NT = c.multiply(r.subtract(one)).multiply(dMinusOneSq).subtract(D);
+    const NT = c
+      .multiply(r.subtract(one))
+      .multiply(dMinusOneSq)
+      .subtract(D);
     const sSquared = S.square();
     const projective = new ProjectiveP3(
       S.add(S).multiply(D),
       FieldElement.one().subtract(sSquared),
       NT.multiply(FieldElement.SQRT_AD_MINUS_ONE),
-      FieldElement.one().add(sSquared),
+      FieldElement.one().add(sSquared)
     );
     return projective.toExtendedCompleted();
   }
@@ -756,7 +711,7 @@ export class RistrettoPoint {
     const sEncodingIsCanonical = isBytesEquals(s.toBytesLE(ENCODING_LENGTH), bytes);
     const sIsNegative = s.isNegative();
     if (!sEncodingIsCanonical || sIsNegative) {
-      throw new Error("Cannot convert bytes to Ristretto Point");
+      throw new Error('Cannot convert bytes to Ristretto Point');
     }
     const one = FieldElement.one();
     const s2 = s.square();
@@ -764,7 +719,10 @@ export class RistrettoPoint {
     const u2 = one.add(s2); // 1 - as² where a=-1
     const squaredU2 = u2.square(); // (1 - as²)²
     // v == ad(1+as²)² - (1-as²)² where d=-121665/121666
-    const v = u1.square().multiply(FieldElement.D.negative()).subtract(squaredU2);
+    const v = u1
+      .square()
+      .multiply(FieldElement.D.negative())
+      .subtract(squaredU2);
     const { isNotZeroSquare, value: I } = v.multiply(squaredU2).invertSqrt(); // 1/sqrt(v*u_2²)
     const Dx = I.multiply(u2);
     const Dy = I.multiply(Dx).multiply(v); // 1/u2
@@ -777,7 +735,7 @@ export class RistrettoPoint {
     // t == ((1+as²) sqrt(4s²/(ad(1+as²)² - (1-as²)²)))/(1-as²)
     const t = x.multiply(y);
     if (!isNotZeroSquare || t.isNegative() || y.isZero()) {
-      throw new Error("Cannot convert bytes to Ristretto Point");
+      throw new Error('Cannot convert bytes to Ristretto Point');
     }
     return new RistrettoPoint(new ProjectiveP3(x, y, one, t));
   }
@@ -790,7 +748,10 @@ export class RistrettoPoint {
     const u1 = z.add(y).multiply(z.subtract(y));
     const u2 = x.multiply(y);
     // Ignore return value since this is always square
-    const { value: invsqrt } = u2.square().multiply(u1).invertSqrt();
+    const { value: invsqrt } = u2
+      .square()
+      .multiply(u1)
+      .invertSqrt();
     const i1 = invsqrt.multiply(u1);
     const i2 = invsqrt.multiply(u2);
     const invertedZ = i1.multiply(i2).multiply(T);
@@ -830,13 +791,16 @@ export class RistrettoPoint {
 // https://tools.ietf.org/html/rfc8032#section-5.1
 export const BASE_POINT = new RistrettoPoint(
   new ProjectiveP3(
-    new FieldElement(15112221349535400772501151409588531511454012693041857206046113283949847762202n),
-    new FieldElement(46316835694926478169428394003475163141307993866256225615783033603165251855960n),
+    new FieldElement(
+      15112221349535400772501151409588531511454012693041857206046113283949847762202n
+    ),
+    new FieldElement(
+      46316835694926478169428394003475163141307993866256225615783033603165251855960n
+    ),
     new FieldElement(1n),
-    new FieldElement(46827403850823179245072216630277197565144205554125654976674165829533817101731n),
+    new FieldElement(46827403850823179245072216630277197565144205554125654976674165829533817101731n)
   )
 );
-
 
 // Commented out signature implementation.
 // ristretto255 doesn't specify details for ecdsa/eddsa signatures.
