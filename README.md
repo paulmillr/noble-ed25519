@@ -154,6 +154,13 @@ We're using built-in JS `BigInt`, which is "unsuitable for use in cryptography" 
 3. If your goal is absolute security, don't use any JS lib — including bindings to native ones. Use low-level libraries & languages.
 4. We however consider infrastructure attacks like rogue NPM modules very important; that's why it's crucial to minimize the amount of 3rd-party dependencies & native bindings. If your app uses 500 dependencies, any dep could get hacked and you'll be downloading rootkits with every `npm install`. Our goal is to minimize this attack vector.
 
+## Contributing
+
+1. Clone the repository.
+2. `npm install` to install build dependencies like TypeScript
+3. `npm run compile` to compile TypeScript code
+4. `npm run test` to run jest on `test/index.ts`
+
 ## License
 
 MIT (c) Paul Miller [(https://paulmillr.com)](https://paulmillr.com), see LICENSE file.
