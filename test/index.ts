@@ -1,8 +1,9 @@
 import * as fc from "fast-check";
-import * as ed25519 from "./index";
+import * as ed25519 from "../";
 import { readFileSync } from "fs";
+import { join } from "path";
 import { createHash } from "crypto";
-import { RistrettoPoint, BASE_POINT } from "./ristretto255";
+import { RistrettoPoint, BASE_POINT } from "../ristretto255";
 
 const PRIVATE_KEY = 0xa665a45920422f9d417e4867efn;
 // const MESSAGE = ripemd160(new Uint8Array([97, 98, 99, 100, 101, 102, 103]));
@@ -30,6 +31,10 @@ function arrayToHex(uint8a: Uint8Array): string {
 }
 
 describe("ed25519", () => {
+  beforeAll(() => {
+    ed25519.utils.precompute(8);
+  });
+
   it("should verify just signed message", async () => {
     await fc.assert(fc.asyncProperty(
       fc.hexa(),
@@ -171,8 +176,8 @@ describe("ed25519", () => {
 // https://ed25519.cr.yp.to/python/sign.py
 // https://ed25519.cr.yp.to/python/sign.input
 describe("ed25519 official vectors", () => {
-  const data = readFileSync('test-vectors.txt', 'utf-8');
-  const vectors = data.trim().split('\n').map(line => line.split(':'))
+  const data = readFileSync(join(__dirname, 'vectors.txt'), 'utf-8');
+  const vectors = data.trim().split('\n').map(line => line.split(':'));
 
   for (let i = 0; i < vectors.length; i++) {
     const vector = vectors[i];
@@ -186,7 +191,7 @@ describe("ed25519 official vectors", () => {
       // Calculate
       const pub = await ed25519.getPublicKey(priv);
       const signature = await ed25519.sign(msg, priv);
-      console.log('vector', i);
+      // console.log('vector', i);
       expect(pub).toBe(expectedPub);
       expect(signature).toBe(expectedSignature);
     });

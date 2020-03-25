@@ -18,6 +18,9 @@ type Hex = Uint8Array | string;
 type Signature = Uint8Array | string | SignResult;
 
 export class Point {
+  W?: number;
+  private PRECOMPUTES?: Point[];
+
   constructor(public x: bigint, public y: bigint) {}
 
   static fromHex(hash: Hex) {
@@ -85,33 +88,79 @@ export class Point {
     return mod(res, P);
   }
 
-  reverseY() {
-    return new Point(this.x, -this.y);
+  negate(): Point {
+    return new Point(this.x, mod(-this.y, P));
   }
 
-  add(p2: Point) {
-    const p1 = this;
+  add(other: Point): Point {
+    if (!(other instanceof Point)) {
+      throw new TypeError('Point#add: expected Point');
+    }
+    const a = this;
+    const b = other;
     const x =
-      (p1.x * p2.y + p2.x * p1.y) *
-      inversion(1n + d * p1.x * p2.x * p1.y * p2.y);
+      (a.x * b.y + b.x * a.y) *
+      inversion(1n + d * a.x * b.x * a.y * b.y);
     const y =
-      (p1.y * p2.y + p1.x * p2.x) *
-      inversion(1n - d * p1.x * p2.x * p1.y * p2.y);
+      (a.y * b.y + a.x * b.x) *
+      inversion(1n - d * a.x * b.x * a.y * b.y);
     return new Point(mod(x, P), mod(y, P));
   }
 
-  subtract(p2: Point) {
-    return this.add(p2.reverseY());
+  subtract(other: Point) {
+    return this.add(other.negate());
   }
 
-  multiply(n: bigint) {
-    let q = new Point(0n, 1n);
-    for (let db: Point = this; n > 0n; n >>= 1n, db = db.add(db)) {
-      if ((n & 1n) === 1n) {
-        q = q.add(db);
-      }
+  private precomputeWindow(W: number): Point[] {
+    if (this.PRECOMPUTES) return this.PRECOMPUTES;
+    const points: Point[] = new Array((2 ** W - 1) * W);
+    if (W !== 1) {
+      this.PRECOMPUTES = points;
     }
-    return q;
+    let currPoint: Point = this;
+    const winSize = 2 ** W - 1;
+    for (let currWin = 0; currWin < 256 / W; currWin++) {
+      let offset = currWin * winSize;
+      let point: Point = currPoint;
+      for (let i = 0; i < winSize; i++) {
+        points[offset + i] = point;
+        point = point.add(currPoint);
+      }
+      currPoint = point;
+    }
+    return points;
+  }
+
+  // Constant time multiplication.
+  // No need to emulate constant-time in ed25519 with `f` fake point,
+  // there is no special case for Point#add(0); private keys are hashed.
+  multiply(scalar: number | bigint): Point {
+    if (typeof scalar !== 'number' && typeof scalar !== 'bigint') {
+      throw new TypeError('Point#multiply: expected number or bigint');
+    }
+    let n = mod(BigInt(scalar), PRIME_ORDER);
+    if (n <= 0) {
+      throw new Error('Point#multiply: invalid scalar, expected positive integer');
+    }
+    const W = this.W || 1;
+    if (256 % W) {
+      throw new Error('Point#multiply: Invalid precomputation window, must be power of 2');
+    }
+    const precomputes = this.precomputeWindow(W);
+    let p = ZERO_POINT;
+    // let f = ZERO_POINT;
+    const winSize = 2 ** W - 1;
+    for (let currWin = 0; currWin < 256 / W; currWin++) {
+      const offset = currWin * winSize;
+      const masked = Number(n & BigInt(winSize));
+      if (masked) {
+        p = p.add(precomputes[offset + masked - 1]);
+      } else {
+        // f = f.add(precomputes[offset]);
+      }
+      n >>= BigInt(W);
+    }
+    return p;
   }
 }
 
@@ -120,6 +169,9 @@ export const BASE_POINT = new Point(
   15112221349535400772501151409588531511454012693041857206046113283949847762202n,
   46316835694926478169428394003475163141307993866256225615783033603165251855960n
 );
+// Enable precomputes. Slows down first publicKey computation by 500ms.
+BASE_POINT.W = 4;
+const ZERO_POINT = new Point(0n, 1n);
 
 export class SignResult {
   constructor(public r: Point, public s: bigint) {}
@@ -172,6 +224,10 @@ function concatTypedArrays(...args: Array<Uint8Array>): Uint8Array {
     pad += arr.length;
   }
   return result;
+}
+
+function bitset(n: number | bigint) {
+  return n.toString(2).split('').reverse().map(b => Number.parseInt(b, 2));
 }
 
 function numberToUint8Array(num: bigint | number, padding?: number): Uint8Array {
@@ -276,8 +332,6 @@ function normalizePrivateKey(privateKey: PrivKey): bigint {
     res = BigInt(privateKey);
   }
   return res;
-  // TODO
-  // return res % PRIME_ORDER;
 }
 
 function normalizePublicKey(publicKey: PubKey): Point {
@@ -315,7 +369,8 @@ export async function getPublicKey(privateKey: PrivKey) {
   const privateBytes = await getPrivateBytes(multiplier);
   const privateInt = encodePrivate(privateBytes);
   const publicKey = BASE_POINT.multiply(privateInt);
-  return normalizePoint(publicKey, privateKey);
+  const p = normalizePoint(publicKey, privateKey);
+  return p;
 }
 
 export function sign(
@@ -353,3 +408,11 @@ export async function verify(
   const R = signature.r.add(publicKey.multiply(h));
   return S.x === R.x && S.y === R.y;
 }
+
+export const utils = {
+  precompute(W = 4, point = BASE_POINT): true {
+    point.W = W;
+    point.multiply(1n);
+    return true;
+  }
+};

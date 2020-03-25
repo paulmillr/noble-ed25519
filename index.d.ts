@@ -8,15 +8,18 @@ declare type Signature = Uint8Array | string | SignResult;
 export declare class Point {
     x: bigint;
     y: bigint;
+    W?: number;
+    private PRECOMPUTES?;
     constructor(x: bigint, y: bigint);
     static fromHex(hash: Hex): Point;
     encode(): Uint8Array;
     toHex(): string;
     toX25519(): bigint;
-    reverseY(): Point;
-    add(p2: Point): Point;
-    subtract(p2: Point): Point;
-    multiply(n: bigint): Point;
+    negate(): Point;
+    add(other: Point): Point;
+    subtract(other: Point): Point;
+    private precomputeWindow;
+    multiply(scalar: number | bigint): Point;
 }
 export declare const BASE_POINT: Point;
 export declare class SignResult {
@@ -32,4 +35,7 @@ export declare function getPublicKey(privateKey: bigint | number): Promise<Point
 export declare function sign(hash: Uint8Array, privateKey: PrivKey): Promise<Uint8Array>;
 export declare function sign(hash: string, privateKey: PrivKey): Promise<string>;
 export declare function verify(signature: Signature, hash: Hex, publicKey: PubKey): Promise<boolean>;
+export declare const utils: {
+    precompute(W?: number, point?: Point): true;
+};
 export {};

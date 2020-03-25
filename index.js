@@ -56,32 +56,76 @@ class Point {
         const res = (1n + this.y) * inversion(1n - this.y);
         return mod(res, exports.P);
     }
-    reverseY() {
-        return new Point(this.x, -this.y);
+    negate() {
+        return new Point(this.x, mod(-this.y, exports.P));
     }
-    add(p2) {
-        const p1 = this;
-        const x = (p1.x * p2.y + p2.x * p1.y) *
-            inversion(1n + d * p1.x * p2.x * p1.y * p2.y);
-        const y = (p1.y * p2.y + p1.x * p2.x) *
-            inversion(1n - d * p1.x * p2.x * p1.y * p2.y);
+    add(other) {
+        if (!(other instanceof Point)) {
+            throw new TypeError('Point#add: expected Point');
+        }
+        const a = this;
+        const b = other;
+        const x = (a.x * b.y + b.x * a.y) *
+            inversion(1n + d * a.x * b.x * a.y * b.y);
+        const y = (a.y * b.y + a.x * b.x) *
+            inversion(1n - d * a.x * b.x * a.y * b.y);
         return new Point(mod(x, exports.P), mod(y, exports.P));
     }
-    subtract(p2) {
-        return this.add(p2.reverseY());
+    subtract(other) {
+        return this.add(other.negate());
     }
-    multiply(n) {
-        let q = new Point(0n, 1n);
-        for (let db = this; n > 0n; n >>= 1n, db = db.add(db)) {
-            if ((n & 1n) === 1n) {
-                q = q.add(db);
-            }
+    precomputeWindow(W) {
+        if (this.PRECOMPUTES)
+            return this.PRECOMPUTES;
+        const points = new Array((2 ** W - 1) * W);
+        if (W !== 1) {
+            this.PRECOMPUTES = points;
         }
-        return q;
+        let currPoint = this;
+        const winSize = 2 ** W - 1;
+        for (let currWin = 0; currWin < 256 / W; currWin++) {
+            let offset = currWin * winSize;
+            let point = currPoint;
+            for (let i = 0; i < winSize; i++) {
+                points[offset + i] = point;
+                point = point.add(currPoint);
+            }
+            currPoint = point;
+        }
+        return points;
+    }
+    multiply(scalar) {
+        if (typeof scalar !== 'number' && typeof scalar !== 'bigint') {
+            throw new TypeError('Point#multiply: expected number or bigint');
+        }
+        let n = mod(BigInt(scalar), exports.PRIME_ORDER);
+        if (n <= 0) {
+            throw new Error('Point#multiply: invalid scalar, expected positive integer');
+        }
+        const W = this.W || 1;
+        if (256 % W) {
+            throw new Error('Point#multiply: Invalid precomputation window, must be power of 2');
+        }
+        const precomputes = this.precomputeWindow(W);
+        let p = ZERO_POINT;
+        const winSize = 2 ** W - 1;
+        for (let currWin = 0; currWin < 256 / W; currWin++) {
+            const offset = currWin * winSize;
+            const masked = Number(n & BigInt(winSize));
+            if (masked) {
+                p = p.add(precomputes[offset + masked - 1]);
+            }
+            else {
+            }
+            n >>= BigInt(W);
+        }
+        return p;
     }
 }
 exports.Point = Point;
 exports.BASE_POINT = new Point(15112221349535400772501151409588531511454012693041857206046113283949847762202n, 46316835694926478169428394003475163141307993866256225615783033603165251855960n);
+exports.BASE_POINT.W = 4;
+const ZERO_POINT = new Point(0n, 1n);
 class SignResult {
     constructor(r, s) {
         this.r = r;
@@ -134,6 +178,9 @@ function concatTypedArrays(...args) {
         pad += arr.length;
     }
     return result;
+}
+function bitset(n) {
+    return n.toString(2).split('').reverse().map(b => Number.parseInt(b, 2));
 }
 function numberToUint8Array(num, padding) {
     let hex = num.toString(16);
@@ -251,7 +298,8 @@ async function getPublicKey(privateKey) {
     const privateBytes = await getPrivateBytes(multiplier);
     const privateInt = encodePrivate(privateBytes);
     const publicKey = exports.BASE_POINT.multiply(privateInt);
-    return normalizePoint(publicKey, privateKey);
+    const p = normalizePoint(publicKey, privateKey);
+    return p;
 }
 exports.getPublicKey = getPublicKey;
 async function sign(hash, privateKey) {
@@ -278,3 +326,10 @@ async function verify(signature, hash, publicKey) {
     return S.x === R.x && S.y === R.y;
 }
 exports.verify = verify;
+exports.utils = {
+    precompute(W = 4, point = exports.BASE_POINT) {
+        point.W = W;
+        point.multiply(1n);
+        return true;
+    }
+};
