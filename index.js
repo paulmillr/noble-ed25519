@@ -1,34 +1,44 @@
 "use strict";
 /*! noble-ed25519 - MIT License (c) Paul Miller (paulmillr.com) */
 Object.defineProperty(exports, "__esModule", { value: true });
+exports.CURVE_PARAMS = {
+    a: -1n,
+    d: 37095705934669439343138083508754565189542113879843219016388785533085940283555n,
+    P: 2n ** 255n - 19n,
+    n: 2n ** 252n + 27742317777372353535851937790883648493n,
+    h: 8n,
+    Gx: 15112221349535400772501151409588531511454012693041857206046113283949847762202n,
+    Gy: 46316835694926478169428394003475163141307993866256225615783033603165251855960n
+};
 const ENCODING_LENGTH = 32;
-const A = -1n;
-const C = 1n;
-exports.P = 2n ** 255n - 19n;
-exports.PRIME_ORDER = 2n ** 252n + 27742317777372353535851937790883648493n;
-const d = -121665n * inversion(121666n);
-const I = powMod(2n, (exports.P - 1n) / 4n, exports.P);
+const P = exports.CURVE_PARAMS.P;
+const PRIME_ORDER = exports.CURVE_PARAMS.n;
+const I = powMod(2n, (P - 1n) / 4n, P);
 class Point {
     constructor(x, y) {
         this.x = x;
         this.y = y;
     }
     static fromHex(hash) {
+        const { a, d } = exports.CURVE_PARAMS;
         const bytes = hash instanceof Uint8Array ? hash : hexToArray(hash);
         const len = bytes.length - 1;
         const normedLast = bytes[len] & ~0x80;
-        const normed = new Uint8Array([...bytes.slice(0, -1), normedLast]);
-        const y = arrayToNumberLE(normed);
-        const sqrY = y * y;
-        const sqrX = mod((sqrY - C) * inversion(C * d * sqrY - A), exports.P);
-        let x = powMod(sqrX, (exports.P + 3n) / 8n, exports.P);
         const isLastByteOdd = (bytes[len] & 0x80) !== 0;
-        if (mod(x * x - sqrX, exports.P) !== 0n) {
-            x = mod(x * I, exports.P);
+        const normed = Uint8Array.from(Array.from(bytes.slice(0, len)).concat(normedLast));
+        const y = arrayToNumberLE(normed);
+        if (y >= P) {
+            throw new Error('Point#fromHex expects hex <= Fp');
+        }
+        const sqrY = y * y;
+        const sqrX = mod((sqrY - 1n) * modInverse(d * sqrY + 1n), P);
+        let x = powMod(sqrX, (P + 3n) / 8n, P);
+        if (mod(x * x - sqrX, P) !== 0n) {
+            x = mod(x * I, P);
         }
         const isXOdd = (x & 1n) === 1n;
         if (isLastByteOdd !== isXOdd) {
-            x = mod(-x, exports.P);
+            x = mod(-x, P);
         }
         return new Point(x, y);
     }
@@ -45,7 +55,7 @@ class Point {
     }
     toHex() {
         const bytes = this.encode();
-        let hex = "";
+        let hex = '';
         for (let i = 0; i < bytes.length; i++) {
             const value = bytes[i].toString(16);
             hex = `${hex}${value.length > 1 ? value : `0${value}`}`;
@@ -53,23 +63,22 @@ class Point {
         return hex;
     }
     toX25519() {
-        const res = (1n + this.y) * inversion(1n - this.y);
-        return mod(res, exports.P);
+        const res = (1n + this.y) * modInverse(1n - this.y);
+        return mod(res, P);
     }
     negate() {
-        return new Point(this.x, mod(-this.y, exports.P));
+        return new Point(this.x, mod(-this.y, P));
     }
     add(other) {
         if (!(other instanceof Point)) {
             throw new TypeError('Point#add: expected Point');
         }
+        const { d } = exports.CURVE_PARAMS;
         const a = this;
         const b = other;
-        const x = (a.x * b.y + b.x * a.y) *
-            inversion(1n + d * a.x * b.x * a.y * b.y);
-        const y = (a.y * b.y + a.x * b.x) *
-            inversion(1n - d * a.x * b.x * a.y * b.y);
-        return new Point(mod(x, exports.P), mod(y, exports.P));
+        const x = (a.x * b.y + b.x * a.y) * modInverse(1n + d * a.x * b.x * a.y * b.y);
+        const y = (a.y * b.y + a.x * b.x) * modInverse(1n - d * a.x * b.x * a.y * b.y);
+        return new Point(mod(x, P), mod(y, P));
     }
     subtract(other) {
         return this.add(other.negate());
@@ -98,16 +107,16 @@ class Point {
         if (typeof scalar !== 'number' && typeof scalar !== 'bigint') {
             throw new TypeError('Point#multiply: expected number or bigint');
         }
-        let n = mod(BigInt(scalar), exports.PRIME_ORDER);
+        let n = mod(BigInt(scalar), PRIME_ORDER);
         if (n <= 0) {
             throw new Error('Point#multiply: invalid scalar, expected positive integer');
         }
-        const W = this.W || 1;
+        const W = this.WINDOW_SIZE || 1;
         if (256 % W) {
             throw new Error('Point#multiply: Invalid precomputation window, must be power of 2');
         }
         const precomputes = this.precomputeWindow(W);
-        let p = ZERO_POINT;
+        let p = Point.ZERO_POINT;
         const winSize = 2 ** W - 1;
         for (let currWin = 0; currWin < 256 / W; currWin++) {
             const offset = currWin * winSize;
@@ -123,9 +132,8 @@ class Point {
     }
 }
 exports.Point = Point;
-exports.BASE_POINT = new Point(15112221349535400772501151409588531511454012693041857206046113283949847762202n, 46316835694926478169428394003475163141307993866256225615783033603165251855960n);
-exports.BASE_POINT.W = 4;
-const ZERO_POINT = new Point(0n, 1n);
+Point.BASE_POINT = new Point(exports.CURVE_PARAMS.Gx, exports.CURVE_PARAMS.Gy);
+Point.ZERO_POINT = new Point(0n, 1n);
 class SignResult {
     constructor(r, s) {
         this.r = r;
@@ -142,7 +150,7 @@ class SignResult {
         const sBytes = new Uint8Array(ENCODING_LENGTH);
         sBytes.set(numberBytes);
         const bytes = concatTypedArrays(this.r.encode(), sBytes);
-        let hex = "";
+        let hex = '';
         for (let i = 0; i < bytes.length; i++) {
             const value = bytes[i].toString(16);
             hex = `${hex}${value.length > 1 ? value : `0${value}`}`;
@@ -152,17 +160,17 @@ class SignResult {
 }
 exports.SignResult = SignResult;
 let sha512;
-if (typeof window == "object" && "crypto" in window) {
+if (typeof window == 'object' && 'crypto' in window) {
     sha512 = async (message) => {
-        const buffer = await window.crypto.subtle.digest("SHA-512", message.buffer);
+        const buffer = await window.crypto.subtle.digest('SHA-512', message.buffer);
         return new Uint8Array(buffer);
     };
 }
-else if (typeof process === "object" && "node" in process.versions) {
+else if (typeof process === 'object' && 'node' in process.versions) {
     const req = require;
-    const { createHash } = req("crypto");
+    const { createHash } = req('crypto');
     sha512 = async (message) => {
-        const hash = createHash("sha512");
+        const hash = createHash('sha512');
         hash.update(message);
         return Uint8Array.from(hash.digest());
     };
@@ -178,9 +186,6 @@ function concatTypedArrays(...args) {
         pad += arr.length;
     }
     return result;
-}
-function bitset(n) {
-    return n.toString(2).split('').reverse().map(b => Number.parseInt(b, 2));
 }
 function numberToUint8Array(num, padding) {
     let hex = num.toString(16);
@@ -235,12 +240,10 @@ async function hashNumber(...args) {
     const messageArray = concatTypedArrays(...args);
     const hash = await sha512(messageArray);
     const value = arrayToNumberLE(hash);
-    return mod(value, exports.PRIME_ORDER);
+    return mod(value, PRIME_ORDER);
 }
 function getPrivateBytes(privateKey) {
-    return sha512(privateKey instanceof Uint8Array
-        ? privateKey
-        : numberToUint8Array(privateKey, 64));
+    return sha512(privateKey instanceof Uint8Array ? privateKey : numberToUint8Array(privateKey, 64));
 }
 function keyPrefix(privateBytes) {
     return privateBytes.slice(ENCODING_LENGTH);
@@ -249,8 +252,8 @@ function mod(a, b) {
     const res = a % b;
     return res >= 0 ? res : b + res;
 }
-function inversion(num) {
-    return powMod(num, exports.P - 2n, exports.P);
+function modInverse(num) {
+    return powMod(num, P - 2n, P);
 }
 function encodePrivate(privateBytes) {
     const last = ENCODING_LENGTH - 1;
@@ -265,7 +268,7 @@ function normalizePrivateKey(privateKey) {
     if (privateKey instanceof Uint8Array) {
         res = arrayToNumberBE(privateKey);
     }
-    else if (typeof privateKey === "string") {
+    else if (typeof privateKey === 'string') {
         res = hexToNumber(privateKey);
     }
     else {
@@ -280,15 +283,13 @@ function normalizePoint(point, privateKey) {
     if (privateKey instanceof Uint8Array) {
         return point.encode();
     }
-    if (typeof privateKey === "string") {
+    if (typeof privateKey === 'string') {
         return point.toHex();
     }
     return point;
 }
 function normalizeSignature(signature) {
-    return signature instanceof SignResult
-        ? signature
-        : SignResult.fromHex(signature);
+    return signature instanceof SignResult ? signature : SignResult.fromHex(signature);
 }
 function normalizeHash(hash) {
     return hash instanceof Uint8Array ? hash : hexToArray(hash);
@@ -297,7 +298,7 @@ async function getPublicKey(privateKey) {
     const multiplier = normalizePrivateKey(privateKey);
     const privateBytes = await getPrivateBytes(multiplier);
     const privateInt = encodePrivate(privateBytes);
-    const publicKey = exports.BASE_POINT.multiply(privateInt);
+    const publicKey = Point.BASE_POINT.multiply(privateInt);
     const p = normalizePoint(publicKey, privateKey);
     return p;
 }
@@ -309,9 +310,9 @@ async function sign(hash, privateKey) {
     const privateBytes = await getPrivateBytes(privateKey);
     const privatePrefix = keyPrefix(privateBytes);
     const r = await hashNumber(privatePrefix, message);
-    const R = exports.BASE_POINT.multiply(r);
+    const R = Point.BASE_POINT.multiply(r);
     const h = await hashNumber(R.encode(), publicKey.encode(), message);
-    const S = mod(r + h * encodePrivate(privateBytes), exports.PRIME_ORDER);
+    const S = mod(r + h * encodePrivate(privateBytes), PRIME_ORDER);
     const signature = new SignResult(R, S).toHex();
     return hash instanceof Uint8Array ? hexToArray(signature) : signature;
 }
@@ -321,14 +322,15 @@ async function verify(signature, hash, publicKey) {
     publicKey = normalizePublicKey(publicKey);
     signature = normalizeSignature(signature);
     const h = await hashNumber(signature.r.encode(), publicKey.encode(), hash);
-    const S = exports.BASE_POINT.multiply(signature.s);
+    const S = Point.BASE_POINT.multiply(signature.s);
     const R = signature.r.add(publicKey.multiply(h));
     return S.x === R.x && S.y === R.y;
 }
 exports.verify = verify;
+Point.BASE_POINT.WINDOW_SIZE = 4;
 exports.utils = {
-    precompute(W = 4, point = exports.BASE_POINT) {
-        point.W = W;
+    precompute(windowSize = 4, point = Point.BASE_POINT) {
+        point.WINDOW_SIZE = windowSize;
         point.multiply(1n);
         return true;
     }

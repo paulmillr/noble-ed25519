@@ -1,38 +1,65 @@
 /*! noble-ed25519 - MIT License (c) Paul Miller (paulmillr.com) */
 // https://ed25519.cr.yp.to
+// https://tools.ietf.org/html/rfc8032
 // https://en.wikipedia.org/wiki/EdDSA
 // Thanks DJB!
-const ENCODING_LENGTH = 32;
-const A = -1n;
-const C = 1n;
-// 𝔽p
-export const P = 2n ** 255n - 19n;
-// Prime subgroup. 25519 is a curve with cofactor = 8, so the order is:
-export const PRIME_ORDER = 2n ** 252n + 27742317777372353535851937790883648493n;
-const d = -121665n * inversion(121666n);
-const I = powMod(2n, (P - 1n) / 4n, P);
+
+export const CURVE_PARAMS = {
+  // Params: a, b
+  a: -1n,
+  // Equal to -121665/121666 over finite field.
+  // Negative number is P - number, and division is modInverse(number, P)
+  d: 37095705934669439343138083508754565189542113879843219016388785533085940283555n,
+  // Finite field 𝔽p over which we'll do calculations
+  P: 2n ** 255n - 19n,
+  // Subgroup order aka prime_order
+  n: 2n ** 252n + 27742317777372353535851937790883648493n,
+  // Cofactor
+  h: 8n,
+  // Base point (x, y) aka generator point
+  Gx: 15112221349535400772501151409588531511454012693041857206046113283949847762202n,
+  Gy: 46316835694926478169428394003475163141307993866256225615783033603165251855960n
+};
 
 type PrivKey = Uint8Array | string | bigint | number;
 type PubKey = Uint8Array | string | Point;
 type Hex = Uint8Array | string;
 type Signature = Uint8Array | string | SignResult;
 
+const ENCODING_LENGTH = 32;
+const P = CURVE_PARAMS.P;
+const PRIME_ORDER = CURVE_PARAMS.n;
+const I = powMod(2n, (P - 1n) / 4n, P);
+
 export class Point {
-  W?: number;
+  // Base point aka generator
+  // public_key = base_point * private_key
+  static BASE_POINT: Point = new Point(CURVE_PARAMS.Gx, CURVE_PARAMS.Gy);
+  // Identity point aka point at infinity
+  // point = point + zero_point
+  static ZERO_POINT: Point = new Point(0n, 1n);
+
+  WINDOW_SIZE?: number;
   private PRECOMPUTES?: Point[];
 
   constructor(public x: bigint, public y: bigint) {}
 
   static fromHex(hash: Hex) {
+    const {a, d} = CURVE_PARAMS;
+
+    // rfc8032 5.1.3
     const bytes = hash instanceof Uint8Array ? hash : hexToArray(hash);
     const len = bytes.length - 1;
     const normedLast = bytes[len] & ~0x80;
-    const normed = new Uint8Array([...bytes.slice(0, -1), normedLast]);
-    const y = arrayToNumberLE(normed);
-    const sqrY = y * y;
-    const sqrX = mod((sqrY - C) * inversion(C * d * sqrY - A), P);
-    let x = powMod(sqrX, (P + 3n) / 8n, P);
     const isLastByteOdd = (bytes[len] & 0x80) !== 0;
+    const normed = Uint8Array.from(Array.from(bytes.slice(0, len)).concat(normedLast));
+    const y = arrayToNumberLE(normed);
+    if (y >= P) {
+      throw new Error('Point#fromHex expects hex <= Fp');
+    }
+    const sqrY = y * y;
+    const sqrX = mod((sqrY - 1n) * modInverse(d * sqrY + 1n), P);
+    let x = powMod(sqrX, (P + 3n) / 8n, P);
     if (mod(x * x - sqrX, P) !== 0n) {
       x = mod(x * I, P);
     }
@@ -80,7 +107,7 @@ export class Point {
     // u, v: x25519 coordinates
     // u = (1 + y) / (1 - y)
     // See https://blog.filippo.io/using-ed25519-keys-for-encryption
-    const res = (1n + this.y) * inversion(1n - this.y);
+    const res = (1n + this.y) * modInverse(1n - this.y);
     return mod(res, P);
   }
 
@@ -92,10 +119,11 @@ export class Point {
     if (!(other instanceof Point)) {
       throw new TypeError('Point#add: expected Point');
     }
+    const {d} = CURVE_PARAMS;
     const a = this;
     const b = other;
-    const x = (a.x * b.y + b.x * a.y) * inversion(1n + d * a.x * b.x * a.y * b.y);
-    const y = (a.y * b.y + a.x * b.x) * inversion(1n - d * a.x * b.x * a.y * b.y);
+    const x = (a.x * b.y + b.x * a.y) * modInverse(1n + d * a.x * b.x * a.y * b.y);
+    const y = (a.y * b.y + a.x * b.x) * modInverse(1n - d * a.x * b.x * a.y * b.y);
     return new Point(mod(x, P), mod(y, P));
   }
 
@@ -134,12 +162,12 @@ export class Point {
     if (n <= 0) {
       throw new Error('Point#multiply: invalid scalar, expected positive integer');
     }
-    const W = this.W || 1;
+    const W = this.WINDOW_SIZE || 1;
     if (256 % W) {
       throw new Error('Point#multiply: Invalid precomputation window, must be power of 2');
     }
     const precomputes = this.precomputeWindow(W);
-    let p = ZERO_POINT;
+    let p = Point.ZERO_POINT;
     // let f = ZERO_POINT;
     const winSize = 2 ** W - 1;
     for (let currWin = 0; currWin < 256 / W; currWin++) {
@@ -155,15 +183,6 @@ export class Point {
     return p;
   }
 }
-
-// https://tools.ietf.org/html/rfc8032#section-5.1
-export const BASE_POINT = new Point(
-  15112221349535400772501151409588531511454012693041857206046113283949847762202n,
-  46316835694926478169428394003475163141307993866256225615783033603165251855960n
-);
-// Enable precomputes. Slows down first publicKey computation by 500ms.
-BASE_POINT.W = 4;
-const ZERO_POINT = new Point(0n, 1n);
 
 export class SignResult {
   constructor(public r: Point, public s: bigint) {}
@@ -189,7 +208,7 @@ export class SignResult {
   }
 }
 
-let sha512: (a: Uint8Array) => Promise<Uint8Array>;
+let sha512: (message: Uint8Array) => Promise<Uint8Array>;
 
 if (typeof window == 'object' && 'crypto' in window) {
   sha512 = async (message: Uint8Array) => {
@@ -292,7 +311,7 @@ function mod(a: bigint, b: bigint) {
   return res >= 0 ? res : b + res;
 }
 
-function inversion(num: bigint) {
+function modInverse(num: bigint): bigint {
   return powMod(num, P - 2n, P);
 }
 
@@ -347,7 +366,7 @@ export async function getPublicKey(privateKey: PrivKey) {
   const multiplier = normalizePrivateKey(privateKey);
   const privateBytes = await getPrivateBytes(multiplier);
   const privateInt = encodePrivate(privateBytes);
-  const publicKey = BASE_POINT.multiply(privateInt);
+  const publicKey = Point.BASE_POINT.multiply(privateInt);
   const p = normalizePoint(publicKey, privateKey);
   return p;
 }
@@ -361,7 +380,7 @@ export async function sign(hash: Hex, privateKey: PrivKey) {
   const privateBytes = await getPrivateBytes(privateKey);
   const privatePrefix = keyPrefix(privateBytes);
   const r = await hashNumber(privatePrefix, message);
-  const R = BASE_POINT.multiply(r);
+  const R = Point.BASE_POINT.multiply(r);
   const h = await hashNumber(R.encode(), publicKey.encode(), message);
   const S = mod(r + h * encodePrivate(privateBytes), PRIME_ORDER);
   const signature = new SignResult(R, S).toHex();
@@ -373,14 +392,17 @@ export async function verify(signature: Signature, hash: Hex, publicKey: PubKey)
   publicKey = normalizePublicKey(publicKey);
   signature = normalizeSignature(signature);
   const h = await hashNumber(signature.r.encode(), publicKey.encode(), hash);
-  const S = BASE_POINT.multiply(signature.s);
+  const S = Point.BASE_POINT.multiply(signature.s);
   const R = signature.r.add(publicKey.multiply(h));
   return S.x === R.x && S.y === R.y;
 }
 
+// Enable precomputes. Slows down first publicKey computation by 500ms.
+Point.BASE_POINT.WINDOW_SIZE = 4;
+
 export const utils = {
-  precompute(W = 4, point = BASE_POINT): true {
-    point.W = W;
+  precompute(windowSize = 4, point = Point.BASE_POINT): true {
+    point.WINDOW_SIZE = windowSize;
     point.multiply(1n);
     return true;
   }

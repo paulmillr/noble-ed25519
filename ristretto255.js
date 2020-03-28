@@ -23,11 +23,7 @@ class FieldElement {
         const octet3 = (this.load8(bytes, 12) >> 6n) & low51bitMask;
         const octet4 = (this.load8(bytes, 19) >> 1n) & low51bitMask;
         const octet5 = (this.load8(bytes, 24) >> 12n) & low51bitMask;
-        return new FieldElement(octet1 +
-            (octet2 << 51n) +
-            (octet3 << 102n) +
-            (octet4 << 153n) +
-            (octet5 << 204n));
+        return new FieldElement(octet1 + (octet2 << 51n) + (octet3 << 102n) + (octet4 << 153n) + (octet5 << 204n));
     }
     static one() {
         return new FieldElement(1n);
@@ -42,7 +38,7 @@ class FieldElement {
     toBytesBE(length = 0) {
         let hex = this.value.toString(16);
         hex = hex.length & 1 ? `0${hex}` : hex;
-        hex = hex.padStart(length * 2, "0");
+        hex = hex.padStart(length * 2, '0');
         const len = hex.length / 2;
         const u8 = new Uint8Array(len);
         for (let j = 0, i = 0; i < hex.length; i += 2, j++) {
@@ -141,10 +137,7 @@ class FieldElement {
         choice = BigInt(choice);
         const mask = choice !== 0n ? mask64Bits : choice;
         const tmp = mask & (this.value ^ other.value);
-        return [
-            new FieldElement(this.value ^ tmp),
-            new FieldElement(other.value ^ tmp)
-        ];
+        return [new FieldElement(this.value ^ tmp), new FieldElement(other.value ^ tmp)];
     }
     sqrtRatio(v) {
         const v3 = v.multiply(v).multiply(v);
@@ -383,16 +376,16 @@ class AffineCached {
     }
 }
 exports.AffineCached = AffineCached;
-if (typeof window == "object" && "crypto" in window) {
+if (typeof window == 'object' && 'crypto' in window) {
     exports.sha512 = async (message) => {
-        const buffer = await window.crypto.subtle.digest("SHA-512", message.buffer);
+        const buffer = await window.crypto.subtle.digest('SHA-512', message.buffer);
         return new Uint8Array(buffer);
     };
 }
-else if (typeof process === "object" && "node" in process.versions) {
-    const { createHash } = require("crypto");
+else if (typeof process === 'object' && 'node' in process.versions) {
+    const { createHash } = require('crypto');
     exports.sha512 = async (message) => {
-        const hash = createHash("sha512");
+        const hash = createHash('sha512');
         hash.update(message);
         return Uint8Array.from(hash.digest());
     };
@@ -404,7 +397,7 @@ function fromHexBE(hex) {
     return BigInt(`0x${hex}`);
 }
 function fromBytesBE(bytes) {
-    if (typeof bytes === "string") {
+    if (typeof bytes === 'string') {
         return fromHexBE(bytes);
     }
     let value = 0n;
@@ -432,10 +425,10 @@ function hexToBytes(hash) {
 }
 exports.hexToBytes = hexToBytes;
 function toBigInt(num) {
-    if (typeof num === "string") {
+    if (typeof num === 'string') {
         return fromHexBE(num);
     }
-    if (typeof num === "number") {
+    if (typeof num === 'number') {
         return BigInt(num);
     }
     if (num instanceof Uint8Array) {
@@ -495,7 +488,7 @@ class RistrettoPoint {
     static elligatorRistrettoFlavor(r0) {
         const one = FieldElement.one();
         const oneMinusDSq = one.subtract(FieldElement.D.square());
-        const dMinusOneSq = (FieldElement.D.subtract(one)).square();
+        const dMinusOneSq = FieldElement.D.subtract(one).square();
         const r = FieldElement.SQRT_M1.multiply(r0.square());
         const NS = r.add(one).multiply(oneMinusDSq);
         let c = one.negative();
@@ -506,7 +499,10 @@ class RistrettoPoint {
         sPrime = sPrime.condNegative(sPrimeIsPos);
         S = S.select(sPrime, isNotZeroSquare);
         c = c.select(r, isNotZeroSquare);
-        const NT = c.multiply(r.subtract(one)).multiply(dMinusOneSq).subtract(D);
+        const NT = c
+            .multiply(r.subtract(one))
+            .multiply(dMinusOneSq)
+            .subtract(D);
         const sSquared = S.square();
         const projective = new ProjectiveP3(S.add(S).multiply(D), FieldElement.one().subtract(sSquared), NT.multiply(FieldElement.SQRT_AD_MINUS_ONE), FieldElement.one().add(sSquared));
         return projective.toExtendedCompleted();
@@ -516,14 +512,17 @@ class RistrettoPoint {
         const sEncodingIsCanonical = isBytesEquals(s.toBytesLE(ENCODING_LENGTH), bytes);
         const sIsNegative = s.isNegative();
         if (!sEncodingIsCanonical || sIsNegative) {
-            throw new Error("Cannot convert bytes to Ristretto Point");
+            throw new Error('Cannot convert bytes to Ristretto Point');
         }
         const one = FieldElement.one();
         const s2 = s.square();
         const u1 = one.subtract(s2);
         const u2 = one.add(s2);
         const squaredU2 = u2.square();
-        const v = u1.square().multiply(FieldElement.D.negative()).subtract(squaredU2);
+        const v = u1
+            .square()
+            .multiply(FieldElement.D.negative())
+            .subtract(squaredU2);
         const { isNotZeroSquare, value: I } = v.multiply(squaredU2).invertSqrt();
         const Dx = I.multiply(u2);
         const Dy = I.multiply(Dx).multiply(v);
@@ -533,7 +532,7 @@ class RistrettoPoint {
         const y = u1.multiply(Dy);
         const t = x.multiply(y);
         if (!isNotZeroSquare || t.isNegative() || y.isZero()) {
-            throw new Error("Cannot convert bytes to Ristretto Point");
+            throw new Error('Cannot convert bytes to Ristretto Point');
         }
         return new RistrettoPoint(new ProjectiveP3(x, y, one, t));
     }
@@ -541,7 +540,10 @@ class RistrettoPoint {
         let { x, y, z, T } = this.point;
         const u1 = z.add(y).multiply(z.subtract(y));
         const u2 = x.multiply(y);
-        const { value: invsqrt } = u2.square().multiply(u1).invertSqrt();
+        const { value: invsqrt } = u2
+            .square()
+            .multiply(u1)
+            .invertSqrt();
         const i1 = invsqrt.multiply(u1);
         const i2 = invsqrt.multiply(u2);
         const invertedZ = i1.multiply(i2).multiply(T);

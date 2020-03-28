@@ -1,6 +1,13 @@
 /*! noble-ed25519 - MIT License (c) Paul Miller (paulmillr.com) */
-export declare const P: bigint;
-export declare const PRIME_ORDER: bigint;
+export declare const CURVE_PARAMS: {
+    a: bigint;
+    d: bigint;
+    P: bigint;
+    n: bigint;
+    h: bigint;
+    Gx: bigint;
+    Gy: bigint;
+};
 declare type PrivKey = Uint8Array | string | bigint | number;
 declare type PubKey = Uint8Array | string | Point;
 declare type Hex = Uint8Array | string;
@@ -8,7 +15,9 @@ declare type Signature = Uint8Array | string | SignResult;
 export declare class Point {
     x: bigint;
     y: bigint;
-    W?: number;
+    static BASE_POINT: Point;
+    static ZERO_POINT: Point;
+    WINDOW_SIZE?: number;
     private PRECOMPUTES?;
     constructor(x: bigint, y: bigint);
     static fromHex(hash: Hex): Point;
@@ -21,7 +30,6 @@ export declare class Point {
     private precomputeWindow;
     multiply(scalar: number | bigint): Point;
 }
-export declare const BASE_POINT: Point;
 export declare class SignResult {
     r: Point;
     s: bigint;
@@ -36,6 +44,6 @@ export declare function sign(hash: Uint8Array, privateKey: PrivKey): Promise<Uin
 export declare function sign(hash: string, privateKey: PrivKey): Promise<string>;
 export declare function verify(signature: Signature, hash: Hex, publicKey: PubKey): Promise<boolean>;
 export declare const utils: {
-    precompute(W?: number, point?: Point): true;
+    precompute(windowSize?: number, point?: Point): true;
 };
 export {};

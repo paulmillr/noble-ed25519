@@ -36,7 +36,7 @@ describe('ed25519', () => {
 
   it('should verify just signed message', async () => {
     await fc.assert(
-      fc.asyncProperty(fc.hexa(), fc.bigUint(ed25519.PRIME_ORDER), async (message, privateKey) => {
+      fc.asyncProperty(fc.hexa(), fc.bigUint(ed25519.CURVE_PARAMS.n), async (message, privateKey) => {
         const publicKey = await ed25519.getPublicKey(privateKey);
         const signature = await ed25519.sign(message, privateKey);
         expect(publicKey.toHex().length).toBe(64);
@@ -51,7 +51,7 @@ describe('ed25519', () => {
       fc.asyncProperty(
         fc.array(fc.integer(0x00, 0xff)),
         fc.array(fc.integer(0x00, 0xff)),
-        fc.bigUint(ed25519.PRIME_ORDER),
+        fc.bigUint(ed25519.CURVE_PARAMS.n),
         async (bytes, wrongBytes, privateKey) => {
           const message = new Uint8Array(bytes);
           const wrongMessage = new Uint8Array(wrongBytes);
@@ -83,7 +83,7 @@ describe('ed25519', () => {
   // https://xmr.llcoins.net/addresstests.html
   it('should create right publicKey without SHA-512 hashing TEST 1', () => {
     // 77fadbe52830d30438ff68036374c0e3fb755d0d983743bcbfb6a45962f50a09
-    const publicKey = ed25519.BASE_POINT.multiply(
+    const publicKey = ed25519.Point.BASE_POINT.multiply(
       4090177687267471719164802180371655790974410769055056530206928641275872410231n
     );
     expect(publicKey.toHex()).toBe(
@@ -92,7 +92,7 @@ describe('ed25519', () => {
   });
   it('should create right publicKey without SHA-512 hashing TEST 2', () => {
     // 888b4d09d3d439e01fe9a9280f9439f026c161b0575d2a388007a611874e3600
-    const publicKey = ed25519.BASE_POINT.multiply(
+    const publicKey = ed25519.Point.BASE_POINT.multiply(
       95951719164491934016098152084711983042317968705124759109304017803304340360n
     );
     expect(publicKey.toHex()).toBe(
@@ -101,7 +101,7 @@ describe('ed25519', () => {
   });
   it('should create right publicKey without SHA-512 hashing TEST 3', () => {
     // 41e9862dec76d60523fca3329dfb6cc1f0627aa0c3ca522704ecabf30ff99b0b
-    const publicKey = ed25519.BASE_POINT.multiply(
+    const publicKey = ed25519.Point.BASE_POINT.multiply(
       5251021594357742159570582158299009909606168663234119833766344637273690532161n
     );
     expect(publicKey.toHex()).toBe(
@@ -110,7 +110,7 @@ describe('ed25519', () => {
   });
   it('should create right publicKey without SHA-512 hashing TEST 4', () => {
     // 6ea44708dbe800084e45549f7fd059280e180803088e87c92495d7026f899d06
-    const publicKey = ed25519.BASE_POINT.multiply(
+    const publicKey = ed25519.Point.BASE_POINT.multiply(
       2992220612772705148923293930750391889471356540185692956764167374764935455854n
     );
     expect(publicKey.toHex()).toBe(
@@ -119,7 +119,7 @@ describe('ed25519', () => {
   });
 
   it('should convert base point to montgomery', async () => {
-    expect(ed25519.BASE_POINT.toX25519()).toBe(9n);
+    expect(ed25519.Point.BASE_POINT.toX25519()).toBe(9n);
   });
 
   it('should convert TEST 1 to montgomery', async () => {
