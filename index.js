@@ -252,9 +252,31 @@ function mod(a, b) {
     const res = a % b;
     return res >= 0 ? res : b + res;
 }
-function modInverse(num) {
-    return powMod(num, P - 2n, P);
+function egcd(a, b) {
+    let [x, y, u, v] = [0n, 1n, 1n, 0n];
+    while (a !== 0n) {
+        let q = b / a;
+        let r = b % a;
+        let m = x - u * q;
+        let n = y - v * q;
+        [b, a] = [a, r];
+        [x, y] = [u, v];
+        [u, v] = [m, n];
+    }
+    let gcd = b;
+    return [gcd, x, y];
 }
+function modInverse(number, modulo = P) {
+    if (number === 0n || modulo <= 0n) {
+        throw new Error('modInverse: expected positive integers');
+    }
+    let [gcd, x] = egcd(mod(number, modulo), modulo);
+    if (gcd !== 1n) {
+        throw new Error('modInverse: does not exist');
+    }
+    return mod(x, modulo);
+}
+exports.modInverse = modInverse;
 function encodePrivate(privateBytes) {
     const last = ENCODING_LENGTH - 1;
     const head = privateBytes.slice(0, ENCODING_LENGTH);

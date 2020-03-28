@@ -311,8 +311,32 @@ function mod(a: bigint, b: bigint) {
   return res >= 0 ? res : b + res;
 }
 
-function modInverse(num: bigint): bigint {
-  return powMod(num, P - 2n, P);
+// Eucledian GCD
+// https://brilliant.org/wiki/extended-euclidean-algorithm/
+function egcd(a: bigint, b: bigint) {
+  let [x, y, u, v] = [0n, 1n, 1n, 0n];
+  while (a !== 0n) {
+    let q = b / a;
+    let r = b % a;
+    let m = x - u * q;
+    let n = y - v * q;
+    [b, a] = [a, r];
+    [x, y] = [u, v];
+    [u, v] = [m, n];
+  }
+  let gcd = b;
+  return [gcd, x, y];
+}
+
+export function modInverse(number: bigint, modulo: bigint = P) {
+  if (number === 0n || modulo <= 0n) {
+    throw new Error('modInverse: expected positive integers');
+  }
+  let [gcd, x] = egcd(mod(number, modulo), modulo);
+  if (gcd !== 1n) {
+    throw new Error('modInverse: does not exist');
+  }
+  return mod(x, modulo);
 }
 
 function encodePrivate(privateBytes: Uint8Array) {
