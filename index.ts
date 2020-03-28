@@ -45,7 +45,7 @@ export class Point {
   constructor(public x: bigint, public y: bigint) {}
 
   static fromHex(hash: Hex) {
-    const {a, d} = CURVE_PARAMS;
+    const { a, d } = CURVE_PARAMS;
 
     // rfc8032 5.1.3
     const bytes = hash instanceof Uint8Array ? hash : hexToArray(hash);
@@ -119,7 +119,7 @@ export class Point {
     if (!(other instanceof Point)) {
       throw new TypeError('Point#add: expected Point');
     }
-    const {d} = CURVE_PARAMS;
+    const { d } = CURVE_PARAMS;
     const a = this;
     const b = other;
     const x = (a.x * b.y + b.x * a.y) * modInverse(1n + d * a.x * b.x * a.y * b.y);
@@ -328,7 +328,7 @@ function egcd(a: bigint, b: bigint) {
   return [gcd, x, y];
 }
 
-export function modInverse(number: bigint, modulo: bigint = P) {
+function modInverse(number: bigint, modulo: bigint = P) {
   if (number === 0n || modulo <= 0n) {
     throw new Error('modInverse: expected positive integers');
   }

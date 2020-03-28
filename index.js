@@ -276,7 +276,6 @@ function modInverse(number, modulo = P) {
     }
     return mod(x, modulo);
 }
-exports.modInverse = modInverse;
 function encodePrivate(privateBytes) {
     const last = ENCODING_LENGTH - 1;
     const head = privateBytes.slice(0, ENCODING_LENGTH);

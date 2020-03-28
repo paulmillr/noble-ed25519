@@ -37,7 +37,6 @@ export declare class SignResult {
     static fromHex(hex: Hex): SignResult;
     toHex(): string;
 }
-export declare function modInverse(number: bigint, modulo?: bigint): bigint;
 export declare function getPublicKey(privateKey: Uint8Array): Promise<Uint8Array>;
 export declare function getPublicKey(privateKey: string): Promise<string>;
 export declare function getPublicKey(privateKey: bigint | number): Promise<Point>;
