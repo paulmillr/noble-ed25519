@@ -1,64 +1,82 @@
-const ed = require('.');
+let ed;
 
-function logMem(i) {
-  const vals = Object.entries(process.memoryUsage()).map(([k, v]) => {
-    return `${k}=${(`${(v / 1e6).toFixed(1)}M`).padEnd(7)}`;
-  });
-  console.log(String(i).padStart(6), ...vals);
+function time() {
+  return process.hrtime.bigint();
 }
 
-async function bench(name, counts, priv, pub) {
-  const label = `${name} x${counts}`;
-  const start = Date.now();
-  for (let i = 0; i < counts; i++) {
-    await ed.getPublicKey('beef');
+function logMem() {
+  const vals = Object.entries(process.memoryUsage()).map(([k, v]) => {
+    return `${k}=${`${(v / 1e6).toFixed(1)}M`.padEnd(7)}`;
+  });
+  console.log('RAM:', ...vals);
+}
+
+async function bench(label, samples, callback) {
+  let initial = false;
+  if (typeof label === 'function' && !samples && !callback) {
+    callback = label;
+    samples = 1;
+    label = 'Initialized in';
+    initial = true;
   }
-  console.log(`${label}: ${Date.now() - start}`);
+  const [μs, ms, sec] = [1000n, 1000000n, 1000000000n];
+  const start = time();
+  for (let i = 0; i < samples; i++) {
+    let val = callback();
+    if (val instanceof Promise) await val;
+  }
+  const end = time();
+  const total = end - start;
+  const perItem = total / BigInt(samples);
+
+  let perItemStr = perItem.toString();
+  let symbol = 'ns';
+  if (perItem > μs) {
+    symbol = 'μs';
+    perItemStr = (perItem / μs).toString();
+  }
+  if (perItem > ms) {
+    symbol = 'ms';
+    perItemStr = (perItem / ms).toString();
+  }
+
+  const perSec = (sec / perItem).toString();
+  let str = `${label} `;
+  if (!initial) {
+    str += `x ${perSec} ops/sec, ${perItemStr}${symbol} / op, ${samples} samples`;
+  } else {
+    str += `${perItemStr}${symbol}`;
+  }
+  console.log(str);
 }
 
 (async () => {
+  // warm-up
+  let pub;
+  console.log('Benchmarking...\n');
+  await bench(() => {
+    ed = require('.');
+    ed.utils.precompute();
+  });
+
   logMem('start');
+  console.log();
 
-  const priv = 'beef';
-  const expected = '096596f308a288d1f8a8bcaca202eb6dd6da707e60e64427a2baa568eb2e31c4';
-  let start = Date.now();
-  let actual;
-  function time(label, expected) {
-    let now = Date.now();
-    const arg = (expected) ? {actual, expected} : '';
-    console.log(`- \`${label}\`: ${now - start}ms`, arg);
-    start = now;
-  }
+  await bench('getPublicKey 1 bit', 100, async () => {
+    pub = await ed.getPublicKey(2n);
+  });
 
-  ed.utils.precompute();
-  time('precomputation: first getPrivateKey() or utils.precompute()');
+  // console.profile('cpu');
+  const priv = 0x9d61b19deffd5a60ba844af492ec2cc44449c5697b326919703bac031cae7f60n;
+  await bench('getPublicKey 256 bit', 100, async () => {
+    pub = await ed.getPublicKey(priv);
+  });
 
-  actual = await ed.getPublicKey(priv);
-  time('getPrivateKey()', expected);
+  const message = 'deadbeefdeadbeefdeadbeefdeadbeefdeadbeef';
+  await bench('sign', 100, async () => {
+    const signature = await ed.sign(message, priv);
+  });
 
-  const privateKey = 0x9d61b19deffd5a60ba844af492ec2cc44449c5697b326919703bac031cae7f60n;
-  const publicKey = await ed.getPublicKey(privateKey);
-  const message = '';
-  const signature = await ed.sign(message, privateKey);
-  time('sign()');
-
-  // actual = await ed.getPublicKey(priv);
-  // time();
-
-  logMem('end');
-})()
-
-// // console.profile('cpu');
-// const priv = 2n ** 255n + 12341n;
-// bench('getPublicKey 256 bit', 1, async () => {
-//   pub = await ed.getPublicKey(priv);
-// });
-
-// let custom = ed.Point.fromHex(pub);
-// bench('multiply custom point', 1, () => {
-//   pub = custom.multiply(0x0123456789abcdef012789abcdef0123456789abcdef0123456789abcdefn);
-// });
-
-// ed.getPublicKey('0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef');
-
-// console.profileEnd('cpu');
+  console.log();
+  logMem();
+})();

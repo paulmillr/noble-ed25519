@@ -31,6 +31,64 @@ const P = CURVE_PARAMS.P;
 const PRIME_ORDER = CURVE_PARAMS.n;
 const I = powMod(2n, (P - 1n) / 4n, P);
 
+
+// Point represents default aka affine coordinates: (x, y)
+// Jacobian Point represents point in jacobian coordinates: (x=x/z^2, y=y/z^3, z)
+class JacobianPoint {
+  static ZERO_POINT = new JacobianPoint(0n, 1n, 1n);
+  static fromPoint(p: Point): JacobianPoint {
+    return new JacobianPoint(p.x, p.y, 1n);
+  }
+
+  constructor(public x: bigint, public y: bigint, public z: bigint) {}
+
+  static batchAffine(points: JacobianPoint[]): Point[] {
+    const toInv = new Array(points.length);
+    for (let i = 0; i < points.length; i++) toInv[i] = points[i].z;
+    batchInverse(toInv, P);
+    const res = new Array(points.length);
+    for (let i = 0; i < res.length; i++) res[i] = points[i].toAffine(toInv[i]);
+    return res;
+  }
+
+  double(): JacobianPoint {
+    // From: http://hyperelliptic.org/EFD/g1p/auto-twisted-projective.html#doubling-mdbl-2008-bbjlp
+    // Cost: 2M + 4S + 1*a + 7add + 1*2.
+    const [X1, Y1] = [this.x, this.y];
+    const {a} = CURVE_PARAMS;
+    const B = (X1+Y1) ** 2n;
+    const C = X1 ** 2n;
+    const D = Y1 ** 2n;
+    const E = a * C;
+    const F = E+D
+    const X3 = (B-C-D)*(F-2n);
+    const Y3 = F*(E-D);
+    const Z3 = F**2n - 2n*F;
+    return new JacobianPoint(X3, Y3, Z3);
+  }
+
+  add(other: JacobianPoint): JacobianPoint {
+    const [X1, Y1, X2, Y2] = [this.x, this.y, other.x, other.y];
+    const {a, d} = CURVE_PARAMS;
+
+    // From: http://hyperelliptic.org/EFD/g1p/auto-twisted-projective.html#addition-mmadd-2008-bbjlp
+    // Cost: 6M + 1S + 1*a + 1*d + 8add.
+    const C = X1*X2;
+    const D = Y1*Y2;
+    const E = d*C*D;
+    const X3 = mod((1n-E)*((X1+Y1)*(X2+Y2)-C-D));
+    const Y3 = mod((1n+E)*(D-a*C));
+    const Z3 = mod(1n - E ** 2n);
+    return new JacobianPoint(X3, Y3, Z3);
+  }
+
+  toAffine(negZ: bigint): Point {
+    const x = mod(this.x * negZ, P);
+    const y = mod(this.y * negZ, P);
+    return new Point(x, y);
+  }
+}
+
 export class Point {
   // Base point aka generator
   // public_key = base_point * private_key
@@ -40,7 +98,7 @@ export class Point {
   static ZERO_POINT: Point = new Point(0n, 1n);
 
   WINDOW_SIZE?: number;
-  private PRECOMPUTES?: Point[];
+  private PRECOMPUTES?: JacobianPoint[];
 
   constructor(public x: bigint, public y: bigint) {}
 
@@ -131,57 +189,112 @@ export class Point {
     return this.add(other.negate());
   }
 
-  private precomputeWindow(W: number): Point[] {
+  // private precomputeWindow2(W: number): Point[] {
+  //   if (this.PRECOMPUTES) return this.PRECOMPUTES;
+  //   const points: Point[] = new Array((2 ** W - 1) * W);
+  //   if (W !== 1) {
+  //     this.PRECOMPUTES = points;
+  //   }
+  //   let currPoint: Point = this;
+  //   const winSize = 2 ** W - 1;
+  //   for (let currWin = 0; currWin < 256 / W; currWin++) {
+  //     let offset = currWin * winSize;
+  //     let point: Point = currPoint;
+  //     for (let i = 0; i < winSize; i++) {
+  //       points[offset + i] = point;
+  //       point = point.add(currPoint);
+  //     }
+  //     currPoint = point;
+  //   }
+  //   return points;
+  // }
+
+  private precomputeWindow(W: number): JacobianPoint[] {
     if (this.PRECOMPUTES) return this.PRECOMPUTES;
-    const points: Point[] = new Array((2 ** W - 1) * W);
-    if (W !== 1) {
-      this.PRECOMPUTES = points;
-    }
-    let currPoint: Point = this;
+    const points: JacobianPoint[] = new Array((2 ** W - 1) * W);
+    let currPoint: JacobianPoint = JacobianPoint.fromPoint(this);
     const winSize = 2 ** W - 1;
     for (let currWin = 0; currWin < 256 / W; currWin++) {
       let offset = currWin * winSize;
-      let point: Point = currPoint;
+      let point: JacobianPoint = currPoint;
       for (let i = 0; i < winSize; i++) {
         points[offset + i] = point;
         point = point.add(currPoint);
       }
       currPoint = point;
     }
-    return points;
+    let res = points;
+    if (W !== 1) {
+      res = JacobianPoint.batchAffine(points).map(p => JacobianPoint.fromPoint(p));
+      this.PRECOMPUTES = res;
+    }
+    return res;
   }
 
   // Constant time multiplication.
   // No need to emulate constant-time in ed25519 with `f` fake point,
   // there is no special case for Point#add(0); private keys are hashed.
-  multiply(scalar: number | bigint): Point {
-    if (typeof scalar !== 'number' && typeof scalar !== 'bigint') {
-      throw new TypeError('Point#multiply: expected number or bigint');
-    }
-    let n = mod(BigInt(scalar), PRIME_ORDER);
-    if (n <= 0) {
-      throw new Error('Point#multiply: invalid scalar, expected positive integer');
-    }
-    const W = this.WINDOW_SIZE || 1;
-    if (256 % W) {
-      throw new Error('Point#multiply: Invalid precomputation window, must be power of 2');
-    }
-    const precomputes = this.precomputeWindow(W);
-    let p = Point.ZERO_POINT;
-    // let f = ZERO_POINT;
-    const winSize = 2 ** W - 1;
-    for (let currWin = 0; currWin < 256 / W; currWin++) {
-      const offset = currWin * winSize;
-      const masked = Number(n & BigInt(winSize));
-      if (masked) {
-        p = p.add(precomputes[offset + masked - 1]);
-      } else {
-        // f = f.add(precomputes[offset]);
+    // Constant time multiplication.
+    multiply(scalar: bigint): Point {
+      if (typeof scalar !== 'number' && typeof scalar !== 'bigint') {
+        throw new TypeError('Point#multiply: expected number or bigint');
       }
-      n >>= BigInt(W);
+      let n = mod(BigInt(scalar), PRIME_ORDER);
+      if (n <= 0) {
+        throw new Error('Point#multiply: invalid scalar, expected positive integer');
+      }
+      // TODO: remove the check in the future, need to adjust tests.
+      if (scalar > PRIME_ORDER) {
+      //  throw new Error('Point#multiply: invalid scalar, expected < PRIME_ORDER');
+      }
+      const W = this.WINDOW_SIZE || 1;
+      if (256 % W) {
+        throw new Error('Point#multiply: Invalid precomputation window, must be power of 2');
+      }
+      const precomputes = this.precomputeWindow(W);
+      const winSize = 2 ** W - 1;
+      let p = JacobianPoint.ZERO_POINT;
+      let f = JacobianPoint.ZERO_POINT;
+      for (let byteIdx = 0; byteIdx < 256 / W; byteIdx++) {
+        const offset = winSize * byteIdx;
+        const masked = Number(n & BigInt(winSize));
+        if (masked) {
+          p = p.add(precomputes[offset + masked - 1]);
+        } else {
+          f = f.add(precomputes[offset]);
+        }
+        n >>= BigInt(W);
+      }
+      return JacobianPoint.batchAffine([p, f])[0];
     }
-    return p;
-  }
+  // multiply(scalar: number | bigint): Point {
+  //   if (typeof scalar !== 'number' && typeof scalar !== 'bigint') {
+  //     throw new TypeError('Point#multiply: expected number or bigint');
+  //   }
+  //   let n = mod(BigInt(scalar), PRIME_ORDER);
+  //   if (n <= 0) {
+  //     throw new Error('Point#multiply: invalid scalar, expected positive integer');
+  //   }
+  //   const W = this.WINDOW_SIZE || 1;
+  //   if (256 % W) {
+  //     throw new Error('Point#multiply: Invalid precomputation window, must be power of 2');
+  //   }
+  //   const precomputes = this.precomputeWindow(W);
+  //   let p = Point.ZERO_POINT;
+  //   // let f = ZERO_POINT;
+  //   const winSize = 2 ** W - 1;
+  //   for (let currWin = 0; currWin < 256 / W; currWin++) {
+  //     const offset = currWin * winSize;
+  //     const masked = Number(n & BigInt(winSize));
+  //     if (masked) {
+  //       p = p.add(precomputes[offset + masked - 1]);
+  //     } else {
+  //       // f = f.add(precomputes[offset]);
+  //     }
+  //     n >>= BigInt(W);
+  //   }
+  //   return p;
+  // }
 }
 
 export class SignResult {
@@ -312,7 +425,7 @@ function keyPrefix(privateBytes: Uint8Array) {
   return privateBytes.slice(ENCODING_LENGTH);
 }
 
-function mod(a: bigint, b: bigint) {
+function mod(a: bigint, b: bigint = P) {
   const res = a % b;
   return res >= 0 ? res : b + res;
 }
@@ -343,6 +456,23 @@ function modInverse(number: bigint, modulo: bigint = P) {
     throw new Error('modInverse: does not exist');
   }
   return mod(x, modulo);
+}
+
+function batchInverse(elms: bigint[], n: bigint) {
+  let scratch = new Array(elms.length);
+  let acc = 1n;
+  for (let i = 0; i < elms.length; i++) {
+    if (!elms[i]) continue;
+    scratch[i] = acc;
+    acc = mod(acc * elms[i], n);
+  }
+  acc = modInverse(acc, n);
+  for (let i = elms.length - 1; i >= 0; i--) {
+    if (!elms[i]) continue;
+    let tmp = mod(acc * elms[i], n);
+    elms[i] = mod(acc * scratch[i], n);
+    acc = tmp;
+  }
 }
 
 function encodePrivate(privateBytes: Uint8Array) {

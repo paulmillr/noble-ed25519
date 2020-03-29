@@ -28,7 +28,7 @@ export declare class Point {
     add(other: Point): Point;
     subtract(other: Point): Point;
     private precomputeWindow;
-    multiply(scalar: number | bigint): Point;
+    multiply(scalar: bigint): Point;
 }
 export declare class SignResult {
     r: Point;

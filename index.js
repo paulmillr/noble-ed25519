@@ -14,6 +14,56 @@ const ENCODING_LENGTH = 32;
 const P = exports.CURVE_PARAMS.P;
 const PRIME_ORDER = exports.CURVE_PARAMS.n;
 const I = powMod(2n, (P - 1n) / 4n, P);
+class JacobianPoint {
+    constructor(x, y, z) {
+        this.x = x;
+        this.y = y;
+        this.z = z;
+    }
+    static fromPoint(p) {
+        return new JacobianPoint(p.x, p.y, 1n);
+    }
+    static batchAffine(points) {
+        const toInv = new Array(points.length);
+        for (let i = 0; i < points.length; i++)
+            toInv[i] = points[i].z;
+        batchInverse(toInv, P);
+        const res = new Array(points.length);
+        for (let i = 0; i < res.length; i++)
+            res[i] = points[i].toAffine(toInv[i]);
+        return res;
+    }
+    double() {
+        const [X1, Y1] = [this.x, this.y];
+        const { a } = exports.CURVE_PARAMS;
+        const B = (X1 + Y1) ** 2n;
+        const C = X1 ** 2n;
+        const D = Y1 ** 2n;
+        const E = a * C;
+        const F = E + D;
+        const X3 = (B - C - D) * (F - 2n);
+        const Y3 = F * (E - D);
+        const Z3 = F ** 2n - 2n * F;
+        return new JacobianPoint(X3, Y3, Z3);
+    }
+    add(other) {
+        const [X1, Y1, X2, Y2] = [this.x, this.y, other.x, other.y];
+        const { a, d } = exports.CURVE_PARAMS;
+        const C = X1 * X2;
+        const D = Y1 * Y2;
+        const E = d * C * D;
+        const X3 = mod((1n - E) * ((X1 + Y1) * (X2 + Y2) - C - D));
+        const Y3 = mod((1n + E) * (D - a * C));
+        const Z3 = mod(1n - E ** 2n);
+        return new JacobianPoint(X3, Y3, Z3);
+    }
+    toAffine(negZ) {
+        const x = mod(this.x * negZ, P);
+        const y = mod(this.y * negZ, P);
+        return new Point(x, y);
+    }
+}
+JacobianPoint.ZERO_POINT = new JacobianPoint(0n, 1n, 1n);
 class Point {
     constructor(x, y) {
         this.x = x;
@@ -87,10 +137,7 @@ class Point {
         if (this.PRECOMPUTES)
             return this.PRECOMPUTES;
         const points = new Array((2 ** W - 1) * W);
-        if (W !== 1) {
-            this.PRECOMPUTES = points;
-        }
-        let currPoint = this;
+        let currPoint = JacobianPoint.fromPoint(this);
         const winSize = 2 ** W - 1;
         for (let currWin = 0; currWin < 256 / W; currWin++) {
             let offset = currWin * winSize;
@@ -101,7 +148,12 @@ class Point {
             }
             currPoint = point;
         }
-        return points;
+        let res = points;
+        if (W !== 1) {
+            res = JacobianPoint.batchAffine(points).map(p => JacobianPoint.fromPoint(p));
+            this.PRECOMPUTES = res;
+        }
+        return res;
     }
     multiply(scalar) {
         if (typeof scalar !== 'number' && typeof scalar !== 'bigint') {
@@ -111,24 +163,28 @@ class Point {
         if (n <= 0) {
             throw new Error('Point#multiply: invalid scalar, expected positive integer');
         }
+        if (scalar > PRIME_ORDER) {
+        }
         const W = this.WINDOW_SIZE || 1;
         if (256 % W) {
             throw new Error('Point#multiply: Invalid precomputation window, must be power of 2');
         }
         const precomputes = this.precomputeWindow(W);
-        let p = Point.ZERO_POINT;
         const winSize = 2 ** W - 1;
-        for (let currWin = 0; currWin < 256 / W; currWin++) {
-            const offset = currWin * winSize;
+        let p = JacobianPoint.ZERO_POINT;
+        let f = JacobianPoint.ZERO_POINT;
+        for (let byteIdx = 0; byteIdx < 256 / W; byteIdx++) {
+            const offset = winSize * byteIdx;
             const masked = Number(n & BigInt(winSize));
             if (masked) {
                 p = p.add(precomputes[offset + masked - 1]);
             }
             else {
+                f = f.add(precomputes[offset]);
             }
             n >>= BigInt(W);
         }
-        return p;
+        return JacobianPoint.batchAffine([p, f])[0];
     }
 }
 exports.Point = Point;
@@ -251,7 +307,7 @@ function getPrivateBytes(privateKey) {
 function keyPrefix(privateBytes) {
     return privateBytes.slice(ENCODING_LENGTH);
 }
-function mod(a, b) {
+function mod(a, b = P) {
     const res = a % b;
     return res >= 0 ? res : b + res;
 }
@@ -278,6 +334,24 @@ function modInverse(number, modulo = P) {
         throw new Error('modInverse: does not exist');
     }
     return mod(x, modulo);
+}
+function batchInverse(elms, n) {
+    let scratch = new Array(elms.length);
+    let acc = 1n;
+    for (let i = 0; i < elms.length; i++) {
+        if (!elms[i])
+            continue;
+        scratch[i] = acc;
+        acc = mod(acc * elms[i], n);
+    }
+    acc = modInverse(acc, n);
+    for (let i = elms.length - 1; i >= 0; i--) {
+        if (!elms[i])
+            continue;
+        let tmp = mod(acc * elms[i], n);
+        elms[i] = mod(acc * scratch[i], n);
+        acc = tmp;
+    }
 }
 function encodePrivate(privateBytes) {
     const last = ENCODING_LENGTH - 1;
