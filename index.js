@@ -41,9 +41,9 @@ class JacobianPoint {
         const D = Y1 ** 2n;
         const E = a * C;
         const F = E + D;
-        const X3 = (B - C - D) * (F - 2n);
-        const Y3 = F * (E - D);
-        const Z3 = F ** 2n - 2n * F;
+        const X3 = mod((B - C - D) * (F - 2n));
+        const Y3 = mod(F * (E - D));
+        const Z3 = mod(F ** 2n - 2n * F);
         return new JacobianPoint(X3, Y3, Z3);
     }
     add(other) {

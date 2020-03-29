@@ -61,9 +61,9 @@ class JacobianPoint {
     const D = Y1 ** 2n;
     const E = a * C;
     const F = E+D
-    const X3 = (B-C-D)*(F-2n);
-    const Y3 = F*(E-D);
-    const Z3 = F**2n - 2n*F;
+    const X3 = mod((B-C-D)*(F-2n));
+    const Y3 = mod(F*(E-D));
+    const Z3 = mod(F**2n - 2n*F);
     return new JacobianPoint(X3, Y3, Z3);
   }
 
@@ -189,26 +189,6 @@ export class Point {
     return this.add(other.negate());
   }
 
-  // private precomputeWindow2(W: number): Point[] {
-  //   if (this.PRECOMPUTES) return this.PRECOMPUTES;
-  //   const points: Point[] = new Array((2 ** W - 1) * W);
-  //   if (W !== 1) {
-  //     this.PRECOMPUTES = points;
-  //   }
-  //   let currPoint: Point = this;
-  //   const winSize = 2 ** W - 1;
-  //   for (let currWin = 0; currWin < 256 / W; currWin++) {
-  //     let offset = currWin * winSize;
-  //     let point: Point = currPoint;
-  //     for (let i = 0; i < winSize; i++) {
-  //       points[offset + i] = point;
-  //       point = point.add(currPoint);
-  //     }
-  //     currPoint = point;
-  //   }
-  //   return points;
-  // }
-
   private precomputeWindow(W: number): JacobianPoint[] {
     if (this.PRECOMPUTES) return this.PRECOMPUTES;
     const points: JacobianPoint[] = new Array((2 ** W - 1) * W);
@@ -267,34 +247,6 @@ export class Point {
       }
       return JacobianPoint.batchAffine([p, f])[0];
     }
-  // multiply(scalar: number | bigint): Point {
-  //   if (typeof scalar !== 'number' && typeof scalar !== 'bigint') {
-  //     throw new TypeError('Point#multiply: expected number or bigint');
-  //   }
-  //   let n = mod(BigInt(scalar), PRIME_ORDER);
-  //   if (n <= 0) {
-  //     throw new Error('Point#multiply: invalid scalar, expected positive integer');
-  //   }
-  //   const W = this.WINDOW_SIZE || 1;
-  //   if (256 % W) {
-  //     throw new Error('Point#multiply: Invalid precomputation window, must be power of 2');
-  //   }
-  //   const precomputes = this.precomputeWindow(W);
-  //   let p = Point.ZERO_POINT;
-  //   // let f = ZERO_POINT;
-  //   const winSize = 2 ** W - 1;
-  //   for (let currWin = 0; currWin < 256 / W; currWin++) {
-  //     const offset = currWin * winSize;
-  //     const masked = Number(n & BigInt(winSize));
-  //     if (masked) {
-  //       p = p.add(precomputes[offset + masked - 1]);
-  //     } else {
-  //       // f = f.add(precomputes[offset]);
-  //     }
-  //     n >>= BigInt(W);
-  //   }
-  //   return p;
-  // }
 }
 
 export class SignResult {
