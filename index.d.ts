@@ -17,9 +17,10 @@ export declare class Point {
     y: bigint;
     static BASE_POINT: Point;
     static ZERO_POINT: Point;
-    WINDOW_SIZE?: number;
+    private WINDOW_SIZE?;
     private PRECOMPUTES?;
     constructor(x: bigint, y: bigint);
+    _setWindowSize(windowSize: number): void;
     static fromHex(hash: Hex): Point;
     encode(): Uint8Array;
     toHex(): string;
@@ -44,6 +45,6 @@ export declare function sign(hash: Uint8Array, privateKey: PrivKey): Promise<Uin
 export declare function sign(hash: string, privateKey: PrivKey): Promise<string>;
 export declare function verify(signature: Signature, hash: Hex, publicKey: PubKey): Promise<boolean>;
 export declare const utils: {
-    precompute(windowSize?: number, point?: Point): true;
+    precompute(windowSize?: number, point?: Point): Point;
 };
 export {};

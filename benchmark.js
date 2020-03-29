@@ -1,4 +1,4 @@
-let ed;
+let ed = require('.');
 
 function time() {
   return process.hrtime.bigint();
@@ -55,26 +55,31 @@ async function bench(label, samples, callback) {
   let pub;
   console.log('Benchmarking...\n');
   await bench(() => {
-    ed = require('.');
+
     ed.utils.precompute();
   });
 
   logMem('start');
   console.log();
 
-  await bench('getPublicKey 1 bit', 100, async () => {
+  await bench('getPublicKey 1 bit', 1000, async () => {
     pub = await ed.getPublicKey(2n);
   });
 
   // console.profile('cpu');
   const priv = 0x9d61b19deffd5a60ba844af492ec2cc44449c5697b326919703bac031cae7f60n;
-  await bench('getPublicKey 256 bit', 100, async () => {
+  await bench('getPublicKey 256 bit', 1000, async () => {
     pub = await ed.getPublicKey(priv);
   });
 
   const message = 'deadbeefdeadbeefdeadbeefdeadbeefdeadbeef';
-  await bench('sign', 100, async () => {
-    const signature = await ed.sign(message, priv);
+  let signature;
+  await bench('sign', 1000, async () => {
+    signature = await ed.sign(message, priv);
+  });
+
+  await bench('verify', 1000, async () => {
+    await ed.verify(signature, message, pub);
   });
 
   console.log();

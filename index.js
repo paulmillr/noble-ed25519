@@ -60,8 +60,12 @@ class Point {
         this.x = x;
         this.y = y;
     }
+    _setWindowSize(windowSize) {
+        this.WINDOW_SIZE = windowSize;
+        this.PRECOMPUTES = undefined;
+    }
     static fromHex(hash) {
-        const { a, d } = exports.CURVE_PARAMS;
+        const { d } = exports.CURVE_PARAMS;
         const bytes = hash instanceof Uint8Array ? hash : hexToArray(hash);
         const len = bytes.length - 1;
         const normedLast = bytes[len] & ~0x80;
@@ -127,12 +131,12 @@ class Point {
     precomputeWindow(W) {
         if (this.PRECOMPUTES)
             return this.PRECOMPUTES;
-        const points = new Array((2 ** W - 1) * W);
+        const points = new Array((2 ** W) * W);
         let currPoint = ProjectivePoint.fromPoint(this);
-        const winSize = 2 ** W - 1;
+        const winSize = 2 ** W;
         for (let currWin = 0; currWin < 256 / W; currWin++) {
             let offset = currWin * winSize;
-            let point = currPoint;
+            let point = ProjectivePoint.ZERO_POINT;
             for (let i = 0; i < winSize; i++) {
                 points[offset + i] = point;
                 point = point.add(currPoint);
@@ -159,21 +163,15 @@ class Point {
             throw new Error('Point#multiply: Invalid precomputation window, must be power of 2');
         }
         const precomputes = this.precomputeWindow(W);
-        const winSize = 2 ** W - 1;
+        const winSize = 2 ** W;
         let p = ProjectivePoint.ZERO_POINT;
-        let f = ProjectivePoint.ZERO_POINT;
         for (let byteIdx = 0; byteIdx < 256 / W; byteIdx++) {
             const offset = winSize * byteIdx;
-            const masked = Number(n & BigInt(winSize));
-            if (masked) {
-                p = p.add(precomputes[offset + masked - 1]);
-            }
-            else {
-                f = f.add(precomputes[offset]);
-            }
+            const masked = Number(n & BigInt(winSize - 1));
+            p = p.add(precomputes[offset + masked]);
             n >>= BigInt(W);
         }
-        return ProjectivePoint.batchAffine([p, f])[0];
+        return p.toAffine(modInverse(p.z));
     }
 }
 exports.Point = Point;
@@ -414,11 +412,12 @@ async function verify(signature, hash, publicKey) {
     return S.x === R.x && S.y === R.y;
 }
 exports.verify = verify;
-Point.BASE_POINT.WINDOW_SIZE = 4;
+Point.BASE_POINT._setWindowSize(4);
 exports.utils = {
     precompute(windowSize = 4, point = Point.BASE_POINT) {
-        point.WINDOW_SIZE = windowSize;
-        point.multiply(1n);
-        return true;
+        const cached = point === Point.BASE_POINT ? point : new Point(point.x, point.y);
+        cached._setWindowSize(windowSize);
+        cached.multiply(1n);
+        return cached;
     }
 };

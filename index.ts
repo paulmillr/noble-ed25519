@@ -80,13 +80,6 @@ class ProjectivePoint {
   }
 }
 
-// let G = BASE_POINT;
-
-// console.log('T00', G.add(G));
-// console.log('T01', G.multiply(2n));
-
-// process.exit();
-
 export class Point {
   // Base point aka generator
   // public_key = base_point * private_key
@@ -95,13 +88,21 @@ export class Point {
   // point = point + zero_point
   static ZERO_POINT: Point = new Point(0n, 1n);
 
-  WINDOW_SIZE?: number;
+  // We calculate precomputes for elliptic curve point multiplication
+  // using windowed method. This specifies window size and
+  // stores precomputed values. Usually only base point would be precomputed.
+  private WINDOW_SIZE?: number;
   private PRECOMPUTES?: ProjectivePoint[];
 
   constructor(public x: bigint, public y: bigint) { }
 
+  _setWindowSize(windowSize: number) {
+    this.WINDOW_SIZE = windowSize;
+    this.PRECOMPUTES = undefined;
+  }
+
   static fromHex(hash: Hex) {
-    const { a, d } = CURVE_PARAMS;
+    const { d } = CURVE_PARAMS;
 
     // rfc8032 5.1.3
     const bytes = hash instanceof Uint8Array ? hash : hexToArray(hash);
@@ -189,12 +190,12 @@ export class Point {
 
   private precomputeWindow(W: number): ProjectivePoint[] {
     if (this.PRECOMPUTES) return this.PRECOMPUTES;
-    const points: ProjectivePoint[] = new Array((2 ** W - 1) * W);
+    const points: ProjectivePoint[] = new Array((2 ** W) * W);
     let currPoint: ProjectivePoint = ProjectivePoint.fromPoint(this);
-    const winSize = 2 ** W - 1;
+    const winSize = 2 ** W;
     for (let currWin = 0; currWin < 256 / W; currWin++) {
       let offset = currWin * winSize;
-      let point: ProjectivePoint = currPoint;
+      let point: ProjectivePoint = ProjectivePoint.ZERO_POINT;
       for (let i = 0; i < winSize; i++) {
         points[offset + i] = point;
         point = point.add(currPoint);
@@ -230,20 +231,15 @@ export class Point {
       throw new Error('Point#multiply: Invalid precomputation window, must be power of 2');
     }
     const precomputes = this.precomputeWindow(W);
-    const winSize = 2 ** W - 1;
+    const winSize = 2 ** W;
     let p = ProjectivePoint.ZERO_POINT;
-    let f = ProjectivePoint.ZERO_POINT;
     for (let byteIdx = 0; byteIdx < 256 / W; byteIdx++) {
       const offset = winSize * byteIdx;
-      const masked = Number(n & BigInt(winSize));
-      if (masked) {
-        p = p.add(precomputes[offset + masked - 1]);
-      } else {
-        f = f.add(precomputes[offset]);
-      }
+      const masked = Number(n & BigInt(winSize - 1));
+      p = p.add(precomputes[offset + masked]);
       n >>= BigInt(W);
     }
-    return ProjectivePoint.batchAffine([p, f])[0];
+    return p.toAffine(modInverse(p.z));
   }
 }
 
@@ -507,13 +503,17 @@ export async function verify(signature: Signature, hash: Hex, publicKey: PubKey)
   return S.x === R.x && S.y === R.y;
 }
 
-// Enable precomputes. Slows down first publicKey computation by 500ms.
-Point.BASE_POINT.WINDOW_SIZE = 4;
+// Enable precomputes. Slows down first publicKey computation by 20ms.
+Point.BASE_POINT._setWindowSize(4);
 
 export const utils = {
-  precompute(windowSize = 4, point = Point.BASE_POINT): true {
-    point.WINDOW_SIZE = windowSize;
-    point.multiply(1n);
-    return true;
+
+  // generateRandomPrivateKey,
+
+  precompute(windowSize = 4, point = Point.BASE_POINT): Point {
+    const cached = point === Point.BASE_POINT ? point : new Point(point.x, point.y);
+    cached._setWindowSize(windowSize);
+    cached.multiply(1n);
+    return cached;
   }
 };
