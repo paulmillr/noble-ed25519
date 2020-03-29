@@ -14,14 +14,14 @@ const ENCODING_LENGTH = 32;
 const P = exports.CURVE_PARAMS.P;
 const PRIME_ORDER = exports.CURVE_PARAMS.n;
 const I = powMod(2n, (P - 1n) / 4n, P);
-class JacobianPoint {
+class ProjectivePoint {
     constructor(x, y, z) {
         this.x = x;
         this.y = y;
         this.z = z;
     }
     static fromPoint(p) {
-        return new JacobianPoint(p.x, p.y, 1n);
+        return new ProjectivePoint(p.x, p.y, 1n);
     }
     static batchAffine(points) {
         const toInv = new Array(points.length);
@@ -33,29 +33,20 @@ class JacobianPoint {
             res[i] = points[i].toAffine(toInv[i]);
         return res;
     }
-    double() {
-        const [X1, Y1] = [this.x, this.y];
-        const { a } = exports.CURVE_PARAMS;
-        const B = (X1 + Y1) ** 2n;
-        const C = X1 ** 2n;
-        const D = Y1 ** 2n;
-        const E = a * C;
-        const F = E + D;
-        const X3 = mod((B - C - D) * (F - 2n));
-        const Y3 = mod(F * (E - D));
-        const Z3 = mod(F ** 2n - 2n * F);
-        return new JacobianPoint(X3, Y3, Z3);
-    }
     add(other) {
-        const [X1, Y1, X2, Y2] = [this.x, this.y, other.x, other.y];
+        const [X1, Y1, Z1, X2, Y2, Z2] = [this.x, this.y, this.z, other.x, other.y, other.z];
         const { a, d } = exports.CURVE_PARAMS;
+        const A = Z1 * Z2;
+        const B = A ** 2n;
         const C = X1 * X2;
         const D = Y1 * Y2;
         const E = d * C * D;
-        const X3 = mod((1n - E) * ((X1 + Y1) * (X2 + Y2) - C - D));
-        const Y3 = mod((1n + E) * (D - a * C));
-        const Z3 = mod(1n - E ** 2n);
-        return new JacobianPoint(X3, Y3, Z3);
+        const F = B - E;
+        const G = B + E;
+        const X3 = mod(A * F * ((X1 + Y1) * (X2 + Y2) - C - D));
+        const Y3 = mod(A * G * (D - a * C));
+        const Z3 = mod(F * G);
+        return new ProjectivePoint(X3, Y3, Z3);
     }
     toAffine(negZ) {
         const x = mod(this.x * negZ, P);
@@ -63,7 +54,7 @@ class JacobianPoint {
         return new Point(x, y);
     }
 }
-JacobianPoint.ZERO_POINT = new JacobianPoint(0n, 1n, 1n);
+ProjectivePoint.ZERO_POINT = new ProjectivePoint(0n, 1n, 1n);
 class Point {
     constructor(x, y) {
         this.x = x;
@@ -137,7 +128,7 @@ class Point {
         if (this.PRECOMPUTES)
             return this.PRECOMPUTES;
         const points = new Array((2 ** W - 1) * W);
-        let currPoint = JacobianPoint.fromPoint(this);
+        let currPoint = ProjectivePoint.fromPoint(this);
         const winSize = 2 ** W - 1;
         for (let currWin = 0; currWin < 256 / W; currWin++) {
             let offset = currWin * winSize;
@@ -150,7 +141,7 @@ class Point {
         }
         let res = points;
         if (W !== 1) {
-            res = JacobianPoint.batchAffine(points).map(p => JacobianPoint.fromPoint(p));
+            res = ProjectivePoint.batchAffine(points).map(p => ProjectivePoint.fromPoint(p));
             this.PRECOMPUTES = res;
         }
         return res;
@@ -163,16 +154,14 @@ class Point {
         if (n <= 0) {
             throw new Error('Point#multiply: invalid scalar, expected positive integer');
         }
-        if (scalar > PRIME_ORDER) {
-        }
         const W = this.WINDOW_SIZE || 1;
         if (256 % W) {
             throw new Error('Point#multiply: Invalid precomputation window, must be power of 2');
         }
         const precomputes = this.precomputeWindow(W);
         const winSize = 2 ** W - 1;
-        let p = JacobianPoint.ZERO_POINT;
-        let f = JacobianPoint.ZERO_POINT;
+        let p = ProjectivePoint.ZERO_POINT;
+        let f = ProjectivePoint.ZERO_POINT;
         for (let byteIdx = 0; byteIdx < 256 / W; byteIdx++) {
             const offset = winSize * byteIdx;
             const masked = Number(n & BigInt(winSize));
@@ -184,7 +173,7 @@ class Point {
             }
             n >>= BigInt(W);
         }
-        return JacobianPoint.batchAffine([p, f])[0];
+        return ProjectivePoint.batchAffine([p, f])[0];
     }
 }
 exports.Point = Point;

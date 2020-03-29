@@ -1,4 +1,7 @@
 /*! noble-ed25519 - MIT License (c) Paul Miller (paulmillr.com) */
+
+import { BASE_POINT } from "./ristretto255";
+
 // https://ed25519.cr.yp.to
 // https://tools.ietf.org/html/rfc8032
 // https://en.wikipedia.org/wiki/EdDSA
@@ -33,16 +36,16 @@ const I = powMod(2n, (P - 1n) / 4n, P);
 
 
 // Point represents default aka affine coordinates: (x, y)
-// Jacobian Point represents point in jacobian coordinates: (x=x/z^2, y=y/z^3, z)
-class JacobianPoint {
-  static ZERO_POINT = new JacobianPoint(0n, 1n, 1n);
-  static fromPoint(p: Point): JacobianPoint {
-    return new JacobianPoint(p.x, p.y, 1n);
+// Projective Point represents point in projective coordinates: (x=x/z, y=y/z, z)
+class ProjectivePoint {
+  static ZERO_POINT = new ProjectivePoint(0n, 1n, 1n);
+  static fromPoint(p: Point): ProjectivePoint {
+    return new ProjectivePoint(p.x, p.y, 1n);
   }
 
-  constructor(public x: bigint, public y: bigint, public z: bigint) {}
+  constructor(public x: bigint, public y: bigint, public z: bigint) { }
 
-  static batchAffine(points: JacobianPoint[]): Point[] {
+  static batchAffine(points: ProjectivePoint[]): Point[] {
     const toInv = new Array(points.length);
     for (let i = 0; i < points.length; i++) toInv[i] = points[i].z;
     batchInverse(toInv, P);
@@ -51,35 +54,23 @@ class JacobianPoint {
     return res;
   }
 
-  double(): JacobianPoint {
-    // From: http://hyperelliptic.org/EFD/g1p/auto-twisted-projective.html#doubling-mdbl-2008-bbjlp
-    // Cost: 2M + 4S + 1*a + 7add + 1*2.
-    const [X1, Y1] = [this.x, this.y];
-    const {a} = CURVE_PARAMS;
-    const B = (X1+Y1) ** 2n;
-    const C = X1 ** 2n;
-    const D = Y1 ** 2n;
-    const E = a * C;
-    const F = E+D
-    const X3 = mod((B-C-D)*(F-2n));
-    const Y3 = mod(F*(E-D));
-    const Z3 = mod(F**2n - 2n*F);
-    return new JacobianPoint(X3, Y3, Z3);
-  }
+  add(other: ProjectivePoint): ProjectivePoint {
+    const [X1, Y1, Z1, X2, Y2, Z2] = [this.x, this.y, this.z, other.x, other.y, other.z];
+    const { a, d } = CURVE_PARAMS;
 
-  add(other: JacobianPoint): JacobianPoint {
-    const [X1, Y1, X2, Y2] = [this.x, this.y, other.x, other.y];
-    const {a, d} = CURVE_PARAMS;
-
-    // From: http://hyperelliptic.org/EFD/g1p/auto-twisted-projective.html#addition-mmadd-2008-bbjlp
-    // Cost: 6M + 1S + 1*a + 1*d + 8add.
-    const C = X1*X2;
-    const D = Y1*Y2;
-    const E = d*C*D;
-    const X3 = mod((1n-E)*((X1+Y1)*(X2+Y2)-C-D));
-    const Y3 = mod((1n+E)*(D-a*C));
-    const Z3 = mod(1n - E ** 2n);
-    return new JacobianPoint(X3, Y3, Z3);
+    // From: http://hyperelliptic.org/EFD/g1p/auto-twisted-projective.html#addition-add-2008-bbjlp
+    // Cost: 10M + 1S + 1*a + 1*d + 7add.
+    const A = Z1 * Z2;
+    const B = A ** 2n;
+    const C = X1 * X2;
+    const D = Y1 * Y2;
+    const E = d * C * D;
+    const F = B - E
+    const G = B + E;
+    const X3 = mod(A * F * ((X1 + Y1) * (X2 + Y2) - C - D));
+    const Y3 = mod(A * G * (D - a * C));
+    const Z3 = mod(F * G);
+    return new ProjectivePoint(X3, Y3, Z3);
   }
 
   toAffine(negZ: bigint): Point {
@@ -88,6 +79,13 @@ class JacobianPoint {
     return new Point(x, y);
   }
 }
+
+// let G = BASE_POINT;
+
+// console.log('T00', G.add(G));
+// console.log('T01', G.multiply(2n));
+
+// process.exit();
 
 export class Point {
   // Base point aka generator
@@ -98,9 +96,9 @@ export class Point {
   static ZERO_POINT: Point = new Point(0n, 1n);
 
   WINDOW_SIZE?: number;
-  private PRECOMPUTES?: JacobianPoint[];
+  private PRECOMPUTES?: ProjectivePoint[];
 
-  constructor(public x: bigint, public y: bigint) {}
+  constructor(public x: bigint, public y: bigint) { }
 
   static fromHex(hash: Hex) {
     const { a, d } = CURVE_PARAMS;
@@ -189,14 +187,14 @@ export class Point {
     return this.add(other.negate());
   }
 
-  private precomputeWindow(W: number): JacobianPoint[] {
+  private precomputeWindow(W: number): ProjectivePoint[] {
     if (this.PRECOMPUTES) return this.PRECOMPUTES;
-    const points: JacobianPoint[] = new Array((2 ** W - 1) * W);
-    let currPoint: JacobianPoint = JacobianPoint.fromPoint(this);
+    const points: ProjectivePoint[] = new Array((2 ** W - 1) * W);
+    let currPoint: ProjectivePoint = ProjectivePoint.fromPoint(this);
     const winSize = 2 ** W - 1;
     for (let currWin = 0; currWin < 256 / W; currWin++) {
       let offset = currWin * winSize;
-      let point: JacobianPoint = currPoint;
+      let point: ProjectivePoint = currPoint;
       for (let i = 0; i < winSize; i++) {
         points[offset + i] = point;
         point = point.add(currPoint);
@@ -205,7 +203,7 @@ export class Point {
     }
     let res = points;
     if (W !== 1) {
-      res = JacobianPoint.batchAffine(points).map(p => JacobianPoint.fromPoint(p));
+      res = ProjectivePoint.batchAffine(points).map(p => ProjectivePoint.fromPoint(p));
       this.PRECOMPUTES = res;
     }
     return res;
@@ -214,43 +212,43 @@ export class Point {
   // Constant time multiplication.
   // No need to emulate constant-time in ed25519 with `f` fake point,
   // there is no special case for Point#add(0); private keys are hashed.
-    // Constant time multiplication.
-    multiply(scalar: bigint): Point {
-      if (typeof scalar !== 'number' && typeof scalar !== 'bigint') {
-        throw new TypeError('Point#multiply: expected number or bigint');
-      }
-      let n = mod(BigInt(scalar), PRIME_ORDER);
-      if (n <= 0) {
-        throw new Error('Point#multiply: invalid scalar, expected positive integer');
-      }
-      // TODO: remove the check in the future, need to adjust tests.
-      if (scalar > PRIME_ORDER) {
-      //  throw new Error('Point#multiply: invalid scalar, expected < PRIME_ORDER');
-      }
-      const W = this.WINDOW_SIZE || 1;
-      if (256 % W) {
-        throw new Error('Point#multiply: Invalid precomputation window, must be power of 2');
-      }
-      const precomputes = this.precomputeWindow(W);
-      const winSize = 2 ** W - 1;
-      let p = JacobianPoint.ZERO_POINT;
-      let f = JacobianPoint.ZERO_POINT;
-      for (let byteIdx = 0; byteIdx < 256 / W; byteIdx++) {
-        const offset = winSize * byteIdx;
-        const masked = Number(n & BigInt(winSize));
-        if (masked) {
-          p = p.add(precomputes[offset + masked - 1]);
-        } else {
-          f = f.add(precomputes[offset]);
-        }
-        n >>= BigInt(W);
-      }
-      return JacobianPoint.batchAffine([p, f])[0];
+  // Constant time multiplication.
+  multiply(scalar: bigint): Point {
+    if (typeof scalar !== 'number' && typeof scalar !== 'bigint') {
+      throw new TypeError('Point#multiply: expected number or bigint');
     }
+    let n = mod(BigInt(scalar), PRIME_ORDER);
+    if (n <= 0) {
+      throw new Error('Point#multiply: invalid scalar, expected positive integer');
+    }
+    // TODO: remove the check in the future, need to adjust tests.
+    // if (scalar > PRIME_ORDER) {
+    //    throw new Error('Point#multiply: invalid scalar, expected < PRIME_ORDER');
+    // }
+    const W = this.WINDOW_SIZE || 1;
+    if (256 % W) {
+      throw new Error('Point#multiply: Invalid precomputation window, must be power of 2');
+    }
+    const precomputes = this.precomputeWindow(W);
+    const winSize = 2 ** W - 1;
+    let p = ProjectivePoint.ZERO_POINT;
+    let f = ProjectivePoint.ZERO_POINT;
+    for (let byteIdx = 0; byteIdx < 256 / W; byteIdx++) {
+      const offset = winSize * byteIdx;
+      const masked = Number(n & BigInt(winSize));
+      if (masked) {
+        p = p.add(precomputes[offset + masked - 1]);
+      } else {
+        f = f.add(precomputes[offset]);
+      }
+      n >>= BigInt(W);
+    }
+    return ProjectivePoint.batchAffine([p, f])[0];
+  }
 }
 
 export class SignResult {
-  constructor(public r: Point, public s: bigint) {}
+  constructor(public r: Point, public s: bigint) { }
 
   static fromHex(hex: Hex) {
     hex = normalizeHash(hex);
@@ -326,7 +324,7 @@ function arrayToNumberLE(bytes: Uint8Array): bigint {
 // Big Endian
 function arrayToNumber(bytes: Uint8Array): bigint {
   let value = 0n;
-  for (let i = bytes.length - 1, j = 0; i >= 0; i--, j++) {
+  for (let i = bytes.length - 1, j = 0; i >= 0; i-- , j++) {
     value += (BigInt(bytes[i]) & 255n) << (8n * BigInt(j));
   }
   return value;
