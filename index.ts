@@ -46,12 +46,9 @@ class ProjectivePoint {
   constructor(public x: bigint, public y: bigint, public z: bigint) { }
 
   static batchAffine(points: ProjectivePoint[]): Point[] {
-    const toInv = new Array(points.length);
-    for (let i = 0; i < points.length; i++) toInv[i] = points[i].z;
+    const toInv = points.map(p => p.z);
     batchInverse(toInv, P);
-    const res = new Array(points.length);
-    for (let i = 0; i < res.length; i++) res[i] = points[i].toAffine(toInv[i]);
-    return res;
+    return points.map((p, i) => p.toAffine(toInv[i]));
   }
 
   add(other: ProjectivePoint): ProjectivePoint {
@@ -60,13 +57,13 @@ class ProjectivePoint {
 
     // From: http://hyperelliptic.org/EFD/g1p/auto-twisted-projective.html#addition-add-2008-bbjlp
     // Cost: 10M + 1S + 1*a + 1*d + 7add.
-    const A = Z1 * Z2;
-    const B = A ** 2n;
-    const C = X1 * X2;
-    const D = Y1 * Y2;
-    const E = d * C * D;
-    const F = B - E
-    const G = B + E;
+    const A = mod(Z1 * Z2);
+    const B = mod(A ** 2n);
+    const C = mod(X1 * X2);
+    const D = mod(Y1 * Y2);
+    const E = mod(d * C * D);
+    const F = mod(B - E);
+    const G = mod(B + E);
     const X3 = mod(A * F * ((X1 + Y1) * (X2 + Y2) - C - D));
     const Y3 = mod(A * G * (D - a * C));
     const Z3 = mod(F * G);
@@ -74,8 +71,8 @@ class ProjectivePoint {
   }
 
   toAffine(negZ: bigint): Point {
-    const x = mod(this.x * negZ, P);
-    const y = mod(this.y * negZ, P);
+    const x = mod(this.x * negZ);
+    const y = mod(this.y * negZ);
     return new Point(x, y);
   }
 }
@@ -210,11 +207,7 @@ export class Point {
     return res;
   }
 
-  // Constant time multiplication.
-  // No need to emulate constant-time in ed25519 with `f` fake point,
-  // there is no special case for Point#add(0); private keys are hashed.
-  // Constant time multiplication.
-  multiply(scalar: bigint): Point {
+  multiplyP(scalar: bigint): ProjectivePoint {
     if (typeof scalar !== 'number' && typeof scalar !== 'bigint') {
       throw new TypeError('Point#multiply: expected number or bigint');
     }
@@ -239,6 +232,15 @@ export class Point {
       p = p.add(precomputes[offset + masked]);
       n >>= BigInt(W);
     }
+    return p;
+  }
+
+  // Constant time multiplication.
+  // No need to emulate constant-time in ed25519 with `f` fake point,
+  // there is no special case for Point#add(0); private keys are hashed.
+  // Constant time multiplication.
+  multiply(scalar: bigint): Point {
+    const p = this.multiplyP(scalar);
     return p.toAffine(modInverse(p.z));
   }
 }
@@ -373,7 +375,7 @@ function keyPrefix(privateBytes: Uint8Array) {
 
 function mod(a: bigint, b: bigint = P) {
   const res = a % b;
-  return res >= 0 ? res : b + res;
+  return res >= 0n ? res : b + res;
 }
 
 // Eucledian GCD
@@ -498,8 +500,13 @@ export async function verify(signature: Signature, hash: Hex, publicKey: PubKey)
   publicKey = normalizePublicKey(publicKey);
   signature = normalizeSignature(signature);
   const h = await hashNumber(signature.r.encode(), publicKey.encode(), hash);
-  const S = Point.BASE_POINT.multiply(signature.s);
-  const R = signature.r.add(publicKey.multiply(h));
+  // const S = Point.BASE_POINT.multiply(signature.s);
+  // const R = signature.r.add(publicKey.multiply(h));
+
+  const _S = Point.BASE_POINT.multiplyP(signature.s);
+  const _R = publicKey.multiplyP(h).add(ProjectivePoint.fromPoint(signature.r));
+  const [S, R] = ProjectivePoint.batchAffine([_S, _R]);
+
   return S.x === R.x && S.y === R.y;
 }
 

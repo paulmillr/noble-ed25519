@@ -12,6 +12,17 @@ declare type PrivKey = Uint8Array | string | bigint | number;
 declare type PubKey = Uint8Array | string | Point;
 declare type Hex = Uint8Array | string;
 declare type Signature = Uint8Array | string | SignResult;
+declare class ProjectivePoint {
+    x: bigint;
+    y: bigint;
+    z: bigint;
+    static ZERO_POINT: ProjectivePoint;
+    static fromPoint(p: Point): ProjectivePoint;
+    constructor(x: bigint, y: bigint, z: bigint);
+    static batchAffine(points: ProjectivePoint[]): Point[];
+    add(other: ProjectivePoint): ProjectivePoint;
+    toAffine(negZ: bigint): Point;
+}
 export declare class Point {
     x: bigint;
     y: bigint;
@@ -29,6 +40,7 @@ export declare class Point {
     add(other: Point): Point;
     subtract(other: Point): Point;
     private precomputeWindow;
+    multiplyP(scalar: bigint): ProjectivePoint;
     multiply(scalar: bigint): Point;
 }
 export declare class SignResult {

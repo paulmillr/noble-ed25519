@@ -79,7 +79,7 @@ async function bench(label, samples, callback) {
   });
 
   await bench('verify', 1000, async () => {
-    await ed.verify(signature, message, pub);
+    const verified = await ed.verify(signature, message, pub);
   });
 
   console.log();

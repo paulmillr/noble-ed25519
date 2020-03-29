@@ -24,33 +24,28 @@ class ProjectivePoint {
         return new ProjectivePoint(p.x, p.y, 1n);
     }
     static batchAffine(points) {
-        const toInv = new Array(points.length);
-        for (let i = 0; i < points.length; i++)
-            toInv[i] = points[i].z;
+        const toInv = points.map(p => p.z);
         batchInverse(toInv, P);
-        const res = new Array(points.length);
-        for (let i = 0; i < res.length; i++)
-            res[i] = points[i].toAffine(toInv[i]);
-        return res;
+        return points.map((p, i) => p.toAffine(toInv[i]));
     }
     add(other) {
         const [X1, Y1, Z1, X2, Y2, Z2] = [this.x, this.y, this.z, other.x, other.y, other.z];
         const { a, d } = exports.CURVE_PARAMS;
-        const A = Z1 * Z2;
-        const B = A ** 2n;
-        const C = X1 * X2;
-        const D = Y1 * Y2;
-        const E = d * C * D;
-        const F = B - E;
-        const G = B + E;
+        const A = mod(Z1 * Z2);
+        const B = mod(A ** 2n);
+        const C = mod(X1 * X2);
+        const D = mod(Y1 * Y2);
+        const E = mod(d * C * D);
+        const F = mod(B - E);
+        const G = mod(B + E);
         const X3 = mod(A * F * ((X1 + Y1) * (X2 + Y2) - C - D));
         const Y3 = mod(A * G * (D - a * C));
         const Z3 = mod(F * G);
         return new ProjectivePoint(X3, Y3, Z3);
     }
     toAffine(negZ) {
-        const x = mod(this.x * negZ, P);
-        const y = mod(this.y * negZ, P);
+        const x = mod(this.x * negZ);
+        const y = mod(this.y * negZ);
         return new Point(x, y);
     }
 }
@@ -150,7 +145,7 @@ class Point {
         }
         return res;
     }
-    multiply(scalar) {
+    multiplyP(scalar) {
         if (typeof scalar !== 'number' && typeof scalar !== 'bigint') {
             throw new TypeError('Point#multiply: expected number or bigint');
         }
@@ -171,6 +166,10 @@ class Point {
             p = p.add(precomputes[offset + masked]);
             n >>= BigInt(W);
         }
+        return p;
+    }
+    multiply(scalar) {
+        const p = this.multiplyP(scalar);
         return p.toAffine(modInverse(p.z));
     }
 }
@@ -295,8 +294,10 @@ function keyPrefix(privateBytes) {
     return privateBytes.slice(ENCODING_LENGTH);
 }
 function mod(a, b = P) {
+    if (0n < a && a < b)
+        return a;
     const res = a % b;
-    return res >= 0 ? res : b + res;
+    return res >= 0n ? res : b + res;
 }
 function egcd(a, b) {
     let [x, y, u, v] = [0n, 1n, 1n, 0n];
@@ -407,8 +408,9 @@ async function verify(signature, hash, publicKey) {
     publicKey = normalizePublicKey(publicKey);
     signature = normalizeSignature(signature);
     const h = await hashNumber(signature.r.encode(), publicKey.encode(), hash);
-    const S = Point.BASE_POINT.multiply(signature.s);
-    const R = signature.r.add(publicKey.multiply(h));
+    const _S = Point.BASE_POINT.multiplyP(signature.s);
+    const _R = publicKey.multiplyP(h).add(ProjectivePoint.fromPoint(signature.r));
+    const [S, R] = ProjectivePoint.batchAffine([_S, _R]);
     return S.x === R.x && S.y === R.y;
 }
 exports.verify = verify;
