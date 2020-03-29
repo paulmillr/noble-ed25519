@@ -146,7 +146,7 @@ class SignResult {
         return new SignResult(r, s);
     }
     toHex() {
-        const numberBytes = numberToUint8Array(this.s).reverse();
+        const numberBytes = numberToArray(this.s).reverse();
         const sBytes = new Uint8Array(ENCODING_LENGTH);
         sBytes.set(numberBytes);
         const bytes = concatTypedArrays(this.r.encode(), sBytes);
@@ -187,7 +187,7 @@ function concatTypedArrays(...args) {
     }
     return result;
 }
-function numberToUint8Array(num, padding) {
+function numberToArray(num, padding) {
     let hex = num.toString(16);
     if (padding)
         hex = hex.padStart(padding);
@@ -203,6 +203,13 @@ function arrayToNumberLE(bytes) {
     let value = 0n;
     for (let i = 0; i < bytes.length; i++) {
         value += (BigInt(bytes[i]) & 255n) << (8n * BigInt(i));
+    }
+    return value;
+}
+function arrayToNumber(bytes) {
+    let value = 0n;
+    for (let i = bytes.length - 1, j = 0; i >= 0; i--, j++) {
+        value += (BigInt(bytes[i]) & 255n) << (8n * BigInt(j));
     }
     return value;
 }
@@ -227,14 +234,10 @@ function hexToArray(hash) {
     return result;
 }
 function hexToNumber(hex) {
-    return BigInt(`0x${hex}`);
-}
-function arrayToNumberBE(bytes) {
-    let value = 0n;
-    for (let i = bytes.length - 1, j = 0; i >= 0; i--, j++) {
-        value += (BigInt(bytes[i]) & 255n) << (8n * BigInt(j));
+    if (typeof hex !== 'string') {
+        throw new TypeError('hexToNumber: expected string, got ' + typeof hex);
     }
-    return value;
+    return BigInt(`0x${hex}`);
 }
 async function hashNumber(...args) {
     const messageArray = concatTypedArrays(...args);
@@ -243,7 +246,7 @@ async function hashNumber(...args) {
     return mod(value, PRIME_ORDER);
 }
 function getPrivateBytes(privateKey) {
-    return sha512(privateKey instanceof Uint8Array ? privateKey : numberToUint8Array(privateKey, 64));
+    return sha512(privateKey instanceof Uint8Array ? privateKey : numberToArray(privateKey, 64));
 }
 function keyPrefix(privateBytes) {
     return privateBytes.slice(ENCODING_LENGTH);
@@ -287,7 +290,7 @@ function encodePrivate(privateBytes) {
 function normalizePrivateKey(privateKey) {
     let res;
     if (privateKey instanceof Uint8Array) {
-        res = arrayToNumberBE(privateKey);
+        res = arrayToNumber(privateKey);
     }
     else if (typeof privateKey === 'string') {
         res = hexToNumber(privateKey);
