@@ -141,8 +141,7 @@ class Point {
         return new Point(x, y);
     }
     toRawBytes() {
-        let hex = this.y.toString(16);
-        hex = hex.length & 1 ? `0${hex}` : hex;
+        const hex = numberToHex(this.y);
         const u8 = new Uint8Array(ENCODING_LENGTH);
         for (let i = hex.length - 2, j = 0; j < ENCODING_LENGTH && i >= 0; i -= 2, j++) {
             u8[j] = parseInt(hex[i] + hex[i + 1], 16);
@@ -292,10 +291,7 @@ function concatTypedArrays(...arrays) {
     }
     return result;
 }
-const c = { arrayToHex: 0, numberToHex: 0, hexToNumber: 0, hexToArray: 0, arrayToNumber: 0, arrayToNumberLE: 0 };
-exports.counters = c;
 function arrayToHex(uint8a) {
-    c.arrayToHex++;
     let hex = '';
     for (let i = 0; i < uint8a.length; i++) {
         hex += uint8a[i].toString(16).padStart(2, '0');
@@ -306,16 +302,10 @@ function pad64(num) {
     return num.toString(16).padStart(64, '0');
 }
 function numberToHex(num) {
-    c.numberToHex++;
     const hex = num.toString(16);
     return hex.length & 1 ? `0${hex}` : hex;
 }
-function hexToNumber(hex) {
-    c.hexToNumber++;
-    return BigInt(`0x${hex}`);
-}
 function hexToArray(hex) {
-    c.hexToArray++;
     hex = hex.length & 1 ? `0${hex}` : hex;
     const array = new Uint8Array(hex.length / 2);
     for (let i = 0; i < array.length; i++) {
@@ -324,12 +314,7 @@ function hexToArray(hex) {
     }
     return array;
 }
-function arrayToNumber(uint8a) {
-    c.arrayToNumber++;
-    return hexToNumber(arrayToHex(uint8a));
-}
 function arrayToNumberLE(uint8a) {
-    c.arrayToNumberLE++;
     let value = 0n;
     for (let i = 0; i < uint8a.length; i++) {
         value += BigInt(uint8a[i]) << (8n * BigInt(i));
@@ -420,7 +405,7 @@ function ensurePrivInputArray(privateKey) {
     if (privateKey instanceof Uint8Array)
         return privateKey;
     if (typeof privateKey === 'string')
-        return hexToArray(privateKey);
+        return hexToArray(privateKey.padStart(64, '0'));
     return hexToArray(pad64(BigInt(privateKey)));
 }
 async function getPublicKey(privateKey) {

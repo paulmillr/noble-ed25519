@@ -197,9 +197,16 @@ export class Point {
     return new Point(x, y);
   }
 
+
+  /**
+   * Converts point to compressed representation of its Y.
+   * ECDSA uses `04${x}${y}` to represent long form and
+   * `02${x}` / `03${x}` to represent short form,
+   * where leading bit signifies positive or negative Y.
+   * EDDSA (ed25519) uses short form.
+   */
   toRawBytes(): Uint8Array {
-    let hex = this.y.toString(16);
-    hex = hex.length & 1 ? `0${hex}` : hex;
+    const hex = numberToHex(this.y);
     const u8 = new Uint8Array(ENCODING_LENGTH);
     for (let i = hex.length - 2, j = 0; j < ENCODING_LENGTH && i >= 0; i -= 2, j++) {
       u8[j] = parseInt(hex[i] + hex[i + 1], 16);
@@ -209,13 +216,7 @@ export class Point {
     return u8;
   }
 
-  /**
-   * Converts point to compressed representation of its Y.
-   * ECDSA uses `04${x}${y}` to represent long form and
-   * `02${x}` / `03${x}` to represent short form,
-   * where leading bit signifies positive or negative Y.
-   * EDDSA (ed25519) uses short form.
-   */
+  // Same as toRawBytes, but returns string.
   toHex(): string {
     return arrayToHex(this.toRawBytes());
   }
@@ -377,12 +378,8 @@ function concatTypedArrays(...arrays: Uint8Array[]): Uint8Array {
 
 // Convert between types
 // ---------------------
-const c = {arrayToHex: 0, numberToHex: 0, hexToNumber: 0, hexToArray: 0, arrayToNumber: 0, arrayToNumberLE: 0};
-// export.c1329 = c;
-export const counters = c;
 function arrayToHex(uint8a: Uint8Array): string {
   // pre-caching chars could speed this up 6x.
-  c.arrayToHex++;
   let hex = '';
   for (let i = 0; i < uint8a.length; i++) {
     hex += uint8a[i].toString(16).padStart(2, '0');
@@ -395,18 +392,11 @@ function pad64(num: number | bigint): string {
 }
 
 function numberToHex(num: number | bigint): string {
-  c.numberToHex++;
   const hex = num.toString(16);
   return hex.length & 1 ? `0${hex}` : hex;
 }
 
-function hexToNumber(hex: string): bigint {
-  c.hexToNumber++;
-  return BigInt(`0x${hex}`);
-}
-
 function hexToArray(hex: string): Uint8Array {
-  c.hexToArray++;
   hex = hex.length & 1 ? `0${hex}` : hex;
   const array = new Uint8Array(hex.length / 2);
   for (let i = 0; i < array.length; i++) {
@@ -416,15 +406,8 @@ function hexToArray(hex: string): Uint8Array {
   return array;
 }
 
-// Big Endian
-function arrayToNumber(uint8a: Uint8Array): bigint {
-  c.arrayToNumber++;
-  return hexToNumber(arrayToHex(uint8a));
-}
-
 // Little Endian
 function arrayToNumberLE(uint8a: Uint8Array): bigint {
-  c.arrayToNumberLE++;
   let value = 0n;
   for (let i = 0; i < uint8a.length; i++) {
     value += BigInt(uint8a[i]) << (8n * BigInt(i));
@@ -525,7 +508,7 @@ function ensureArray(hash: Hex): Uint8Array {
 
 function ensurePrivInputArray(privateKey: PrivKey): Uint8Array {
   if (privateKey instanceof Uint8Array) return privateKey;
-  if (typeof privateKey === 'string') return hexToArray(privateKey);
+  if (typeof privateKey === 'string') return hexToArray(privateKey.padStart(64, '0'));
   return hexToArray(pad64(BigInt(privateKey)));
 }
 
@@ -538,8 +521,8 @@ export async function getPublicKey(privateKey: PrivKey) {
   return typeof privateKey === 'string' ? publicKey.toHex() : publicKey.toRawBytes();
 }
 
-export function sign(hash: Uint8Array, privateKey: Uint8Array): Promise<Uint8Array>;
-export function sign(hash: string, privateKey: string): Promise<string>;
+export function sign(hash: Uint8Array, privateKey: Hex): Promise<Uint8Array>;
+export function sign(hash: string, privateKey: Hex): Promise<string>;
 export async function sign(hash: Hex, privateKey: Hex) {
   const privBytes = await sha512(ensurePrivInputArray(privateKey));
   const p = encodePrivate(privBytes);

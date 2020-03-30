@@ -38,16 +38,16 @@ run(async () => {
     sigHex = await ed.sign(msg, priv2);
   });
 
-  const sig = ed.SignResult.fromHex(sigHex);
-  const pub = ed.Point.fromHex(pubHex);
   await mark('verify', 1000, async () => {
     const verified = await ed.verify(sigHex, msg, pubHex);
   });
+
+  const sig = ed.SignResult.fromHex(sigHex);
+  const pub = ed.Point.fromHex(pubHex);
   await mark('verifyBatch', 1000, async () => {
     const verified = await ed.verify(sig, msg, pub);
   });
 
-  debugger;
   console.log();
   logMem();
 });

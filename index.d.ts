@@ -56,19 +56,11 @@ export declare class SignResult {
     toRawBytes(): Uint8Array;
     toHex(): string;
 }
-export declare const counters: {
-    arrayToHex: number;
-    numberToHex: number;
-    hexToNumber: number;
-    hexToArray: number;
-    arrayToNumber: number;
-    arrayToNumberLE: number;
-};
 export declare function getPublicKey(privateKey: Uint8Array): Promise<Uint8Array>;
 export declare function getPublicKey(privateKey: string): Promise<string>;
 export declare function getPublicKey(privateKey: bigint | number): Promise<Uint8Array>;
-export declare function sign(hash: Uint8Array, privateKey: Uint8Array): Promise<Uint8Array>;
-export declare function sign(hash: string, privateKey: string): Promise<string>;
+export declare function sign(hash: Uint8Array, privateKey: Hex): Promise<Uint8Array>;
+export declare function sign(hash: string, privateKey: Hex): Promise<string>;
 export declare function verify(signature: Signature, hash: Hex, publicKey: PubKey): Promise<boolean>;
 export declare const utils: {
     generateRandomPrivateKey: (bytesLength?: number) => Uint8Array;
