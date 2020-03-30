@@ -91,6 +91,24 @@ class ProjectivePoint {
     return new ProjectivePoint(X3, Y3, Z3);
   }
 
+  multiplyUnsafe(scalar: bigint): ProjectivePoint {
+    if (typeof scalar !== 'number' && typeof scalar !== 'bigint') {
+      throw new TypeError('Point#multiply: expected number or bigint');
+    }
+    let n = mod(BigInt(scalar), PRIME_ORDER);
+    if (n <= 0) {
+      throw new Error('Point#multiply: invalid scalar, expected positive integer');
+    }
+    let p = ProjectivePoint.ZERO_POINT;
+    let d: ProjectivePoint = this;
+    while (n > 0n) {
+      if (n & 1n) p = p.add(d);
+      d = d.double();
+      n >>= 1n;
+    }
+    return p;
+  }
+
   toAffine(invZ: bigint = modInverse(this.z)): Point {
     const x = mod(this.x * invZ);
     const y = mod(this.y * invZ);
@@ -230,26 +248,6 @@ export class Point {
       this.PRECOMPUTES = res;
     }
     return res;
-  }
-
-  multiplyUnsafe(scalar: bigint, isAffine: false): ProjectivePoint;
-  multiplyUnsafe(scalar: bigint, isAffine?: true): Point;
-  multiplyUnsafe(scalar: bigint, isAffine = true): Point | ProjectivePoint {
-    if (typeof scalar !== 'number' && typeof scalar !== 'bigint') {
-      throw new TypeError('Point#multiply: expected number or bigint');
-    }
-    let n = mod(BigInt(scalar), PRIME_ORDER);
-    if (n <= 0) {
-      throw new Error('Point#multiply: invalid scalar, expected positive integer');
-    }
-    let p = ProjectivePoint.ZERO_POINT;
-    let d = ProjectivePoint.fromPoint(this);
-    while (n > 0n) {
-      if (n & 1n) p = p.add(d);
-      d = d.double();
-      n >>= 1n;
-    }
-    return isAffine ? p.toAffine() : p;
   }
 
   multiply(scalar: bigint, isAffine: false): ProjectivePoint;
@@ -537,8 +535,9 @@ export async function verify(signature: Signature, hash: Hex, publicKey: PubKey)
   publicKey = normalizePublicKey(publicKey);
   signature = normalizeSignature(signature);
   const h = await hashNumber(signature.r.encode(), publicKey.encode(), hash);
+  const pub = ProjectivePoint.fromPoint(publicKey);
   const S = BASE_POINT.multiply(signature.s, false);
-  const R = ProjectivePoint.fromPoint(signature.r).add(publicKey.multiplyUnsafe(h, false));
+  const R = ProjectivePoint.fromPoint(signature.r).add(pub.multiplyUnsafe(h));
   return S.equals(R);
 }
 

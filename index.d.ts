@@ -23,6 +23,7 @@ declare class ProjectivePoint {
     equals(other: ProjectivePoint): boolean;
     add(other: ProjectivePoint): ProjectivePoint;
     double(): ProjectivePoint;
+    multiplyUnsafe(scalar: bigint): ProjectivePoint;
     toAffine(invZ?: bigint): Point;
 }
 export declare class Point {
@@ -43,8 +44,6 @@ export declare class Point {
     add(other: Point): Point;
     subtract(other: Point): Point;
     private precomputeWindow;
-    multiplyUnsafe(scalar: bigint, isAffine: false): ProjectivePoint;
-    multiplyUnsafe(scalar: bigint, isAffine?: true): Point;
     multiply(scalar: bigint, isAffine: false): ProjectivePoint;
     multiply(scalar: bigint, isAffine?: true): Point;
 }
