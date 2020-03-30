@@ -36,26 +36,8 @@ class ExtendedPoint {
         const [T1, T2, Z1, Z2] = [a.t, b.t, a.z, b.z];
         return mod(T1 * Z2) === mod(T2 * Z1);
     }
-    add(other) {
-        const _a = this, _b = other;
-        const X1 = _a.x, Y1 = _a.y, Z1 = _a.z, T1 = _a.t;
-        const X2 = _b.x, Y2 = _b.y, Z2 = _b.z, T2 = _b.t;
-        const A = mod((Y1 - X1) * (Y2 + X2));
-        const B = mod((Y1 + X1) * (Y2 - X2));
-        const F = mod(B - A);
-        if (F === 0n) {
-            return this.double();
-        }
-        const C = mod(Z1 * 2n * T2);
-        const D = mod(T1 * 2n * Z2);
-        const E = mod(D + C);
-        const G = mod(B + A);
-        const H = mod(D - C);
-        const X3 = mod(E * F);
-        const Y3 = mod(G * H);
-        const T3 = mod(E * H);
-        const Z3 = mod(F * G);
-        return new ExtendedPoint(X3, Y3, Z3, T3);
+    negate() {
+        return new ExtendedPoint(mod(-this.x), this.y, this.z, mod(-this.t));
     }
     double() {
         const _a = this;
@@ -69,6 +51,32 @@ class ExtendedPoint {
         const G = mod(D + B);
         const F = mod(G - C);
         const H = mod(D - B);
+        const X3 = mod(E * F);
+        const Y3 = mod(G * H);
+        const T3 = mod(E * H);
+        const Z3 = mod(F * G);
+        return new ExtendedPoint(X3, Y3, Z3, T3);
+    }
+    add(other) {
+        const X1 = this.x;
+        const Y1 = this.y;
+        const Z1 = this.z;
+        const T1 = this.t;
+        const X2 = other.x;
+        const Y2 = other.y;
+        const Z2 = other.z;
+        const T2 = other.t;
+        const A = mod((Y1 - X1) * (Y2 + X2));
+        const B = mod((Y1 + X1) * (Y2 - X2));
+        const F = mod(B - A);
+        if (F === 0n) {
+            return this.double();
+        }
+        const C = mod(Z1 * 2n * T2);
+        const D = mod(T1 * 2n * Z2);
+        const E = mod(D + C);
+        const G = mod(B + A);
+        const H = mod(D - C);
         const X3 = mod(E * F);
         const Y3 = mod(G * H);
         const T3 = mod(E * H);
@@ -93,7 +101,7 @@ class ExtendedPoint {
         }
         return p;
     }
-    toAffine(invZ = modInverse(mod(this.z))) {
+    toAffine(invZ = modInverse(this.z)) {
         const x = mod(this.x * invZ);
         const y = mod(this.y * invZ);
         return new Point(x, y);
@@ -109,8 +117,7 @@ class Point {
         this.WINDOW_SIZE = windowSize;
         this.PRECOMPUTES = undefined;
     }
-    static fromHex(hash) {
-        const { d } = exports.CURVE_PARAMS;
+    static fromHex(hash, invdyy1) {
         const bytes = hash instanceof Uint8Array ? hash : hexToArray(hash);
         const len = bytes.length - 1;
         const normedLast = bytes[len] & ~0x80;
@@ -121,7 +128,10 @@ class Point {
             throw new Error('Point#fromHex expects hex <= Fp');
         }
         const sqrY = y * y;
-        const sqrX = mod((sqrY - 1n) * modInverse(d * sqrY + 1n), P);
+        const { d } = exports.CURVE_PARAMS;
+        if (invdyy1 == null)
+            invdyy1 = modInverse(d * sqrY + 1n);
+        const sqrX = mod((sqrY - 1n) * invdyy1);
         let x = powMod(sqrX, (P + 3n) / 8n, P);
         if (mod(x * x - sqrX, P) !== 0n) {
             x = mod(x * I, P);
@@ -153,25 +163,26 @@ class Point {
         return hex;
     }
     toX25519() {
-        const res = (1n + this.y) * modInverse(1n - this.y);
-        return mod(res, P);
+        return mod((1n + this.y) * modInverse(1n - this.y));
     }
     equals(other) {
         return this.x === other.x && this.y === other.y;
     }
     negate() {
-        return new Point(this.x, mod(-this.y, P));
+        return new Point(this.x, mod(-this.y));
     }
     add(other) {
         if (!(other instanceof Point)) {
             throw new TypeError('Point#add: expected Point');
         }
         const { d } = exports.CURVE_PARAMS;
-        const a = this;
-        const b = other;
-        const x = (a.x * b.y + b.x * a.y) * modInverse(1n + d * a.x * b.x * a.y * b.y);
-        const y = (a.y * b.y + a.x * b.x) * modInverse(1n - d * a.x * b.x * a.y * b.y);
-        return new Point(mod(x, P), mod(y, P));
+        const X1 = this.x;
+        const Y1 = this.y;
+        const X2 = other.x;
+        const Y2 = other.y;
+        const X3 = (X1 * Y2 + Y1 * X2) * modInverse(1n + d * X1 * X2 * Y1 * Y2);
+        const Y3 = (Y1 * Y2 + X1 * X2) * modInverse(1n - d * X1 * X2 * Y1 * Y2);
+        return new Point(mod(X3), mod(Y3));
     }
     subtract(other) {
         return this.add(other.negate());
@@ -225,6 +236,7 @@ class Point {
 exports.Point = Point;
 Point.BASE_POINT = new Point(exports.CURVE_PARAMS.Gx, exports.CURVE_PARAMS.Gy);
 Point.ZERO_POINT = new Point(0n, 1n);
+const { BASE_POINT } = Point;
 class SignResult {
     constructor(r, s) {
         this.r = r;
@@ -237,7 +249,7 @@ class SignResult {
         return new SignResult(r, s);
     }
     toHex() {
-        const numberBytes = numberToArray(this.s).reverse();
+        const numberBytes = hexToArray(numberToHex(this.s)).reverse();
         const sBytes = new Uint8Array(ENCODING_LENGTH);
         sBytes.set(numberBytes);
         const bytes = concatTypedArrays(this.r.encode(), sBytes);
@@ -250,60 +262,83 @@ class SignResult {
     }
 }
 exports.SignResult = SignResult;
-const { BASE_POINT } = Point;
 let sha512;
+let generateRandomPrivateKey = (bytesLength = 32) => new Uint8Array(0);
 if (typeof window == 'object' && 'crypto' in window) {
     sha512 = async (message) => {
         const buffer = await window.crypto.subtle.digest('SHA-512', message.buffer);
         return new Uint8Array(buffer);
     };
+    generateRandomPrivateKey = (bytesLength = 32) => {
+        return window.crypto.getRandomValues(new Uint8Array(bytesLength));
+    };
 }
 else if (typeof process === 'object' && 'node' in process.versions) {
     const req = require;
-    const { createHash } = req('crypto');
+    const { createHash, randomBytes } = req('crypto');
     sha512 = async (message) => {
         const hash = createHash('sha512');
         hash.update(message);
         return Uint8Array.from(hash.digest());
     };
+    generateRandomPrivateKey = (bytesLength = 32) => {
+        return new Uint8Array(randomBytes(bytesLength).buffer);
+    };
 }
 else {
     throw new Error("The environment doesn't have sha512 function");
 }
-function concatTypedArrays(...args) {
-    const result = new Uint8Array(args.reduce((a, arr) => a + arr.length, 0));
-    for (let i = 0, pad = 0; i < args.length; i++) {
-        const arr = args[i];
+function concatTypedArrays(...arrays) {
+    if (arrays.length === 1)
+        return arrays[0];
+    const length = arrays.reduce((a, arr) => a + arr.length, 0);
+    const result = new Uint8Array(length);
+    for (let i = 0, pad = 0; i < arrays.length; i++) {
+        const arr = arrays[i];
         result.set(arr, pad);
         pad += arr.length;
     }
     return result;
 }
-function numberToArray(num, padding) {
-    let hex = num.toString(16);
-    if (padding)
-        hex = hex.padStart(padding);
+function arrayToHex(uint8a) {
+    let hex = '';
+    for (let i = 0; i < uint8a.length; i++) {
+        hex += uint8a[i].toString(16).padStart(2, '0');
+    }
+    return hex;
+}
+function pad64(num) {
+    return num.toString(16).padStart(64, '0');
+}
+function numberToHex(num) {
+    const hex = num.toString(16);
+    return hex.length & 1 ? `0${hex}` : hex;
+}
+function hexToNumber(hex) {
+    return BigInt(`0x${hex}`);
+}
+function hexToArray(hex) {
     hex = hex.length & 1 ? `0${hex}` : hex;
-    const len = hex.length / 2;
-    const u8 = new Uint8Array(len);
-    for (let j = 0, i = 0; i < hex.length; i += 2, j++) {
-        u8[j] = parseInt(hex[i] + hex[i + 1], 16);
+    const array = new Uint8Array(hex.length / 2);
+    for (let i = 0; i < array.length; i++) {
+        let j = i * 2;
+        array[i] = Number.parseInt(hex.slice(j, j + 2), 16);
     }
-    return u8;
+    return array;
 }
-function arrayToNumberLE(bytes) {
+function arrayToNumber(uint8a) {
+    return hexToNumber(arrayToHex(uint8a));
+}
+function arrayToNumberLE(uint8a) {
     let value = 0n;
-    for (let i = 0; i < bytes.length; i++) {
-        value += (BigInt(bytes[i]) & 255n) << (8n * BigInt(i));
+    for (let i = 0; i < uint8a.length; i++) {
+        value += BigInt(uint8a[i]) << 8n * BigInt(i);
     }
     return value;
 }
-function arrayToNumber(bytes) {
-    let value = 0n;
-    for (let i = bytes.length - 1, j = 0; i >= 0; i--, j++) {
-        value += (BigInt(bytes[i]) & 255n) << (8n * BigInt(j));
-    }
-    return value;
+function mod(a, b = P) {
+    const res = a % b;
+    return res >= 0n ? res : b + res;
 }
 function powMod(x, power, order) {
     let res = 1n;
@@ -315,37 +350,6 @@ function powMod(x, power, order) {
         x = mod(x * x, order);
     }
     return res;
-}
-function hexToArray(hash) {
-    hash = hash.length & 1 ? `0${hash}` : hash;
-    const len = hash.length;
-    const result = new Uint8Array(len / 2);
-    for (let i = 0, j = 0; i < len - 1; i += 2, j++) {
-        result[j] = parseInt(hash[i] + hash[i + 1], 16);
-    }
-    return result;
-}
-function hexToNumber(hex) {
-    if (typeof hex !== 'string') {
-        throw new TypeError('hexToNumber: expected string, got ' + typeof hex);
-    }
-    return BigInt(`0x${hex}`);
-}
-async function hashNumber(...args) {
-    const messageArray = concatTypedArrays(...args);
-    const hash = await sha512(messageArray);
-    const value = arrayToNumberLE(hash);
-    return mod(value, PRIME_ORDER);
-}
-function getPrivateBytes(privateKey) {
-    return sha512(privateKey instanceof Uint8Array ? privateKey : numberToArray(privateKey, 64));
-}
-function keyPrefix(privateBytes) {
-    return privateBytes.slice(ENCODING_LENGTH);
-}
-function mod(a, b = P) {
-    const res = a % b;
-    return res >= 0n ? res : b + res;
 }
 function egcd(a, b) {
     let [x, y, u, v] = [0n, 1n, 1n, 0n];
@@ -391,6 +395,18 @@ function batchInverse(nums, n = P) {
         acc = tmp;
     }
     return nums;
+}
+async function hashNumber(...args) {
+    const messageArray = concatTypedArrays(...args);
+    const hash = await sha512(messageArray);
+    const value = arrayToNumberLE(hash);
+    return mod(value, PRIME_ORDER);
+}
+function getPrivateBytes(privKey) {
+    return sha512(privKey instanceof Uint8Array ? privKey : hexToArray(pad64(privKey)));
+}
+function keyPrefix(privateBytes) {
+    return privateBytes.slice(ENCODING_LENGTH);
 }
 function encodePrivate(privateBytes) {
     const last = ENCODING_LENGTH - 1;
@@ -467,6 +483,7 @@ async function verify(signature, hash, publicKey) {
 exports.verify = verify;
 BASE_POINT._setWindowSize(4);
 exports.utils = {
+    generateRandomPrivateKey,
     precompute(windowSize = 4, point = BASE_POINT) {
         const cached = point.equals(BASE_POINT) ? point : new Point(point.x, point.y);
         cached._setWindowSize(windowSize);

@@ -32,8 +32,9 @@ const P = CURVE_PARAMS.P;
 const PRIME_ORDER = CURVE_PARAMS.n;
 const I = powMod(2n, (P - 1n) / 4n, P);
 
-// Point represents default aka affine coordinates: (x, y)
-// Extended Point represents point in extended coordinates: (x, y, z, t=xy)
+// Default Point works in default aka affine coordinates: (x, y)
+// Extended Point works in extended coordinates: (x, y, z, t) ∋ (x=x/z, y=y/z, t=xy)
+// https://en.wikipedia.org/wiki/Twisted_Edwards_curve#Extended_coordinates
 class ExtendedPoint {
   static ZERO_POINT = new ExtendedPoint(0n, 1n, 1n, 0n);
   static fromPoint(p: Point): ExtendedPoint {
@@ -43,11 +44,15 @@ class ExtendedPoint {
 
   constructor(public x: bigint, public y: bigint, public z: bigint, public t: bigint) {}
 
+  // Takes a bunch of Jacobian Points but executes only one
+  // modInverse on all of them. modInverse is very slow operation,
+  // so this improves performance massively.
   static batchAffine(points: ExtendedPoint[]): Point[] {
     const toInv = batchInverse(points.map(p => p.z));
     return points.map((p, i) => p.toAffine(toInv[i]));
   }
 
+  // Compare one point to another.
   equals(other: ExtendedPoint): boolean {
     const a = this;
     const b = other;
@@ -55,35 +60,19 @@ class ExtendedPoint {
     return mod(T1 * Z2) === mod(T2 * Z1);
   }
 
-  // http://hyperelliptic.org/EFD/g1p/auto-twisted-extended-1.html#addition-add-2008-hwcd-4
-  // Cost: 8M + 8add + 2*2.
-  add(other: ExtendedPoint): ExtendedPoint {
-    const _a = this, _b = other;
-    const X1 = _a.x, Y1 = _a.y, Z1 = _a.z, T1 = _a.t;
-    const X2 = _b.x, Y2 = _b.y, Z2 = _b.z, T2 = _b.t;
-    const A = mod((Y1 - X1) * (Y2 + X2));
-    const B = mod((Y1 + X1) * (Y2 - X2));
-    const F = mod(B - A);
-    if (F === 0n) {
-      return this.double();
-    }
-    const C = mod(Z1 * 2n * T2);
-    const D = mod(T1 * 2n * Z2);
-    const E = mod(D + C);
-    const G = mod(B + A);
-    const H = mod(D - C);
-    const X3 = mod(E * F);
-    const Y3 = mod(G * H);
-    const T3 = mod(E * H);
-    const Z3 = mod(F * G);
-    return new ExtendedPoint(X3, Y3, Z3, T3);
+  // Inverses point to one corresponding to (x, -y) in Affine coordinates.
+  negate(): ExtendedPoint {
+    return new ExtendedPoint(mod(-this.x), this.y, this.z, mod(-this.t));
   }
 
+  // Fast algo for doubling Extended Point when curve's a=-1.
   // http://hyperelliptic.org/EFD/g1p/auto-twisted-extended-1.html#doubling-dbl-2008-hwcd
   // Cost: 3M + 4S + 1*a + 7add + 1*2.
   double(): ExtendedPoint {
     const _a = this;
-    const X1 = _a.x, Y1 = _a.y, Z1 = _a.z;
+    const X1 = _a.x,
+      Y1 = _a.y,
+      Z1 = _a.z;
     const { a } = CURVE_PARAMS;
     const A = mod(X1 ** 2n);
     const B = mod(Y1 ** 2n);
@@ -100,6 +89,40 @@ class ExtendedPoint {
     return new ExtendedPoint(X3, Y3, Z3, T3);
   }
 
+  // Fast algo for adding 2 Extended Points when curve's a=-1.
+  // http://hyperelliptic.org/EFD/g1p/auto-twisted-extended-1.html#addition-add-2008-hwcd-4
+  // Cost: 8M + 8add + 2*2.
+  add(other: ExtendedPoint): ExtendedPoint {
+    const X1 = this.x;
+    const Y1 = this.y;
+    const Z1 = this.z;
+    const T1 = this.t;
+    const X2 = other.x;
+    const Y2 = other.y;
+    const Z2 = other.z;
+    const T2 = other.t;
+    const A = mod((Y1 - X1) * (Y2 + X2));
+    const B = mod((Y1 + X1) * (Y2 - X2));
+    const F = mod(B - A);
+    if (F === 0n) {
+      // Same point.
+      return this.double();
+    }
+    const C = mod(Z1 * 2n * T2);
+    const D = mod(T1 * 2n * Z2);
+    const E = mod(D + C);
+    const G = mod(B + A);
+    const H = mod(D - C);
+    const X3 = mod(E * F);
+    const Y3 = mod(G * H);
+    const T3 = mod(E * H);
+    const Z3 = mod(F * G);
+    return new ExtendedPoint(X3, Y3, Z3, T3);
+  }
+
+  // Non-constant-time multiplication. Uses double-and-add algorithm.
+  // It's faster, but should only be used when you don't care about
+  // an exposed private key e.g. sig verification.
   multiplyUnsafe(scalar: bigint): ExtendedPoint {
     if (typeof scalar !== 'number' && typeof scalar !== 'bigint') {
       throw new TypeError('Point#multiply: expected number or bigint');
@@ -118,13 +141,16 @@ class ExtendedPoint {
     return p;
   }
 
-  toAffine(invZ: bigint = modInverse(mod(this.z))): Point {
+  // Converts Extended point to default (x, y) coordinates.
+  // Can accept precomputed Z^-1 - for example, from batchInverse.
+  toAffine(invZ: bigint = modInverse(this.z)): Point {
     const x = mod(this.x * invZ);
     const y = mod(this.y * invZ);
     return new Point(x, y);
   }
 }
 
+// Default Point works in default aka affine coordinates: (x, y)
 export class Point {
   // Base point aka generator
   // public_key = base_point * private_key
@@ -132,7 +158,6 @@ export class Point {
   // Identity point aka point at infinity
   // point = point + zero_point
   static ZERO_POINT: Point = new Point(0n, 1n);
-
   // We calculate precomputes for elliptic curve point multiplication
   // using windowed method. This specifies window size and
   // stores precomputed values. Usually only base point would be precomputed.
@@ -141,15 +166,14 @@ export class Point {
 
   constructor(public x: bigint, public y: bigint) {}
 
+  // "Private method", don't use it directly.
   _setWindowSize(windowSize: number) {
     this.WINDOW_SIZE = windowSize;
     this.PRECOMPUTES = undefined;
   }
-
-  static fromHex(hash: Hex) {
-    const { d } = CURVE_PARAMS;
-
-    // rfc8032 5.1.3
+  // Converts hash string or Uint8Array to Point.
+  // Uses algo from RFC8032 5.1.3.
+  static fromHex(hash: Hex, invdyy1?: bigint) {
     const bytes = hash instanceof Uint8Array ? hash : hexToArray(hash);
     const len = bytes.length - 1;
     const normedLast = bytes[len] & ~0x80;
@@ -160,7 +184,9 @@ export class Point {
       throw new Error('Point#fromHex expects hex <= Fp');
     }
     const sqrY = y * y;
-    const sqrX = mod((sqrY - 1n) * modInverse(d * sqrY + 1n), P);
+    const { d } = CURVE_PARAMS;
+    if (invdyy1 == null) invdyy1 = modInverse(d * sqrY + 1n);
+    const sqrX = mod((sqrY - 1n) * invdyy1);
     let x = powMod(sqrX, (P + 3n) / 8n, P);
     if (mod(x * x - sqrX, P) !== 0n) {
       x = mod(x * I, P);
@@ -209,8 +235,7 @@ export class Point {
     // u, v: x25519 coordinates
     // u = (1 + y) / (1 - y)
     // See https://blog.filippo.io/using-ed25519-keys-for-encryption
-    const res = (1n + this.y) * modInverse(1n - this.y);
-    return mod(res, P);
+    return mod((1n + this.y) * modInverse(1n - this.y));
   }
 
   equals(other: Point): boolean {
@@ -218,19 +243,22 @@ export class Point {
   }
 
   negate(): Point {
-    return new Point(this.x, mod(-this.y, P));
+    return new Point(this.x, mod(-this.y));
   }
 
+  // Adds point to itself. http://hyperelliptic.org/EFD/g1p/auto-twisted.html
   add(other: Point): Point {
     if (!(other instanceof Point)) {
       throw new TypeError('Point#add: expected Point');
     }
     const { d } = CURVE_PARAMS;
-    const a = this;
-    const b = other;
-    const x = (a.x * b.y + b.x * a.y) * modInverse(1n + d * a.x * b.x * a.y * b.y);
-    const y = (a.y * b.y + a.x * b.x) * modInverse(1n - d * a.x * b.x * a.y * b.y);
-    return new Point(mod(x, P), mod(y, P));
+    const X1 = this.x;
+    const Y1 = this.y;
+    const X2 = other.x;
+    const Y2 = other.y;
+    const X3 = (X1 * Y2 + Y1 * X2) * modInverse(1n + d * X1 * X2 * Y1 * Y2);
+    const Y3 = (Y1 * Y2 + X1 * X2) * modInverse(1n - d * X1 * X2 * Y1 * Y2);
+    return new Point(mod(X3), mod(Y3));
   }
 
   subtract(other: Point) {
@@ -259,6 +287,8 @@ export class Point {
     return res;
   }
 
+  // Constant time multiplication.
+  // Uses window method to generate 2^W precomputed points.
   multiply(scalar: bigint, isAffine: false): ExtendedPoint;
   multiply(scalar: bigint, isAffine?: true): Point;
   multiply(scalar: bigint, isAffine = true): Point | ExtendedPoint {
@@ -285,6 +315,7 @@ export class Point {
     return isAffine ? p.toAffine() : p;
   }
 }
+const { BASE_POINT } = Point;
 
 export class SignResult {
   constructor(public r: Point, public s: bigint) {}
@@ -297,7 +328,7 @@ export class SignResult {
   }
 
   toHex() {
-    const numberBytes = numberToArray(this.s).reverse();
+    const numberBytes = hexToArray(numberToHex(this.s)).reverse();
     const sBytes = new Uint8Array(ENCODING_LENGTH);
     sBytes.set(numberBytes);
     const bytes = concatTypedArrays(this.r.encode(), sBytes);
@@ -309,65 +340,99 @@ export class SignResult {
     return hex;
   }
 }
-const { BASE_POINT } = Point;
 
+// SHA512 implementation.
 let sha512: (message: Uint8Array) => Promise<Uint8Array>;
+let generateRandomPrivateKey = (bytesLength: number = 32) => new Uint8Array(0);
 
 if (typeof window == 'object' && 'crypto' in window) {
   sha512 = async (message: Uint8Array) => {
     const buffer = await window.crypto.subtle.digest('SHA-512', message.buffer);
     return new Uint8Array(buffer);
   };
+  generateRandomPrivateKey = (bytesLength: number = 32): Uint8Array => {
+    return window.crypto.getRandomValues(new Uint8Array(bytesLength));
+  };
 } else if (typeof process === 'object' && 'node' in process.versions) {
   const req = require;
-  const { createHash } = req('crypto');
+  const { createHash, randomBytes } = req('crypto');
   sha512 = async (message: Uint8Array) => {
     const hash = createHash('sha512');
     hash.update(message);
     return Uint8Array.from(hash.digest());
   };
+  generateRandomPrivateKey = (bytesLength: number = 32): Uint8Array => {
+    return new Uint8Array(randomBytes(bytesLength).buffer);
+  };
 } else {
   throw new Error("The environment doesn't have sha512 function");
 }
 
-function concatTypedArrays(...args: Array<Uint8Array>): Uint8Array {
-  const result = new Uint8Array(args.reduce((a, arr) => a + arr.length, 0));
-  for (let i = 0, pad = 0; i < args.length; i++) {
-    const arr = args[i];
+function concatTypedArrays(...arrays: Uint8Array[]): Uint8Array {
+  if (arrays.length === 1) return arrays[0];
+  const length = arrays.reduce((a, arr) => a + arr.length, 0);
+  const result = new Uint8Array(length);
+  for (let i = 0, pad = 0; i < arrays.length; i++) {
+    const arr = arrays[i];
     result.set(arr, pad);
     pad += arr.length;
   }
   return result;
 }
 
-function numberToArray(num: bigint | number, padding?: number): Uint8Array {
-  let hex = num.toString(16);
-  if (padding) hex = hex.padStart(padding);
-  hex = hex.length & 1 ? `0${hex}` : hex;
-  const len = hex.length / 2;
-  const u8 = new Uint8Array(len);
-  for (let j = 0, i = 0; i < hex.length; i += 2, j++) {
-    u8[j] = parseInt(hex[i] + hex[i + 1], 16);
+// Convert between types
+// ---------------------
+function arrayToHex(uint8a: Uint8Array): string {
+  // pre-caching chars could speed this up 6x.
+  let hex = '';
+  for (let i = 0; i < uint8a.length; i++) {
+    hex += uint8a[i].toString(16).padStart(2, '0');
   }
-  return u8;
+  return hex;
 }
 
-// Little Endian
-function arrayToNumberLE(bytes: Uint8Array): bigint {
-  let value = 0n;
-  for (let i = 0; i < bytes.length; i++) {
-    value += (BigInt(bytes[i]) & 255n) << (8n * BigInt(i));
+function pad64(num: number | bigint): string {
+  return num.toString(16).padStart(64, '0');
+}
+
+function numberToHex(num: number | bigint): string {
+  const hex = num.toString(16);
+  return hex.length & 1 ? `0${hex}` : hex;
+}
+
+function hexToNumber(hex: string): bigint {
+  return BigInt(`0x${hex}`);
+}
+
+function hexToArray(hex: string): Uint8Array {
+  hex = hex.length & 1 ? `0${hex}` : hex;
+  const array = new Uint8Array(hex.length / 2);
+  for (let i = 0; i < array.length; i++) {
+    let j = i * 2;
+    array[i] = Number.parseInt(hex.slice(j, j + 2), 16);
   }
-  return value;
+  return array;
 }
 
 // Big Endian
-function arrayToNumber(bytes: Uint8Array): bigint {
+function arrayToNumber(uint8a: Uint8Array): bigint {
+  return hexToNumber(arrayToHex(uint8a));
+}
+
+// Little Endian
+function arrayToNumberLE(uint8a: Uint8Array): bigint {
   let value = 0n;
-  for (let i = bytes.length - 1, j = 0; i >= 0; i--, j++) {
-    value += (BigInt(bytes[i]) & 255n) << (8n * BigInt(j));
+  for (let i = 0; i < uint8a.length; i++) {
+    value += BigInt(uint8a[i]) << 8n * BigInt(i);
   }
   return value;
+}
+
+// -------------------------
+
+function mod(a: bigint, b: bigint = P) {
+  const res = a % b;
+  return res >= 0n ? res : b + res;
 }
 
 function powMod(x: bigint, power: bigint, order: bigint) {
@@ -380,44 +445,6 @@ function powMod(x: bigint, power: bigint, order: bigint) {
     x = mod(x * x, order);
   }
   return res;
-}
-
-function hexToArray(hash: string): Uint8Array {
-  hash = hash.length & 1 ? `0${hash}` : hash;
-  const len = hash.length;
-  const result = new Uint8Array(len / 2);
-  for (let i = 0, j = 0; i < len - 1; i += 2, j++) {
-    result[j] = parseInt(hash[i] + hash[i + 1], 16);
-  }
-  return result;
-}
-
-function hexToNumber(hex: string): bigint {
-  if (typeof hex !== 'string') {
-    throw new TypeError('hexToNumber: expected string, got ' + typeof hex);
-  }
-  // Big Endian
-  return BigInt(`0x${hex}`);
-}
-
-async function hashNumber(...args: Array<Uint8Array>) {
-  const messageArray = concatTypedArrays(...args);
-  const hash = await sha512(messageArray);
-  const value = arrayToNumberLE(hash);
-  return mod(value, PRIME_ORDER);
-}
-
-function getPrivateBytes(privateKey: bigint | number | Uint8Array) {
-  return sha512(privateKey instanceof Uint8Array ? privateKey : numberToArray(privateKey, 64));
-}
-
-function keyPrefix(privateBytes: Uint8Array) {
-  return privateBytes.slice(ENCODING_LENGTH);
-}
-
-function mod(a: bigint, b: bigint = P) {
-  const res = a % b;
-  return res >= 0n ? res : b + res;
 }
 
 // Eucledian GCD
@@ -466,6 +493,21 @@ function batchInverse(nums: bigint[], n: bigint = P): bigint[] {
     acc = tmp;
   }
   return nums;
+}
+
+async function hashNumber(...args: Uint8Array[]): Promise<bigint> {
+  const messageArray = concatTypedArrays(...args);
+  const hash = await sha512(messageArray);
+  const value = arrayToNumberLE(hash);
+  return mod(value, PRIME_ORDER);
+}
+
+function getPrivateBytes(privKey: bigint | number | Uint8Array) {
+  return sha512(privKey instanceof Uint8Array ? privKey : hexToArray(pad64(privKey)));
+}
+
+function keyPrefix(privateBytes: Uint8Array) {
+  return privateBytes.slice(ENCODING_LENGTH);
 }
 
 function encodePrivate(privateBytes: Uint8Array) {
@@ -555,7 +597,7 @@ export async function verify(signature: Signature, hash: Hex, publicKey: PubKey)
 BASE_POINT._setWindowSize(4);
 
 export const utils = {
-  // generateRandomPrivateKey,
+  generateRandomPrivateKey,
 
   precompute(windowSize = 4, point = BASE_POINT): Point {
     const cached = point.equals(BASE_POINT) ? point : new Point(point.x, point.y);

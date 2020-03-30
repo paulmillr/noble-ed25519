@@ -22,8 +22,9 @@ declare class ExtendedPoint {
     constructor(x: bigint, y: bigint, z: bigint, t: bigint);
     static batchAffine(points: ExtendedPoint[]): Point[];
     equals(other: ExtendedPoint): boolean;
-    add(other: ExtendedPoint): ExtendedPoint;
+    negate(): ExtendedPoint;
     double(): ExtendedPoint;
+    add(other: ExtendedPoint): ExtendedPoint;
     multiplyUnsafe(scalar: bigint): ExtendedPoint;
     toAffine(invZ?: bigint): Point;
 }
@@ -36,7 +37,7 @@ export declare class Point {
     private PRECOMPUTES?;
     constructor(x: bigint, y: bigint);
     _setWindowSize(windowSize: number): void;
-    static fromHex(hash: Hex): Point;
+    static fromHex(hash: Hex, invdyy1?: bigint): Point;
     encode(): Uint8Array;
     toHex(): string;
     toX25519(): bigint;
@@ -62,6 +63,7 @@ export declare function sign(hash: Uint8Array, privateKey: PrivKey): Promise<Uin
 export declare function sign(hash: string, privateKey: PrivKey): Promise<string>;
 export declare function verify(signature: Signature, hash: Hex, publicKey: PubKey): Promise<boolean>;
 export declare const utils: {
+    generateRandomPrivateKey: (bytesLength?: number) => Uint8Array;
     precompute(windowSize?: number, point?: Point): Point;
 };
 export {};
