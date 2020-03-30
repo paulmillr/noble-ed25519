@@ -68,7 +68,7 @@ async function bench(label, samples, callback) {
 
   // console.profile('cpu');
   const priv = 0x9d61b19deffd5a60ba844af492ec2cc44449c5697b326919703bac031cae7f60n;
-  await bench('getPublicKey 256 bit', 1000, async () => {
+  await bench('getPublicKey', 1000, async () => {
     pub = await ed.getPublicKey(priv);
   });
 
@@ -80,6 +80,7 @@ async function bench(label, samples, callback) {
 
   await bench('verify', 1000, async () => {
     const verified = await ed.verify(signature, message, pub);
+    // console.log({verified});
   });
 
   console.log();

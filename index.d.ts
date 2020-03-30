@@ -20,8 +20,10 @@ declare class ProjectivePoint {
     static fromPoint(p: Point): ProjectivePoint;
     constructor(x: bigint, y: bigint, z: bigint);
     static batchAffine(points: ProjectivePoint[]): Point[];
+    equals(other: ProjectivePoint): boolean;
     add(other: ProjectivePoint): ProjectivePoint;
-    toAffine(negZ: bigint): Point;
+    double(): ProjectivePoint;
+    toAffine(invZ?: bigint): Point;
 }
 export declare class Point {
     x: bigint;
@@ -36,12 +38,15 @@ export declare class Point {
     encode(): Uint8Array;
     toHex(): string;
     toX25519(): bigint;
+    equals(other: Point): boolean;
     negate(): Point;
     add(other: Point): Point;
     subtract(other: Point): Point;
     private precomputeWindow;
-    multiplyP(scalar: bigint): ProjectivePoint;
-    multiply(scalar: bigint): Point;
+    multiplyUnsafe(scalar: bigint, isAffine: false): ProjectivePoint;
+    multiplyUnsafe(scalar: bigint, isAffine?: true): Point;
+    multiply(scalar: bigint, isAffine: false): ProjectivePoint;
+    multiply(scalar: bigint, isAffine?: true): Point;
 }
 export declare class SignResult {
     r: Point;

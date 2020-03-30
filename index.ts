@@ -1,7 +1,5 @@
 /*! noble-ed25519 - MIT License (c) Paul Miller (paulmillr.com) */
 
-import { BASE_POINT } from "./ristretto255";
-
 // https://ed25519.cr.yp.to
 // https://tools.ietf.org/html/rfc8032
 // https://en.wikipedia.org/wiki/EdDSA
@@ -46,9 +44,14 @@ class ProjectivePoint {
   constructor(public x: bigint, public y: bigint, public z: bigint) { }
 
   static batchAffine(points: ProjectivePoint[]): Point[] {
-    const toInv = points.map(p => p.z);
-    batchInverse(toInv, P);
+    const toInv = batchInverse(points.map(p => p.z));
     return points.map((p, i) => p.toAffine(toInv[i]));
+  }
+
+  equals(other: ProjectivePoint): boolean {
+    const a = this;
+    const b = other;
+    return mod(a.x * b.z) === mod(a.z * b.x) && mod(a.y * b.z) === mod(b.y * a.z);
   }
 
   add(other: ProjectivePoint): ProjectivePoint {
@@ -70,9 +73,27 @@ class ProjectivePoint {
     return new ProjectivePoint(X3, Y3, Z3);
   }
 
-  toAffine(negZ: bigint): Point {
-    const x = mod(this.x * negZ);
-    const y = mod(this.y * negZ);
+  double(): ProjectivePoint {
+    const [X1, Y1, Z1] = [this.x, this.y, this.z];
+    const { a, } = CURVE_PARAMS;
+    // From: http://hyperelliptic.org/EFD/g1p/auto-twisted-projective.html#doubling-dbl-2008-bbjlp
+    // Cost: 3M + 4S + 1*a + 6add + 1*2.
+    const B = mod((X1 + Y1) ** 2n, P);
+    const C = mod(X1 ** 2n, P);
+    const D = mod(Y1 ** 2n, P);
+    const E = mod(a * C, P);
+    const F = mod(E + D, P);
+    const H = mod(Z1 ** 2n, P);
+    const J = mod(F - 2n * H, P);
+    const X3 = mod((B - C - D) * J, P);
+    const Y3 = mod(F * (E - D), P);
+    const Z3 = mod(F * J, P);
+    return new ProjectivePoint(X3, Y3, Z3);
+  }
+
+  toAffine(invZ: bigint = modInverse(this.z)): Point {
+    const x = mod(this.x * invZ);
+    const y = mod(this.y * invZ);
     return new Point(x, y);
   }
 }
@@ -165,6 +186,10 @@ export class Point {
     return mod(res, P);
   }
 
+  equals(other: Point): boolean {
+    return this.x === other.x && this.y === other.y;
+  }
+
   negate(): Point {
     return new Point(this.x, mod(-this.y, P));
   }
@@ -207,7 +232,9 @@ export class Point {
     return res;
   }
 
-  multiplyP(scalar: bigint): ProjectivePoint {
+  multiplyUnsafe(scalar: bigint, isAffine: false): ProjectivePoint;
+  multiplyUnsafe(scalar: bigint, isAffine?: true): Point;
+  multiplyUnsafe(scalar: bigint, isAffine = true): Point | ProjectivePoint {
     if (typeof scalar !== 'number' && typeof scalar !== 'bigint') {
       throw new TypeError('Point#multiply: expected number or bigint');
     }
@@ -215,10 +242,26 @@ export class Point {
     if (n <= 0) {
       throw new Error('Point#multiply: invalid scalar, expected positive integer');
     }
-    // TODO: remove the check in the future, need to adjust tests.
-    // if (scalar > PRIME_ORDER) {
-    //    throw new Error('Point#multiply: invalid scalar, expected < PRIME_ORDER');
-    // }
+    let p = ProjectivePoint.ZERO_POINT;
+    let d = ProjectivePoint.fromPoint(this);
+    while (n > 0n) {
+      if (n & 1n) p = p.add(d);
+      d = d.double();
+      n >>= 1n;
+    }
+    return isAffine ? p.toAffine() : p;
+  }
+
+  multiply(scalar: bigint, isAffine: false): ProjectivePoint;
+  multiply(scalar: bigint, isAffine?: true): Point;
+  multiply(scalar: bigint, isAffine = true): Point | ProjectivePoint {
+    if (typeof scalar !== 'number' && typeof scalar !== 'bigint') {
+      throw new TypeError('Point#multiply: expected number or bigint');
+    }
+    let n = mod(BigInt(scalar), PRIME_ORDER);
+    if (n <= 0) {
+      throw new Error('Point#multiply: invalid scalar, expected positive integer');
+    }
     const W = this.WINDOW_SIZE || 1;
     if (256 % W) {
       throw new Error('Point#multiply: Invalid precomputation window, must be power of 2');
@@ -232,16 +275,7 @@ export class Point {
       p = p.add(precomputes[offset + masked]);
       n >>= BigInt(W);
     }
-    return p;
-  }
-
-  // Constant time multiplication.
-  // No need to emulate constant-time in ed25519 with `f` fake point,
-  // there is no special case for Point#add(0); private keys are hashed.
-  // Constant time multiplication.
-  multiply(scalar: bigint): Point {
-    const p = this.multiplyP(scalar);
-    return p.toAffine(modInverse(p.z));
+    return isAffine ? p.toAffine() : p;
   }
 }
 
@@ -268,6 +302,7 @@ export class SignResult {
     return hex;
   }
 }
+const {BASE_POINT} = Point;
 
 let sha512: (message: Uint8Array) => Promise<Uint8Array>;
 
@@ -406,21 +441,23 @@ function modInverse(number: bigint, modulo: bigint = P) {
   return mod(x, modulo);
 }
 
-function batchInverse(elms: bigint[], n: bigint) {
-  let scratch = new Array(elms.length);
+function batchInverse(nums: bigint[], n: bigint = P): bigint[] {
+  const len = nums.length;
+  const scratch = new Array(len);
   let acc = 1n;
-  for (let i = 0; i < elms.length; i++) {
-    if (!elms[i]) continue;
+  for (let i = 0; i < len; i++) {
+    if (nums[i] === 0n) continue;
     scratch[i] = acc;
-    acc = mod(acc * elms[i], n);
+    acc = mod(acc * nums[i], n);
   }
   acc = modInverse(acc, n);
-  for (let i = elms.length - 1; i >= 0; i--) {
-    if (!elms[i]) continue;
-    let tmp = mod(acc * elms[i], n);
-    elms[i] = mod(acc * scratch[i], n);
+  for (let i = len - 1; i >= 0; i--) {
+    if (nums[i] === 0n) continue;
+    let tmp = mod(acc * nums[i], n);
+    nums[i] = mod(acc * scratch[i], n);
     acc = tmp;
   }
+  return nums;
 }
 
 function encodePrivate(privateBytes: Uint8Array) {
@@ -474,7 +511,7 @@ export async function getPublicKey(privateKey: PrivKey) {
   const multiplier = normalizePrivateKey(privateKey);
   const privateBytes = await getPrivateBytes(multiplier);
   const privateInt = encodePrivate(privateBytes);
-  const publicKey = Point.BASE_POINT.multiply(privateInt);
+  const publicKey = BASE_POINT.multiply(privateInt);
   const p = normalizePoint(publicKey, privateKey);
   return p;
 }
@@ -488,7 +525,7 @@ export async function sign(hash: Hex, privateKey: PrivKey) {
   const privateBytes = await getPrivateBytes(privateKey);
   const privatePrefix = keyPrefix(privateBytes);
   const r = await hashNumber(privatePrefix, message);
-  const R = Point.BASE_POINT.multiply(r);
+  const R = BASE_POINT.multiply(r);
   const h = await hashNumber(R.encode(), publicKey.encode(), message);
   const S = mod(r + h * encodePrivate(privateBytes), PRIME_ORDER);
   const signature = new SignResult(R, S).toHex();
@@ -500,25 +537,20 @@ export async function verify(signature: Signature, hash: Hex, publicKey: PubKey)
   publicKey = normalizePublicKey(publicKey);
   signature = normalizeSignature(signature);
   const h = await hashNumber(signature.r.encode(), publicKey.encode(), hash);
-  // const S = Point.BASE_POINT.multiply(signature.s);
-  // const R = signature.r.add(publicKey.multiply(h));
-
-  const _S = Point.BASE_POINT.multiplyP(signature.s);
-  const _R = publicKey.multiplyP(h).add(ProjectivePoint.fromPoint(signature.r));
-  const [S, R] = ProjectivePoint.batchAffine([_S, _R]);
-
-  return S.x === R.x && S.y === R.y;
+  const S = BASE_POINT.multiply(signature.s, false);
+  const R = ProjectivePoint.fromPoint(signature.r).add(publicKey.multiplyUnsafe(h, false));
+  return S.equals(R);
 }
 
 // Enable precomputes. Slows down first publicKey computation by 20ms.
-Point.BASE_POINT._setWindowSize(4);
+BASE_POINT._setWindowSize(4);
 
 export const utils = {
 
   // generateRandomPrivateKey,
 
-  precompute(windowSize = 4, point = Point.BASE_POINT): Point {
-    const cached = point === Point.BASE_POINT ? point : new Point(point.x, point.y);
+  precompute(windowSize = 4, point = BASE_POINT): Point {
+    const cached = point.equals(BASE_POINT) ? point : new Point(point.x, point.y);
     cached._setWindowSize(windowSize);
     cached.multiply(1n);
     return cached;
