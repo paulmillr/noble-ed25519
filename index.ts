@@ -32,66 +32,72 @@ const P = CURVE_PARAMS.P;
 const PRIME_ORDER = CURVE_PARAMS.n;
 const I = powMod(2n, (P - 1n) / 4n, P);
 
-
 // Point represents default aka affine coordinates: (x, y)
 // Projective Point represents point in projective coordinates: (x=x/z, y=y/z, z)
-class ProjectivePoint {
-  static ZERO_POINT = new ProjectivePoint(0n, 1n, 1n);
-  static fromPoint(p: Point): ProjectivePoint {
-    return new ProjectivePoint(p.x, p.y, 1n);
+class ExtendedPoint {
+  static ZERO_POINT = new ExtendedPoint(0n, 1n, 1n, 0n);
+  static fromPoint(p: Point): ExtendedPoint {
+    if (p.equals(Point.ZERO_POINT)) return ExtendedPoint.ZERO_POINT;
+    return new ExtendedPoint(p.x, p.y, 1n, mod(p.x * p.y));
   }
 
-  constructor(public x: bigint, public y: bigint, public z: bigint) { }
+  constructor(public x: bigint, public y: bigint, public z: bigint, public t: bigint) {}
 
-  static batchAffine(points: ProjectivePoint[]): Point[] {
+  static batchAffine(points: ExtendedPoint[]): Point[] {
     const toInv = batchInverse(points.map(p => p.z));
     return points.map((p, i) => p.toAffine(toInv[i]));
   }
 
-  equals(other: ProjectivePoint): boolean {
+  equals(other: ExtendedPoint): boolean {
     const a = this;
     const b = other;
-    return mod(a.x * b.z) === mod(a.z * b.x) && mod(a.y * b.z) === mod(b.y * a.z);
+    const [T1, T2, Z1, Z2] = [a.t, b.t, a.z, b.z];
+    return mod(T1 * Z2) === mod(T2 * Z1);
   }
 
-  add(other: ProjectivePoint): ProjectivePoint {
-    const [X1, Y1, Z1, X2, Y2, Z2] = [this.x, this.y, this.z, other.x, other.y, other.z];
-    const { a, d } = CURVE_PARAMS;
-
-    // From: http://hyperelliptic.org/EFD/g1p/auto-twisted-projective.html#addition-add-2008-bbjlp
-    // Cost: 10M + 1S + 1*a + 1*d + 7add.
-    const A = mod(Z1 * Z2);
-    const B = mod(A ** 2n);
-    const C = mod(X1 * X2);
-    const D = mod(Y1 * Y2);
-    const E = mod(d * C * D);
-    const F = mod(B - E);
-    const G = mod(B + E);
-    const X3 = mod(A * F * ((X1 + Y1) * (X2 + Y2) - C - D));
-    const Y3 = mod(A * G * (D - a * C));
+  add(other: ExtendedPoint): ExtendedPoint {
+    const _a = this, _b = other;
+    const X1 = _a.x, Y1 = _a.y, Z1 = _a.z, T1 = _a.t;
+    const X2 = _b.x, Y2 = _b.y, Z2 = _b.z, T2 = _b.t;
+    const A = mod((Y1 - X1) * (Y2 + X2));
+    const B = mod((Y1 + X1) * (Y2 - X2));
+    const F = mod(B - A);
+    if (F === 0n) {
+      return this.double();
+    }
+    const C = mod(Z1 * 2n * T2);
+    const D = mod(T1 * 2n * Z2);
+    const E = mod(D + C);
+    const G = mod(B + A);
+    const H = mod(D - C);
+    const X3 = mod(E * F);
+    const Y3 = mod(G * H);
+    const T3 = mod(E * H);
     const Z3 = mod(F * G);
-    return new ProjectivePoint(X3, Y3, Z3);
+    return new ExtendedPoint(X3, Y3, Z3, T3);
   }
 
-  double(): ProjectivePoint {
-    const [X1, Y1, Z1] = [this.x, this.y, this.z];
-    const { a, } = CURVE_PARAMS;
-    // From: http://hyperelliptic.org/EFD/g1p/auto-twisted-projective.html#doubling-dbl-2008-bbjlp
-    // Cost: 3M + 4S + 1*a + 6add + 1*2.
-    const B = mod((X1 + Y1) ** 2n, P);
-    const C = mod(X1 ** 2n, P);
-    const D = mod(Y1 ** 2n, P);
-    const E = mod(a * C, P);
-    const F = mod(E + D, P);
-    const H = mod(Z1 ** 2n, P);
-    const J = mod(F - 2n * H, P);
-    const X3 = mod((B - C - D) * J, P);
-    const Y3 = mod(F * (E - D), P);
-    const Z3 = mod(F * J, P);
-    return new ProjectivePoint(X3, Y3, Z3);
+  double(): ExtendedPoint {
+    // const [X1, Y1, Z1] = [this.x, this.y, this.z];
+    const _a = this;
+    const X1 = _a.x, Y1 = _a.y, Z1 = _a.z;
+    const { a } = CURVE_PARAMS;
+    const A = mod(X1 ** 2n);
+    const B = mod(Y1 ** 2n);
+    const C = mod(2n * Z1 ** 2n);
+    const D = mod(a * A);
+    const E = mod((X1 + Y1) ** 2n - A - B);
+    const G = mod(D + B);
+    const F = mod(G - C);
+    const H = mod(D - B);
+    const X3 = mod(E * F);
+    const Y3 = mod(G * H);
+    const T3 = mod(E * H);
+    const Z3 = mod(F * G);
+    return new ExtendedPoint(X3, Y3, Z3, T3);
   }
 
-  multiplyUnsafe(scalar: bigint): ProjectivePoint {
+  multiplyUnsafe(scalar: bigint): ExtendedPoint {
     if (typeof scalar !== 'number' && typeof scalar !== 'bigint') {
       throw new TypeError('Point#multiply: expected number or bigint');
     }
@@ -99,8 +105,8 @@ class ProjectivePoint {
     if (n <= 0) {
       throw new Error('Point#multiply: invalid scalar, expected positive integer');
     }
-    let p = ProjectivePoint.ZERO_POINT;
-    let d: ProjectivePoint = this;
+    let p = ExtendedPoint.ZERO_POINT;
+    let d: ExtendedPoint = this;
     while (n > 0n) {
       if (n & 1n) p = p.add(d);
       d = d.double();
@@ -109,7 +115,7 @@ class ProjectivePoint {
     return p;
   }
 
-  toAffine(invZ: bigint = modInverse(this.z)): Point {
+  toAffine(invZ: bigint = modInverse(mod(this.z))): Point {
     const x = mod(this.x * invZ);
     const y = mod(this.y * invZ);
     return new Point(x, y);
@@ -128,9 +134,9 @@ export class Point {
   // using windowed method. This specifies window size and
   // stores precomputed values. Usually only base point would be precomputed.
   private WINDOW_SIZE?: number;
-  private PRECOMPUTES?: ProjectivePoint[];
+  private PRECOMPUTES?: ExtendedPoint[];
 
-  constructor(public x: bigint, public y: bigint) { }
+  constructor(public x: bigint, public y: bigint) {}
 
   _setWindowSize(windowSize: number) {
     this.WINDOW_SIZE = windowSize;
@@ -228,14 +234,14 @@ export class Point {
     return this.add(other.negate());
   }
 
-  private precomputeWindow(W: number): ProjectivePoint[] {
+  private precomputeWindow(W: number): ExtendedPoint[] {
     if (this.PRECOMPUTES) return this.PRECOMPUTES;
-    const points: ProjectivePoint[] = new Array((2 ** W) * W);
-    let currPoint: ProjectivePoint = ProjectivePoint.fromPoint(this);
+    const points: ExtendedPoint[] = new Array(2 ** W * W);
+    let currPoint: ExtendedPoint = ExtendedPoint.fromPoint(this);
     const winSize = 2 ** W;
     for (let currWin = 0; currWin < 256 / W; currWin++) {
       let offset = currWin * winSize;
-      let point: ProjectivePoint = ProjectivePoint.ZERO_POINT;
+      let point: ExtendedPoint = ExtendedPoint.ZERO_POINT;
       for (let i = 0; i < winSize; i++) {
         points[offset + i] = point;
         point = point.add(currPoint);
@@ -244,15 +250,15 @@ export class Point {
     }
     let res = points;
     if (W !== 1) {
-      res = ProjectivePoint.batchAffine(points).map(p => ProjectivePoint.fromPoint(p));
+      res = ExtendedPoint.batchAffine(points).map(p => ExtendedPoint.fromPoint(p));
       this.PRECOMPUTES = res;
     }
     return res;
   }
 
-  multiply(scalar: bigint, isAffine: false): ProjectivePoint;
+  multiply(scalar: bigint, isAffine: false): ExtendedPoint;
   multiply(scalar: bigint, isAffine?: true): Point;
-  multiply(scalar: bigint, isAffine = true): Point | ProjectivePoint {
+  multiply(scalar: bigint, isAffine = true): Point | ExtendedPoint {
     if (typeof scalar !== 'number' && typeof scalar !== 'bigint') {
       throw new TypeError('Point#multiply: expected number or bigint');
     }
@@ -266,7 +272,7 @@ export class Point {
     }
     const precomputes = this.precomputeWindow(W);
     const winSize = 2 ** W;
-    let p = ProjectivePoint.ZERO_POINT;
+    let p = ExtendedPoint.ZERO_POINT;
     for (let byteIdx = 0; byteIdx < 256 / W; byteIdx++) {
       const offset = winSize * byteIdx;
       const masked = Number(n & BigInt(winSize - 1));
@@ -278,7 +284,7 @@ export class Point {
 }
 
 export class SignResult {
-  constructor(public r: Point, public s: bigint) { }
+  constructor(public r: Point, public s: bigint) {}
 
   static fromHex(hex: Hex) {
     hex = normalizeHash(hex);
@@ -300,7 +306,7 @@ export class SignResult {
     return hex;
   }
 }
-const {BASE_POINT} = Point;
+const { BASE_POINT } = Point;
 
 let sha512: (message: Uint8Array) => Promise<Uint8Array>;
 
@@ -355,7 +361,7 @@ function arrayToNumberLE(bytes: Uint8Array): bigint {
 // Big Endian
 function arrayToNumber(bytes: Uint8Array): bigint {
   let value = 0n;
-  for (let i = bytes.length - 1, j = 0; i >= 0; i-- , j++) {
+  for (let i = bytes.length - 1, j = 0; i >= 0; i--, j++) {
     value += (BigInt(bytes[i]) & 255n) << (8n * BigInt(j));
   }
   return value;
@@ -430,6 +436,7 @@ function egcd(a: bigint, b: bigint) {
 
 function modInverse(number: bigint, modulo: bigint = P) {
   if (number === 0n || modulo <= 0n) {
+    console.log(number);
     throw new Error('modInverse: expected positive integers');
   }
   let [gcd, x] = egcd(mod(number, modulo), modulo);
@@ -535,9 +542,9 @@ export async function verify(signature: Signature, hash: Hex, publicKey: PubKey)
   publicKey = normalizePublicKey(publicKey);
   signature = normalizeSignature(signature);
   const h = await hashNumber(signature.r.encode(), publicKey.encode(), hash);
-  const pub = ProjectivePoint.fromPoint(publicKey);
+  const pub = ExtendedPoint.fromPoint(publicKey);
   const S = BASE_POINT.multiply(signature.s, false);
-  const R = ProjectivePoint.fromPoint(signature.r).add(pub.multiplyUnsafe(h));
+  const R = ExtendedPoint.fromPoint(signature.r).add(pub.multiplyUnsafe(h));
   return S.equals(R);
 }
 
@@ -545,7 +552,6 @@ export async function verify(signature: Signature, hash: Hex, publicKey: PubKey)
 BASE_POINT._setWindowSize(4);
 
 export const utils = {
-
   // generateRandomPrivateKey,
 
   precompute(windowSize = 4, point = BASE_POINT): Point {

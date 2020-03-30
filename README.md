@@ -138,10 +138,9 @@ There are additional `ristretto255` helpers in `ristretto255.js` file.
 
 Measured with 2.9Ghz Coffee Lake.
 
-- precomputation: first `getPrivateKey()` or `utils.precompute()`: 480ms
-- `getPrivateKey()`: 30ms
-- `sign()`: 86ms
-- `getPrivateKey()` with `utils.precompute(8)`: 15ms
+    getPublicKey x 2660 ops/sec @ 375μs/op
+    sign x 1241 ops/sec @ 805μs/op
+    verify x 445 ops/sec @ 2ms/op
 
 ## Security
 

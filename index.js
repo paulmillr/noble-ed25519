@@ -14,14 +14,17 @@ const ENCODING_LENGTH = 32;
 const P = exports.CURVE_PARAMS.P;
 const PRIME_ORDER = exports.CURVE_PARAMS.n;
 const I = powMod(2n, (P - 1n) / 4n, P);
-class ProjectivePoint {
-    constructor(x, y, z) {
+class ExtendedPoint {
+    constructor(x, y, z, t) {
         this.x = x;
         this.y = y;
         this.z = z;
+        this.t = t;
     }
     static fromPoint(p) {
-        return new ProjectivePoint(p.x, p.y, 1n);
+        if (p.equals(Point.ZERO_POINT))
+            return ExtendedPoint.ZERO_POINT;
+        return new ExtendedPoint(p.x, p.y, 1n, mod(p.x * p.y));
     }
     static batchAffine(points) {
         const toInv = batchInverse(points.map(p => p.z));
@@ -30,37 +33,47 @@ class ProjectivePoint {
     equals(other) {
         const a = this;
         const b = other;
-        return mod(a.x * b.z) === mod(a.z * b.x) && mod(a.y * b.z) === mod(b.y * a.z);
+        const [T1, T2, Z1, Z2] = [a.t, b.t, a.z, b.z];
+        return mod(T1 * Z2) === mod(T2 * Z1);
     }
     add(other) {
-        const [X1, Y1, Z1, X2, Y2, Z2] = [this.x, this.y, this.z, other.x, other.y, other.z];
-        const { a, d } = exports.CURVE_PARAMS;
-        const A = mod(Z1 * Z2);
-        const B = mod(A ** 2n);
-        const C = mod(X1 * X2);
-        const D = mod(Y1 * Y2);
-        const E = mod(d * C * D);
-        const F = mod(B - E);
-        const G = mod(B + E);
-        const X3 = mod(A * F * ((X1 + Y1) * (X2 + Y2) - C - D));
-        const Y3 = mod(A * G * (D - a * C));
+        const _a = this, _b = other;
+        const X1 = _a.x, Y1 = _a.y, Z1 = _a.z, T1 = _a.t;
+        const X2 = _b.x, Y2 = _b.y, Z2 = _b.z, T2 = _b.t;
+        const A = mod((Y1 - X1) * (Y2 + X2));
+        const B = mod((Y1 + X1) * (Y2 - X2));
+        const F = mod(B - A);
+        if (F === 0n) {
+            return this.double();
+        }
+        const C = mod(Z1 * 2n * T2);
+        const D = mod(T1 * 2n * Z2);
+        const E = mod(D + C);
+        const G = mod(B + A);
+        const H = mod(D - C);
+        const X3 = mod(E * F);
+        const Y3 = mod(G * H);
+        const T3 = mod(E * H);
         const Z3 = mod(F * G);
-        return new ProjectivePoint(X3, Y3, Z3);
+        return new ExtendedPoint(X3, Y3, Z3, T3);
     }
     double() {
-        const [X1, Y1, Z1] = [this.x, this.y, this.z];
-        const { a, } = exports.CURVE_PARAMS;
-        const B = mod((X1 + Y1) ** 2n, P);
-        const C = mod(X1 ** 2n, P);
-        const D = mod(Y1 ** 2n, P);
-        const E = mod(a * C, P);
-        const F = mod(E + D, P);
-        const H = mod(Z1 ** 2n, P);
-        const J = mod(F - 2n * H, P);
-        const X3 = mod((B - C - D) * J, P);
-        const Y3 = mod(F * (E - D), P);
-        const Z3 = mod(F * J, P);
-        return new ProjectivePoint(X3, Y3, Z3);
+        const _a = this;
+        const X1 = _a.x, Y1 = _a.y, Z1 = _a.z;
+        const { a } = exports.CURVE_PARAMS;
+        const A = mod(X1 ** 2n);
+        const B = mod(Y1 ** 2n);
+        const C = mod(2n * Z1 ** 2n);
+        const D = mod(a * A);
+        const E = mod((X1 + Y1) ** 2n - A - B);
+        const G = mod(D + B);
+        const F = mod(G - C);
+        const H = mod(D - B);
+        const X3 = mod(E * F);
+        const Y3 = mod(G * H);
+        const T3 = mod(E * H);
+        const Z3 = mod(F * G);
+        return new ExtendedPoint(X3, Y3, Z3, T3);
     }
     multiplyUnsafe(scalar) {
         if (typeof scalar !== 'number' && typeof scalar !== 'bigint') {
@@ -70,7 +83,7 @@ class ProjectivePoint {
         if (n <= 0) {
             throw new Error('Point#multiply: invalid scalar, expected positive integer');
         }
-        let p = ProjectivePoint.ZERO_POINT;
+        let p = ExtendedPoint.ZERO_POINT;
         let d = this;
         while (n > 0n) {
             if (n & 1n)
@@ -80,13 +93,13 @@ class ProjectivePoint {
         }
         return p;
     }
-    toAffine(invZ = modInverse(this.z)) {
+    toAffine(invZ = modInverse(mod(this.z))) {
         const x = mod(this.x * invZ);
         const y = mod(this.y * invZ);
         return new Point(x, y);
     }
 }
-ProjectivePoint.ZERO_POINT = new ProjectivePoint(0n, 1n, 1n);
+ExtendedPoint.ZERO_POINT = new ExtendedPoint(0n, 1n, 1n, 0n);
 class Point {
     constructor(x, y) {
         this.x = x;
@@ -166,12 +179,12 @@ class Point {
     precomputeWindow(W) {
         if (this.PRECOMPUTES)
             return this.PRECOMPUTES;
-        const points = new Array((2 ** W) * W);
-        let currPoint = ProjectivePoint.fromPoint(this);
+        const points = new Array(2 ** W * W);
+        let currPoint = ExtendedPoint.fromPoint(this);
         const winSize = 2 ** W;
         for (let currWin = 0; currWin < 256 / W; currWin++) {
             let offset = currWin * winSize;
-            let point = ProjectivePoint.ZERO_POINT;
+            let point = ExtendedPoint.ZERO_POINT;
             for (let i = 0; i < winSize; i++) {
                 points[offset + i] = point;
                 point = point.add(currPoint);
@@ -180,7 +193,7 @@ class Point {
         }
         let res = points;
         if (W !== 1) {
-            res = ProjectivePoint.batchAffine(points).map(p => ProjectivePoint.fromPoint(p));
+            res = ExtendedPoint.batchAffine(points).map(p => ExtendedPoint.fromPoint(p));
             this.PRECOMPUTES = res;
         }
         return res;
@@ -199,7 +212,7 @@ class Point {
         }
         const precomputes = this.precomputeWindow(W);
         const winSize = 2 ** W;
-        let p = ProjectivePoint.ZERO_POINT;
+        let p = ExtendedPoint.ZERO_POINT;
         for (let byteIdx = 0; byteIdx < 256 / W; byteIdx++) {
             const offset = winSize * byteIdx;
             const masked = Number(n & BigInt(winSize - 1));
@@ -350,6 +363,7 @@ function egcd(a, b) {
 }
 function modInverse(number, modulo = P) {
     if (number === 0n || modulo <= 0n) {
+        console.log(number);
         throw new Error('modInverse: expected positive integers');
     }
     let [gcd, x] = egcd(mod(number, modulo), modulo);
@@ -445,9 +459,9 @@ async function verify(signature, hash, publicKey) {
     publicKey = normalizePublicKey(publicKey);
     signature = normalizeSignature(signature);
     const h = await hashNumber(signature.r.encode(), publicKey.encode(), hash);
-    const pub = ProjectivePoint.fromPoint(publicKey);
+    const pub = ExtendedPoint.fromPoint(publicKey);
     const S = BASE_POINT.multiply(signature.s, false);
-    const R = ProjectivePoint.fromPoint(signature.r).add(pub.multiplyUnsafe(h));
+    const R = ExtendedPoint.fromPoint(signature.r).add(pub.multiplyUnsafe(h));
     return S.equals(R);
 }
 exports.verify = verify;
