@@ -33,7 +33,7 @@ const PRIME_ORDER = CURVE_PARAMS.n;
 const I = powMod(2n, (P - 1n) / 4n, P);
 
 // Point represents default aka affine coordinates: (x, y)
-// Projective Point represents point in projective coordinates: (x=x/z, y=y/z, z)
+// Extended Point represents point in extended coordinates: (x, y, z, t=xy)
 class ExtendedPoint {
   static ZERO_POINT = new ExtendedPoint(0n, 1n, 1n, 0n);
   static fromPoint(p: Point): ExtendedPoint {
@@ -55,6 +55,8 @@ class ExtendedPoint {
     return mod(T1 * Z2) === mod(T2 * Z1);
   }
 
+  // http://hyperelliptic.org/EFD/g1p/auto-twisted-extended-1.html#addition-add-2008-hwcd-4
+  // Cost: 8M + 8add + 2*2.
   add(other: ExtendedPoint): ExtendedPoint {
     const _a = this, _b = other;
     const X1 = _a.x, Y1 = _a.y, Z1 = _a.z, T1 = _a.t;
@@ -77,8 +79,9 @@ class ExtendedPoint {
     return new ExtendedPoint(X3, Y3, Z3, T3);
   }
 
+  // http://hyperelliptic.org/EFD/g1p/auto-twisted-extended-1.html#doubling-dbl-2008-hwcd
+  // Cost: 3M + 4S + 1*a + 7add + 1*2.
   double(): ExtendedPoint {
-    // const [X1, Y1, Z1] = [this.x, this.y, this.z];
     const _a = this;
     const X1 = _a.x, Y1 = _a.y, Z1 = _a.z;
     const { a } = CURVE_PARAMS;
