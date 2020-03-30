@@ -8,7 +8,6 @@ export declare const CURVE_PARAMS: {
     Gx: bigint;
     Gy: bigint;
 };
-declare type PrivKey = Uint8Array | string | bigint | number;
 declare type PubKey = Uint8Array | string | Point;
 declare type Hex = Uint8Array | string;
 declare type Signature = Uint8Array | string | SignResult;
@@ -37,8 +36,8 @@ export declare class Point {
     private PRECOMPUTES?;
     constructor(x: bigint, y: bigint);
     _setWindowSize(windowSize: number): void;
-    static fromHex(hash: Hex, invdyy1?: bigint): Point;
-    encode(): Uint8Array;
+    static fromHex(hash: Hex): Point;
+    toRawBytes(): Uint8Array;
     toHex(): string;
     toX25519(): bigint;
     equals(other: Point): boolean;
@@ -54,13 +53,22 @@ export declare class SignResult {
     s: bigint;
     constructor(r: Point, s: bigint);
     static fromHex(hex: Hex): SignResult;
+    toRawBytes(): Uint8Array;
     toHex(): string;
 }
+export declare const counters: {
+    arrayToHex: number;
+    numberToHex: number;
+    hexToNumber: number;
+    hexToArray: number;
+    arrayToNumber: number;
+    arrayToNumberLE: number;
+};
 export declare function getPublicKey(privateKey: Uint8Array): Promise<Uint8Array>;
 export declare function getPublicKey(privateKey: string): Promise<string>;
-export declare function getPublicKey(privateKey: bigint | number): Promise<Point>;
-export declare function sign(hash: Uint8Array, privateKey: PrivKey): Promise<Uint8Array>;
-export declare function sign(hash: string, privateKey: PrivKey): Promise<string>;
+export declare function getPublicKey(privateKey: bigint | number): Promise<Uint8Array>;
+export declare function sign(hash: Uint8Array, privateKey: Uint8Array): Promise<Uint8Array>;
+export declare function sign(hash: string, privateKey: string): Promise<string>;
 export declare function verify(signature: Signature, hash: Hex, publicKey: PubKey): Promise<boolean>;
 export declare const utils: {
     generateRandomPrivateKey: (bytesLength?: number) => Uint8Array;

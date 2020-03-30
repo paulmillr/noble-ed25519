@@ -117,7 +117,8 @@ class Point {
         this.WINDOW_SIZE = windowSize;
         this.PRECOMPUTES = undefined;
     }
-    static fromHex(hash, invdyy1) {
+    static fromHex(hash) {
+        const { d } = exports.CURVE_PARAMS;
         const bytes = hash instanceof Uint8Array ? hash : hexToArray(hash);
         const len = bytes.length - 1;
         const normedLast = bytes[len] & ~0x80;
@@ -128,21 +129,18 @@ class Point {
             throw new Error('Point#fromHex expects hex <= Fp');
         }
         const sqrY = y * y;
-        const { d } = exports.CURVE_PARAMS;
-        if (invdyy1 == null)
-            invdyy1 = modInverse(d * sqrY + 1n);
-        const sqrX = mod((sqrY - 1n) * invdyy1);
+        const sqrX = mod((sqrY - 1n) * modInverse(d * sqrY + 1n), P);
         let x = powMod(sqrX, (P + 3n) / 8n, P);
-        if (mod(x * x - sqrX, P) !== 0n) {
-            x = mod(x * I, P);
+        if (mod(x * x - sqrX) !== 0n) {
+            x = mod(x * I);
         }
         const isXOdd = (x & 1n) === 1n;
         if (isLastByteOdd !== isXOdd) {
-            x = mod(-x, P);
+            x = mod(-x);
         }
         return new Point(x, y);
     }
-    encode() {
+    toRawBytes() {
         let hex = this.y.toString(16);
         hex = hex.length & 1 ? `0${hex}` : hex;
         const u8 = new Uint8Array(ENCODING_LENGTH);
@@ -154,13 +152,7 @@ class Point {
         return u8;
     }
     toHex() {
-        const bytes = this.encode();
-        let hex = '';
-        for (let i = 0; i < bytes.length; i++) {
-            const value = bytes[i].toString(16);
-            hex = `${hex}${value.length > 1 ? value : `0${value}`}`;
-        }
-        return hex;
+        return arrayToHex(this.toRawBytes());
     }
     toX25519() {
         return mod((1n + this.y) * modInverse(1n - this.y));
@@ -243,22 +235,22 @@ class SignResult {
         this.s = s;
     }
     static fromHex(hex) {
-        hex = normalizeHash(hex);
+        hex = ensureArray(hex);
         const r = Point.fromHex(hex.slice(0, 32));
         const s = arrayToNumberLE(hex.slice(32));
         return new SignResult(r, s);
     }
-    toHex() {
+    toRawBytes() {
         const numberBytes = hexToArray(numberToHex(this.s)).reverse();
         const sBytes = new Uint8Array(ENCODING_LENGTH);
         sBytes.set(numberBytes);
-        const bytes = concatTypedArrays(this.r.encode(), sBytes);
-        let hex = '';
-        for (let i = 0; i < bytes.length; i++) {
-            const value = bytes[i].toString(16);
-            hex = `${hex}${value.length > 1 ? value : `0${value}`}`;
-        }
-        return hex;
+        const res = new Uint8Array(64);
+        res.set(this.r.toRawBytes());
+        res.set(sBytes, 32);
+        return res;
+    }
+    toHex() {
+        return arrayToHex(this.toRawBytes());
     }
 }
 exports.SignResult = SignResult;
@@ -300,7 +292,10 @@ function concatTypedArrays(...arrays) {
     }
     return result;
 }
+const c = { arrayToHex: 0, numberToHex: 0, hexToNumber: 0, hexToArray: 0, arrayToNumber: 0, arrayToNumberLE: 0 };
+exports.counters = c;
 function arrayToHex(uint8a) {
+    c.arrayToHex++;
     let hex = '';
     for (let i = 0; i < uint8a.length; i++) {
         hex += uint8a[i].toString(16).padStart(2, '0');
@@ -311,13 +306,16 @@ function pad64(num) {
     return num.toString(16).padStart(64, '0');
 }
 function numberToHex(num) {
+    c.numberToHex++;
     const hex = num.toString(16);
     return hex.length & 1 ? `0${hex}` : hex;
 }
 function hexToNumber(hex) {
+    c.hexToNumber++;
     return BigInt(`0x${hex}`);
 }
 function hexToArray(hex) {
+    c.hexToArray++;
     hex = hex.length & 1 ? `0${hex}` : hex;
     const array = new Uint8Array(hex.length / 2);
     for (let i = 0; i < array.length; i++) {
@@ -327,12 +325,14 @@ function hexToArray(hex) {
     return array;
 }
 function arrayToNumber(uint8a) {
+    c.arrayToNumber++;
     return hexToNumber(arrayToHex(uint8a));
 }
 function arrayToNumberLE(uint8a) {
+    c.arrayToNumberLE++;
     let value = 0n;
     for (let i = 0; i < uint8a.length; i++) {
-        value += BigInt(uint8a[i]) << 8n * BigInt(i);
+        value += BigInt(uint8a[i]) << (8n * BigInt(i));
     }
     return value;
 }
@@ -396,14 +396,11 @@ function batchInverse(nums, n = P) {
     }
     return nums;
 }
-async function hashNumber(...args) {
+async function sha512ToNumberLE(...args) {
     const messageArray = concatTypedArrays(...args);
     const hash = await sha512(messageArray);
     const value = arrayToNumberLE(hash);
     return mod(value, PRIME_ORDER);
-}
-function getPrivateBytes(privKey) {
-    return sha512(privKey instanceof Uint8Array ? privKey : hexToArray(pad64(privKey)));
 }
 function keyPrefix(privateBytes) {
     return privateBytes.slice(ENCODING_LENGTH);
@@ -416,69 +413,46 @@ function encodePrivate(privateBytes) {
     head[last] |= 64;
     return arrayToNumberLE(head);
 }
-function normalizePrivateKey(privateKey) {
-    let res;
-    if (privateKey instanceof Uint8Array) {
-        res = arrayToNumber(privateKey);
-    }
-    else if (typeof privateKey === 'string') {
-        res = hexToNumber(privateKey);
-    }
-    else {
-        res = BigInt(privateKey);
-    }
-    return res;
-}
-function normalizePublicKey(publicKey) {
-    return publicKey instanceof Point ? publicKey : Point.fromHex(publicKey);
-}
-function normalizePoint(point, privateKey) {
-    if (privateKey instanceof Uint8Array) {
-        return point.encode();
-    }
-    if (typeof privateKey === 'string') {
-        return point.toHex();
-    }
-    return point;
-}
-function normalizeSignature(signature) {
-    return signature instanceof SignResult ? signature : SignResult.fromHex(signature);
-}
-function normalizeHash(hash) {
+function ensureArray(hash) {
     return hash instanceof Uint8Array ? hash : hexToArray(hash);
 }
+function ensurePrivInputArray(privateKey) {
+    if (privateKey instanceof Uint8Array)
+        return privateKey;
+    if (typeof privateKey === 'string')
+        return hexToArray(privateKey);
+    return hexToArray(pad64(BigInt(privateKey)));
+}
 async function getPublicKey(privateKey) {
-    const multiplier = normalizePrivateKey(privateKey);
-    const privateBytes = await getPrivateBytes(multiplier);
-    const privateInt = encodePrivate(privateBytes);
-    const publicKey = BASE_POINT.multiply(privateInt);
-    const p = normalizePoint(publicKey, privateKey);
-    return p;
+    const privBytes = await sha512(ensurePrivInputArray(privateKey));
+    const publicKey = BASE_POINT.multiply(encodePrivate(privBytes));
+    return typeof privateKey === 'string' ? publicKey.toHex() : publicKey.toRawBytes();
 }
 exports.getPublicKey = getPublicKey;
 async function sign(hash, privateKey) {
-    const message = normalizeHash(hash);
-    privateKey = normalizePrivateKey(privateKey);
-    const publicKey = await getPublicKey(privateKey);
-    const privateBytes = await getPrivateBytes(privateKey);
-    const privatePrefix = keyPrefix(privateBytes);
-    const r = await hashNumber(privatePrefix, message);
+    const privBytes = await sha512(ensurePrivInputArray(privateKey));
+    const p = encodePrivate(privBytes);
+    const P = BASE_POINT.multiply(p);
+    const msg = ensureArray(hash);
+    const r = await sha512ToNumberLE(keyPrefix(privBytes), msg);
     const R = BASE_POINT.multiply(r);
-    const h = await hashNumber(R.encode(), publicKey.encode(), message);
-    const S = mod(r + h * encodePrivate(privateBytes), PRIME_ORDER);
-    const signature = new SignResult(R, S).toHex();
-    return hash instanceof Uint8Array ? hexToArray(signature) : signature;
+    const h = await sha512ToNumberLE(R.toRawBytes(), P.toRawBytes(), msg);
+    const S = mod(r + h * p, PRIME_ORDER);
+    const sig = new SignResult(R, S);
+    return typeof hash === 'string' ? sig.toHex() : sig.toRawBytes();
 }
 exports.sign = sign;
 async function verify(signature, hash, publicKey) {
-    hash = normalizeHash(hash);
-    publicKey = normalizePublicKey(publicKey);
-    signature = normalizeSignature(signature);
-    const h = await hashNumber(signature.r.encode(), publicKey.encode(), hash);
-    const pub = ExtendedPoint.fromPoint(publicKey);
-    const S = BASE_POINT.multiply(signature.s, false);
-    const R = ExtendedPoint.fromPoint(signature.r).add(pub.multiplyUnsafe(h));
-    return S.equals(R);
+    hash = ensureArray(hash);
+    if (!(publicKey instanceof Point))
+        publicKey = Point.fromHex(publicKey);
+    if (!(signature instanceof SignResult))
+        signature = SignResult.fromHex(signature);
+    const h = await sha512ToNumberLE(signature.r.toRawBytes(), publicKey.toRawBytes(), hash);
+    const Ph = ExtendedPoint.fromPoint(publicKey).multiplyUnsafe(h);
+    const Gs = BASE_POINT.multiply(signature.s, false);
+    const RPh = ExtendedPoint.fromPoint(signature.r).add(Ph);
+    return Gs.equals(RPh);
 }
 exports.verify = verify;
 BASE_POINT._setWindowSize(4);
