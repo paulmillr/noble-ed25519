@@ -104,12 +104,18 @@ for tests, to speed-up tests 2x.
 
 You may want to precompute values for your own point.
 
+`Point#toX25519`
+
+You can use the method to use ed25519 keys for curve25519 encryption.
+
+https://blog.filippo.io/using-ed25519-keys-for-encryption
+
 ```typescript
 // 𝔽p
-ed25519.P // 2 ^ 255 - 19
+ed25519.CURVE_PARAMS.P // 2 ^ 255 - 19
 
 // Subgroup order
-ed25519.PRIME_ORDER // 2 ^ 252 - 27742317777372353535851937790883648493
+ed25519.CURVE_PARAMS.n // 2 ^ 252 - 27742317777372353535851937790883648493
 
 // Elliptic curve point
 ed25519.Point {
