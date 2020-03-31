@@ -2,6 +2,8 @@
 
 [ed25519](https://en.wikipedia.org/wiki/EdDSA), an elliptic curve that could be used for assymetric encryption and EDDSA signature scheme.
 
+[Very fast](#speed), algorithmically resistant to timing attacks.
+
 Supports [ristretto255](https://ristretto.group).
 
 ### This library belongs to *noble* crypto
@@ -62,8 +64,8 @@ function getPublicKey(privateKey: bigint): Promise<Uint8Array>;
 function sign(hash: Uint8Array, privateKey: Uint8Array): Promise<Uint8Array>;
 function sign(hash: string, privateKey: string): Promise<string>;
 ```
-- `hash: Uint8Array` - message hash which would be signed
-- `privateKey: Uint8Array | bigint` - private key which will sign the hash
+- `hash: Uint8Array | string` - message hash which would be signed
+- `privateKey: Uint8Array | string` - private key which will sign the hash
 - Returns EdDSA signature. You can consume it with `SignResult.fromHex()` method:
     - `SignResult.fromHex(ed25519.sign(hash, privateKey))`
 
@@ -141,8 +143,8 @@ There are additional `ristretto255` helpers in `ristretto255.js` file.
 
 Measured with 2.9Ghz Coffee Lake.
 
-    getPublicKey x 2812 ops/sec @ 355μs/op
-    sign x 1309 ops/sec @ 763μs/op
+    getPublicKey x 2851 ops/sec @ 350μs/op
+    sign x 1347 ops/sec @ 742μs/op
     verify x 400 ops/sec @ 2ms/op
 
 ## Security
