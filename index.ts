@@ -37,7 +37,7 @@ const I = powMod(2n, (P - 1n) / 4n, P);
 // https://en.wikipedia.org/wiki/Twisted_Edwards_curve#Extended_coordinates
 class ExtendedPoint {
   static ZERO_POINT = new ExtendedPoint(0n, 1n, 1n, 0n);
-  static fromPoint(p: Point): ExtendedPoint {
+  static fromAffine(p: Point): ExtendedPoint {
     if (p.equals(Point.ZERO_POINT)) return ExtendedPoint.ZERO_POINT;
     return new ExtendedPoint(p.x, p.y, 1n, mod(p.x * p.y));
   }
@@ -150,6 +150,9 @@ class ExtendedPoint {
   }
 }
 
+// Stores precomputed values for points.
+const pointPrecomputes = new WeakMap();
+
 // Default Point works in default aka affine coordinates: (x, y)
 export class Point {
   // Base point aka generator
@@ -162,14 +165,13 @@ export class Point {
   // using windowed method. This specifies window size and
   // stores precomputed values. Usually only base point would be precomputed.
   private WINDOW_SIZE?: number;
-  private PRECOMPUTES?: ExtendedPoint[];
 
   constructor(public x: bigint, public y: bigint) {}
 
   // "Private method", don't use it directly.
   _setWindowSize(windowSize: number) {
     this.WINDOW_SIZE = windowSize;
-    this.PRECOMPUTES = undefined;
+    pointPrecomputes.delete(this);
   }
   // Converts hash string or Uint8Array to Point.
   // Uses algo from RFC8032 5.1.3.
@@ -260,29 +262,68 @@ export class Point {
   }
 
   private precomputeWindow(W: number): ExtendedPoint[] {
-    if (this.PRECOMPUTES) return this.PRECOMPUTES;
-    const points: ExtendedPoint[] = new Array(2 ** W * W);
-    let currPoint: ExtendedPoint = ExtendedPoint.fromPoint(this);
-    const winSize = 2 ** W;
-    for (let currWin = 0; currWin < 256 / W; currWin++) {
-      let offset = currWin * winSize;
-      let point: ExtendedPoint = ExtendedPoint.ZERO_POINT;
-      for (let i = 0; i < winSize; i++) {
-        points[offset + i] = point;
-        point = point.add(currPoint);
+    const cached = pointPrecomputes.get(this);
+    if (cached) return cached;
+    const windows = 256 / W + 1;
+    let points: ExtendedPoint[] = [];
+    let p = ExtendedPoint.fromAffine(this);
+    let base = p;
+    for (let window = 0; window < windows; window++) {
+      base = p;
+      points.push(base);
+      for (let i = 1; i < 2 ** (W - 1); i++) {
+        base = base.add(p);
+        points.push(base);
       }
-      currPoint = point;
+      p = base.double();
     }
-    let res = points;
     if (W !== 1) {
-      res = ExtendedPoint.batchAffine(points).map(p => ExtendedPoint.fromPoint(p));
-      this.PRECOMPUTES = res;
+      points = ExtendedPoint.batchAffine(points).map(ExtendedPoint.fromAffine);
+      pointPrecomputes.set(this, points);
     }
-    return res;
+    return points;
+  }
+
+  private wNAF(n: bigint, W: number, precomputes: ExtendedPoint[], isHalf = false) {
+    let p = ExtendedPoint.ZERO_POINT;
+    let f = ExtendedPoint.ZERO_POINT
+
+    const windows = (isHalf ? 128 : 256) / W + 1;
+    const windowSize = 2 ** (W - 1);
+    const mask = BigInt(2 ** W - 1); // Create mask with W ones: 0b1111 for W=4 etc.
+    const maxNumber = 2 ** W;
+    const shiftBy = BigInt(W);
+
+    for (let window = 0; window < windows; window++) {
+      const offset = window * windowSize;
+      // Extract W bits.
+      let wbits = Number(n & mask);
+
+      // Shift number by W bits.
+      n >>= shiftBy;
+
+      // If the bits are bigger than max size, we'll split those.
+      // +224 => 256 - 32
+      if (wbits > windowSize) {
+        wbits -= maxNumber;
+        n += 1n;
+      }
+
+      // Check if we're onto Zero point.
+      // Add random point inside current window to f.
+      if (wbits === 0) {
+        f = f.add(precomputes[offset]);
+      } else {
+        const cached = precomputes[offset + Math.abs(wbits) - 1];
+        p = p.add(wbits < 0 ? cached.negate() : cached);
+      }
+    }
+    return [p, f];
   }
 
   // Constant time multiplication.
-  // Uses window method to generate 2^W precomputed points.
+  // Uses wNAF method. Windowed method may be 10% faster,
+  // but takes 2x longer to generate and consumes 2x memory.
   multiply(scalar: bigint, isAffine: false): ExtendedPoint;
   multiply(scalar: bigint, isAffine?: true): Point;
   multiply(scalar: bigint, isAffine = true): Point | ExtendedPoint {
@@ -293,20 +334,22 @@ export class Point {
     if (n <= 0) {
       throw new Error('Point#multiply: invalid scalar, expected positive integer');
     }
+    // TODO: remove the check in the future, need to adjust tests.
+    // if (scalar > PRIME_ORDER) {
+    //   throw new Error('Point#multiply: invalid scalar, expected < PRIME_ORDER');
+    // }
     const W = this.WINDOW_SIZE || 1;
     if (256 % W) {
       throw new Error('Point#multiply: Invalid precomputation window, must be power of 2');
     }
     const precomputes = this.precomputeWindow(W);
-    const winSize = 2 ** W;
-    let p = ExtendedPoint.ZERO_POINT;
-    for (let byteIdx = 0; byteIdx < 256 / W; byteIdx++) {
-      const offset = winSize * byteIdx;
-      const masked = Number(n & BigInt(winSize - 1));
-      p = p.add(precomputes[offset + masked]);
-      n >>= BigInt(W);
-    }
-    return isAffine ? p.toAffine() : p;
+
+    // Real point.
+    let point: ExtendedPoint;
+    // Fake point, we use it to achieve constant-time multiplication.
+    let fake: ExtendedPoint;
+    [point, fake] = this.wNAF(n, W, precomputes);
+    return isAffine ? ExtendedPoint.batchAffine([point, fake])[0] : point;
   }
 }
 const { BASE_POINT } = Point;
@@ -541,19 +584,19 @@ export async function verify(signature: Signature, hash: Hex, publicKey: PubKey)
   if (!(publicKey instanceof Point)) publicKey = Point.fromHex(publicKey);
   if (!(signature instanceof SignResult)) signature = SignResult.fromHex(signature);
   const h = await sha512ToNumberLE(signature.r.toRawBytes(), publicKey.toRawBytes(), hash);
-  const Ph = ExtendedPoint.fromPoint(publicKey).multiplyUnsafe(h);
+  const Ph = ExtendedPoint.fromAffine(publicKey).multiplyUnsafe(h);
   const Gs = BASE_POINT.multiply(signature.s, false);
-  const RPh = ExtendedPoint.fromPoint(signature.r).add(Ph);
+  const RPh = ExtendedPoint.fromAffine(signature.r).add(Ph);
   return Gs.equals(RPh);
 }
 
 // Enable precomputes. Slows down first publicKey computation by 20ms.
-BASE_POINT._setWindowSize(4);
+BASE_POINT._setWindowSize(8);
 
 export const utils = {
   generateRandomPrivateKey,
 
-  precompute(windowSize = 4, point = BASE_POINT): Point {
+  precompute(windowSize = 8, point = BASE_POINT): Point {
     const cached = point.equals(BASE_POINT) ? point : new Point(point.x, point.y);
     cached._setWindowSize(windowSize);
     cached.multiply(1n);

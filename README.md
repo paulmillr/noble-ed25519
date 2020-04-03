@@ -149,9 +149,9 @@ There are additional `ristretto255` helpers in `ristretto255.js` file.
 
 Measured with 2.9Ghz Coffee Lake.
 
-    getPublicKey x 2851 ops/sec @ 350μs/op
-    sign x 1347 ops/sec @ 742μs/op
-    verify x 400 ops/sec @ 2ms/op
+    getPublicKey x 4016 ops/sec @ 248μs/op
+    sign x 1914 ops/sec @ 522μs/op
+    verify x 384 ops/sec @ 2ms/op
 
 ## Security
 

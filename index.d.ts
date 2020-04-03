@@ -17,7 +17,7 @@ declare class ExtendedPoint {
     z: bigint;
     t: bigint;
     static ZERO_POINT: ExtendedPoint;
-    static fromPoint(p: Point): ExtendedPoint;
+    static fromAffine(p: Point): ExtendedPoint;
     constructor(x: bigint, y: bigint, z: bigint, t: bigint);
     static batchAffine(points: ExtendedPoint[]): Point[];
     equals(other: ExtendedPoint): boolean;
@@ -33,7 +33,6 @@ export declare class Point {
     static BASE_POINT: Point;
     static ZERO_POINT: Point;
     private WINDOW_SIZE?;
-    private PRECOMPUTES?;
     constructor(x: bigint, y: bigint);
     _setWindowSize(windowSize: number): void;
     static fromHex(hash: Hex): Point;
@@ -45,6 +44,7 @@ export declare class Point {
     add(other: Point): Point;
     subtract(other: Point): Point;
     private precomputeWindow;
+    private wNAF;
     multiply(scalar: bigint, isAffine: false): ExtendedPoint;
     multiply(scalar: bigint, isAffine?: true): Point;
 }

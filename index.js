@@ -21,7 +21,7 @@ class ExtendedPoint {
         this.z = z;
         this.t = t;
     }
-    static fromPoint(p) {
+    static fromAffine(p) {
         if (p.equals(Point.ZERO_POINT))
             return ExtendedPoint.ZERO_POINT;
         return new ExtendedPoint(p.x, p.y, 1n, mod(p.x * p.y));
@@ -108,6 +108,7 @@ class ExtendedPoint {
     }
 }
 ExtendedPoint.ZERO_POINT = new ExtendedPoint(0n, 1n, 1n, 0n);
+const pointPrecomputes = new WeakMap();
 class Point {
     constructor(x, y) {
         this.x = x;
@@ -115,7 +116,7 @@ class Point {
     }
     _setWindowSize(windowSize) {
         this.WINDOW_SIZE = windowSize;
-        this.PRECOMPUTES = undefined;
+        pointPrecomputes.delete(this);
     }
     static fromHex(hash) {
         const { d } = exports.CURVE_PARAMS;
@@ -179,26 +180,53 @@ class Point {
         return this.add(other.negate());
     }
     precomputeWindow(W) {
-        if (this.PRECOMPUTES)
-            return this.PRECOMPUTES;
-        const points = new Array(2 ** W * W);
-        let currPoint = ExtendedPoint.fromPoint(this);
-        const winSize = 2 ** W;
-        for (let currWin = 0; currWin < 256 / W; currWin++) {
-            let offset = currWin * winSize;
-            let point = ExtendedPoint.ZERO_POINT;
-            for (let i = 0; i < winSize; i++) {
-                points[offset + i] = point;
-                point = point.add(currPoint);
+        const cached = pointPrecomputes.get(this);
+        if (cached)
+            return cached;
+        const windows = 256 / W + 1;
+        let points = [];
+        let p = ExtendedPoint.fromAffine(this);
+        let base = p;
+        for (let window = 0; window < windows; window++) {
+            base = p;
+            points.push(base);
+            for (let i = 1; i < 2 ** (W - 1); i++) {
+                base = base.add(p);
+                points.push(base);
             }
-            currPoint = point;
+            p = base.double();
         }
-        let res = points;
         if (W !== 1) {
-            res = ExtendedPoint.batchAffine(points).map(p => ExtendedPoint.fromPoint(p));
-            this.PRECOMPUTES = res;
+            points = ExtendedPoint.batchAffine(points).map(ExtendedPoint.fromAffine);
+            pointPrecomputes.set(this, points);
         }
-        return res;
+        return points;
+    }
+    wNAF(n, W, precomputes, isHalf = false) {
+        let p = ExtendedPoint.ZERO_POINT;
+        let f = ExtendedPoint.ZERO_POINT;
+        const windows = (isHalf ? 128 : 256) / W + 1;
+        const windowSize = 2 ** (W - 1);
+        const mask = BigInt(2 ** W - 1);
+        const maxNumber = 2 ** W;
+        const shiftBy = BigInt(W);
+        for (let window = 0; window < windows; window++) {
+            const offset = window * windowSize;
+            let wbits = Number(n & mask);
+            n >>= shiftBy;
+            if (wbits > windowSize) {
+                wbits -= maxNumber;
+                n += 1n;
+            }
+            if (wbits === 0) {
+                f = f.add(precomputes[offset]);
+            }
+            else {
+                const cached = precomputes[offset + Math.abs(wbits) - 1];
+                p = p.add(wbits < 0 ? cached.negate() : cached);
+            }
+        }
+        return [p, f];
     }
     multiply(scalar, isAffine = true) {
         if (typeof scalar !== 'number' && typeof scalar !== 'bigint') {
@@ -213,15 +241,10 @@ class Point {
             throw new Error('Point#multiply: Invalid precomputation window, must be power of 2');
         }
         const precomputes = this.precomputeWindow(W);
-        const winSize = 2 ** W;
-        let p = ExtendedPoint.ZERO_POINT;
-        for (let byteIdx = 0; byteIdx < 256 / W; byteIdx++) {
-            const offset = winSize * byteIdx;
-            const masked = Number(n & BigInt(winSize - 1));
-            p = p.add(precomputes[offset + masked]);
-            n >>= BigInt(W);
-        }
-        return isAffine ? p.toAffine() : p;
+        let point;
+        let fake;
+        [point, fake] = this.wNAF(n, W, precomputes);
+        return isAffine ? ExtendedPoint.batchAffine([point, fake])[0] : point;
     }
 }
 exports.Point = Point;
@@ -434,16 +457,16 @@ async function verify(signature, hash, publicKey) {
     if (!(signature instanceof SignResult))
         signature = SignResult.fromHex(signature);
     const h = await sha512ToNumberLE(signature.r.toRawBytes(), publicKey.toRawBytes(), hash);
-    const Ph = ExtendedPoint.fromPoint(publicKey).multiplyUnsafe(h);
+    const Ph = ExtendedPoint.fromAffine(publicKey).multiplyUnsafe(h);
     const Gs = BASE_POINT.multiply(signature.s, false);
-    const RPh = ExtendedPoint.fromPoint(signature.r).add(Ph);
+    const RPh = ExtendedPoint.fromAffine(signature.r).add(Ph);
     return Gs.equals(RPh);
 }
 exports.verify = verify;
-BASE_POINT._setWindowSize(4);
+BASE_POINT._setWindowSize(8);
 exports.utils = {
     generateRandomPrivateKey,
-    precompute(windowSize = 4, point = BASE_POINT) {
+    precompute(windowSize = 8, point = BASE_POINT) {
         const cached = point.equals(BASE_POINT) ? point : new Point(point.x, point.y);
         cached._setWindowSize(windowSize);
         cached.multiply(1n);
