@@ -202,10 +202,15 @@ class Point {
         }
         return points;
     }
-    wNAF(n, W, precomputes, isHalf = false) {
+    wNAF(n, isHalf = false) {
+        const W = this.WINDOW_SIZE || 1;
+        if (256 % W) {
+            throw new Error('Point#multiply: Invalid precomputation window, must be power of 2');
+        }
+        const precomputes = this.precomputeWindow(W);
         let p = ExtendedPoint.ZERO_POINT;
         let f = ExtendedPoint.ZERO_POINT;
-        const windows = (isHalf ? 128 : 256) / W + 1;
+        const windows = 256 / W + 1;
         const windowSize = 2 ** (W - 1);
         const mask = BigInt(2 ** W - 1);
         const maxNumber = 2 ** W;
@@ -236,14 +241,9 @@ class Point {
         if (n <= 0) {
             throw new Error('Point#multiply: invalid scalar, expected positive integer');
         }
-        const W = this.WINDOW_SIZE || 1;
-        if (256 % W) {
-            throw new Error('Point#multiply: Invalid precomputation window, must be power of 2');
-        }
-        const precomputes = this.precomputeWindow(W);
         let point;
         let fake;
-        [point, fake] = this.wNAF(n, W, precomputes);
+        [point, fake] = this.wNAF(n);
         return isAffine ? ExtendedPoint.batchAffine([point, fake])[0] : point;
     }
 }

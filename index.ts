@@ -284,11 +284,16 @@ export class Point {
     return points;
   }
 
-  private wNAF(n: bigint, W: number, precomputes: ExtendedPoint[], isHalf = false) {
+  private wNAF(n: bigint, isHalf = false) {
+    const W = this.WINDOW_SIZE || 1;
+    if (256 % W) {
+      throw new Error('Point#multiply: Invalid precomputation window, must be power of 2');
+    }
+    const precomputes = this.precomputeWindow(W);
     let p = ExtendedPoint.ZERO_POINT;
     let f = ExtendedPoint.ZERO_POINT
 
-    const windows = (isHalf ? 128 : 256) / W + 1;
+    const windows = 256 / W + 1;
     const windowSize = 2 ** (W - 1);
     const mask = BigInt(2 ** W - 1); // Create mask with W ones: 0b1111 for W=4 etc.
     const maxNumber = 2 ** W;
@@ -338,17 +343,11 @@ export class Point {
     // if (scalar > PRIME_ORDER) {
     //   throw new Error('Point#multiply: invalid scalar, expected < PRIME_ORDER');
     // }
-    const W = this.WINDOW_SIZE || 1;
-    if (256 % W) {
-      throw new Error('Point#multiply: Invalid precomputation window, must be power of 2');
-    }
-    const precomputes = this.precomputeWindow(W);
-
     // Real point.
     let point: ExtendedPoint;
     // Fake point, we use it to achieve constant-time multiplication.
     let fake: ExtendedPoint;
-    [point, fake] = this.wNAF(n, W, precomputes);
+    [point, fake] = this.wNAF(n);
     return isAffine ? ExtendedPoint.batchAffine([point, fake])[0] : point;
   }
 }
