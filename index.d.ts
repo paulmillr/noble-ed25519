@@ -1,5 +1,5 @@
 /*! noble-ed25519 - MIT License (c) Paul Miller (paulmillr.com) */
-export declare const CURVE_PARAMS: {
+declare const CURVE: {
     a: bigint;
     d: bigint;
     P: bigint;
@@ -8,6 +8,7 @@ export declare const CURVE_PARAMS: {
     Gx: bigint;
     Gy: bigint;
 };
+export { CURVE };
 declare type PubKey = Uint8Array | string | Point;
 declare type Hex = Uint8Array | string;
 declare type Signature = Uint8Array | string | SignResult;
@@ -16,7 +17,8 @@ declare class ExtendedPoint {
     y: bigint;
     z: bigint;
     t: bigint;
-    static ZERO_POINT: ExtendedPoint;
+    static BASE: ExtendedPoint;
+    static ZERO: ExtendedPoint;
     static fromAffine(p: Point): ExtendedPoint;
     constructor(x: bigint, y: bigint, z: bigint, t: bigint);
     static batchAffine(points: ExtendedPoint[]): Point[];
@@ -30,8 +32,8 @@ declare class ExtendedPoint {
 export declare class Point {
     x: bigint;
     y: bigint;
-    static BASE_POINT: Point;
-    static ZERO_POINT: Point;
+    static BASE: Point;
+    static ZERO: Point;
     private WINDOW_SIZE?;
     constructor(x: bigint, y: bigint);
     _setWindowSize(windowSize: number): void;
@@ -66,4 +68,3 @@ export declare const utils: {
     generateRandomPrivateKey: (bytesLength?: number) => Uint8Array;
     precompute(windowSize?: number, point?: Point): Point;
 };
-export {};

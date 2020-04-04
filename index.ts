@@ -5,7 +5,7 @@
 // https://en.wikipedia.org/wiki/EdDSA
 // Thanks DJB!
 
-export const CURVE_PARAMS = {
+const CURVE = {
   // Params: a, b
   a: -1n,
   // Equal to -121665/121666 over finite field.
@@ -22,23 +22,27 @@ export const CURVE_PARAMS = {
   Gy: 46316835694926478169428394003475163141307993866256225615783033603165251855960n
 };
 
+// Cleaner output this way.
+export {CURVE};
+
 type PrivKey = Uint8Array | string | bigint | number;
 type PubKey = Uint8Array | string | Point;
 type Hex = Uint8Array | string;
 type Signature = Uint8Array | string | SignResult;
 
 const ENCODING_LENGTH = 32;
-const P = CURVE_PARAMS.P;
-const PRIME_ORDER = CURVE_PARAMS.n;
+const P = CURVE.P;
+const PRIME_ORDER = CURVE.n;
 const I = powMod(2n, (P - 1n) / 4n, P);
 
 // Default Point works in default aka affine coordinates: (x, y)
 // Extended Point works in extended coordinates: (x, y, z, t) ∋ (x=x/z, y=y/z, t=xy)
 // https://en.wikipedia.org/wiki/Twisted_Edwards_curve#Extended_coordinates
 class ExtendedPoint {
-  static ZERO_POINT = new ExtendedPoint(0n, 1n, 1n, 0n);
+  static BASE = new ExtendedPoint(CURVE.Gx, CURVE.Gy, 1n, mod(CURVE.Gx * CURVE.Gy));
+  static ZERO = new ExtendedPoint(0n, 1n, 1n, 0n);
   static fromAffine(p: Point): ExtendedPoint {
-    if (p.equals(Point.ZERO_POINT)) return ExtendedPoint.ZERO_POINT;
+    if (p.equals(Point.ZERO)) return ExtendedPoint.ZERO;
     return new ExtendedPoint(p.x, p.y, 1n, mod(p.x * p.y));
   }
 
@@ -73,7 +77,7 @@ class ExtendedPoint {
     const X1 = _a.x,
       Y1 = _a.y,
       Z1 = _a.z;
-    const { a } = CURVE_PARAMS;
+    const { a } = CURVE;
     const A = mod(X1 ** 2n);
     const B = mod(Y1 ** 2n);
     const C = mod(2n * Z1 ** 2n);
@@ -131,7 +135,7 @@ class ExtendedPoint {
     if (n <= 0) {
       throw new Error('Point#multiply: invalid scalar, expected positive integer');
     }
-    let p = ExtendedPoint.ZERO_POINT;
+    let p = ExtendedPoint.ZERO;
     let d: ExtendedPoint = this;
     while (n > 0n) {
       if (n & 1n) p = p.add(d);
@@ -156,11 +160,11 @@ const pointPrecomputes = new WeakMap();
 // Default Point works in default aka affine coordinates: (x, y)
 export class Point {
   // Base point aka generator
-  // public_key = base_point * private_key
-  static BASE_POINT: Point = new Point(CURVE_PARAMS.Gx, CURVE_PARAMS.Gy);
+  // public_key = Point.BASE * private_key
+  static BASE: Point = new Point(CURVE.Gx, CURVE.Gy);
   // Identity point aka point at infinity
   // point = point + zero_point
-  static ZERO_POINT: Point = new Point(0n, 1n);
+  static ZERO: Point = new Point(0n, 1n);
   // We calculate precomputes for elliptic curve point multiplication
   // using windowed method. This specifies window size and
   // stores precomputed values. Usually only base point would be precomputed.
@@ -176,7 +180,7 @@ export class Point {
   // Converts hash string or Uint8Array to Point.
   // Uses algo from RFC8032 5.1.3.
   static fromHex(hash: Hex) {
-    const { d } = CURVE_PARAMS;
+    const { d } = CURVE;
     const bytes = hash instanceof Uint8Array ? hash : hexToArray(hash);
     const len = bytes.length - 1;
     const normedLast = bytes[len] & ~0x80;
@@ -247,7 +251,7 @@ export class Point {
     if (!(other instanceof Point)) {
       throw new TypeError('Point#add: expected Point');
     }
-    const { d } = CURVE_PARAMS;
+    const { d } = CURVE;
     const X1 = this.x;
     const Y1 = this.y;
     const X2 = other.x;
@@ -284,14 +288,14 @@ export class Point {
     return points;
   }
 
-  private wNAF(n: bigint, isHalf = false) {
+  private wNAF(n: bigint) {
     const W = this.WINDOW_SIZE || 1;
     if (256 % W) {
       throw new Error('Point#multiply: Invalid precomputation window, must be power of 2');
     }
     const precomputes = this.precomputeWindow(W);
-    let p = ExtendedPoint.ZERO_POINT;
-    let f = ExtendedPoint.ZERO_POINT
+    let p = ExtendedPoint.ZERO;
+    let f = ExtendedPoint.ZERO
 
     const windows = 256 / W + 1;
     const windowSize = 2 ** (W - 1);
@@ -335,23 +339,14 @@ export class Point {
     if (typeof scalar !== 'number' && typeof scalar !== 'bigint') {
       throw new TypeError('Point#multiply: expected number or bigint');
     }
-    let n = mod(BigInt(scalar), PRIME_ORDER);
+    const n = mod(BigInt(scalar), PRIME_ORDER);
     if (n <= 0) {
       throw new Error('Point#multiply: invalid scalar, expected positive integer');
     }
-    // TODO: remove the check in the future, need to adjust tests.
-    // if (scalar > PRIME_ORDER) {
-    //   throw new Error('Point#multiply: invalid scalar, expected < PRIME_ORDER');
-    // }
-    // Real point.
-    let point: ExtendedPoint;
-    // Fake point, we use it to achieve constant-time multiplication.
-    let fake: ExtendedPoint;
-    [point, fake] = this.wNAF(n);
+    const [point, fake] = this.wNAF(n);
     return isAffine ? ExtendedPoint.batchAffine([point, fake])[0] : point;
   }
 }
-const { BASE_POINT } = Point;
 
 export class SignResult {
   constructor(public r: Point, public s: bigint) {}
@@ -381,7 +376,7 @@ export class SignResult {
 
 // SHA512 implementation.
 let sha512: (message: Uint8Array) => Promise<Uint8Array>;
-let generateRandomPrivateKey = (bytesLength: number = 32) => new Uint8Array(0);
+let generateRandomPrivateKey = (bytesLength: number = 32) => new Uint8Array(bytesLength);
 
 if (typeof window == 'object' && 'crypto' in window) {
   sha512 = async (message: Uint8Array) => {
@@ -559,7 +554,7 @@ export function getPublicKey(privateKey: string): Promise<string>;
 export function getPublicKey(privateKey: bigint | number): Promise<Uint8Array>;
 export async function getPublicKey(privateKey: PrivKey) {
   const privBytes = await sha512(ensurePrivInputArray(privateKey));
-  const publicKey = BASE_POINT.multiply(encodePrivate(privBytes));
+  const publicKey = Point.BASE.multiply(encodePrivate(privBytes));
   return typeof privateKey === 'string' ? publicKey.toHex() : publicKey.toRawBytes();
 }
 
@@ -568,10 +563,10 @@ export function sign(hash: string, privateKey: Hex): Promise<string>;
 export async function sign(hash: Hex, privateKey: Hex) {
   const privBytes = await sha512(ensurePrivInputArray(privateKey));
   const p = encodePrivate(privBytes);
-  const P = BASE_POINT.multiply(p);
+  const P = Point.BASE.multiply(p);
   const msg = ensureArray(hash);
   const r = await sha512ToNumberLE(keyPrefix(privBytes), msg);
-  const R = BASE_POINT.multiply(r);
+  const R = Point.BASE.multiply(r);
   const h = await sha512ToNumberLE(R.toRawBytes(), P.toRawBytes(), msg);
   const S = mod(r + h * p, PRIME_ORDER);
   const sig = new SignResult(R, S);
@@ -584,19 +579,19 @@ export async function verify(signature: Signature, hash: Hex, publicKey: PubKey)
   if (!(signature instanceof SignResult)) signature = SignResult.fromHex(signature);
   const h = await sha512ToNumberLE(signature.r.toRawBytes(), publicKey.toRawBytes(), hash);
   const Ph = ExtendedPoint.fromAffine(publicKey).multiplyUnsafe(h);
-  const Gs = BASE_POINT.multiply(signature.s, false);
+  const Gs = Point.BASE.multiply(signature.s, false);
   const RPh = ExtendedPoint.fromAffine(signature.r).add(Ph);
   return Gs.equals(RPh);
 }
 
 // Enable precomputes. Slows down first publicKey computation by 20ms.
-BASE_POINT._setWindowSize(8);
+Point.BASE._setWindowSize(8);
 
 export const utils = {
   generateRandomPrivateKey,
 
-  precompute(windowSize = 8, point = BASE_POINT): Point {
-    const cached = point.equals(BASE_POINT) ? point : new Point(point.x, point.y);
+  precompute(windowSize = 8, point = Point.BASE): Point {
+    const cached = point.equals(Point.BASE) ? point : new Point(point.x, point.y);
     cached._setWindowSize(windowSize);
     cached.multiply(1n);
     return cached;

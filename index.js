@@ -1,7 +1,7 @@
 "use strict";
 /*! noble-ed25519 - MIT License (c) Paul Miller (paulmillr.com) */
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.CURVE_PARAMS = {
+const CURVE = {
     a: -1n,
     d: 37095705934669439343138083508754565189542113879843219016388785533085940283555n,
     P: 2n ** 255n - 19n,
@@ -10,9 +10,10 @@ exports.CURVE_PARAMS = {
     Gx: 15112221349535400772501151409588531511454012693041857206046113283949847762202n,
     Gy: 46316835694926478169428394003475163141307993866256225615783033603165251855960n
 };
+exports.CURVE = CURVE;
 const ENCODING_LENGTH = 32;
-const P = exports.CURVE_PARAMS.P;
-const PRIME_ORDER = exports.CURVE_PARAMS.n;
+const P = CURVE.P;
+const PRIME_ORDER = CURVE.n;
 const I = powMod(2n, (P - 1n) / 4n, P);
 class ExtendedPoint {
     constructor(x, y, z, t) {
@@ -22,8 +23,8 @@ class ExtendedPoint {
         this.t = t;
     }
     static fromAffine(p) {
-        if (p.equals(Point.ZERO_POINT))
-            return ExtendedPoint.ZERO_POINT;
+        if (p.equals(Point.ZERO))
+            return ExtendedPoint.ZERO;
         return new ExtendedPoint(p.x, p.y, 1n, mod(p.x * p.y));
     }
     static batchAffine(points) {
@@ -42,7 +43,7 @@ class ExtendedPoint {
     double() {
         const _a = this;
         const X1 = _a.x, Y1 = _a.y, Z1 = _a.z;
-        const { a } = exports.CURVE_PARAMS;
+        const { a } = CURVE;
         const A = mod(X1 ** 2n);
         const B = mod(Y1 ** 2n);
         const C = mod(2n * Z1 ** 2n);
@@ -91,7 +92,7 @@ class ExtendedPoint {
         if (n <= 0) {
             throw new Error('Point#multiply: invalid scalar, expected positive integer');
         }
-        let p = ExtendedPoint.ZERO_POINT;
+        let p = ExtendedPoint.ZERO;
         let d = this;
         while (n > 0n) {
             if (n & 1n)
@@ -107,7 +108,8 @@ class ExtendedPoint {
         return new Point(x, y);
     }
 }
-ExtendedPoint.ZERO_POINT = new ExtendedPoint(0n, 1n, 1n, 0n);
+ExtendedPoint.BASE = new ExtendedPoint(CURVE.Gx, CURVE.Gy, 1n, mod(CURVE.Gx * CURVE.Gy));
+ExtendedPoint.ZERO = new ExtendedPoint(0n, 1n, 1n, 0n);
 const pointPrecomputes = new WeakMap();
 class Point {
     constructor(x, y) {
@@ -119,7 +121,7 @@ class Point {
         pointPrecomputes.delete(this);
     }
     static fromHex(hash) {
-        const { d } = exports.CURVE_PARAMS;
+        const { d } = CURVE;
         const bytes = hash instanceof Uint8Array ? hash : hexToArray(hash);
         const len = bytes.length - 1;
         const normedLast = bytes[len] & ~0x80;
@@ -167,7 +169,7 @@ class Point {
         if (!(other instanceof Point)) {
             throw new TypeError('Point#add: expected Point');
         }
-        const { d } = exports.CURVE_PARAMS;
+        const { d } = CURVE;
         const X1 = this.x;
         const Y1 = this.y;
         const X2 = other.x;
@@ -208,8 +210,8 @@ class Point {
             throw new Error('Point#multiply: Invalid precomputation window, must be power of 2');
         }
         const precomputes = this.precomputeWindow(W);
-        let p = ExtendedPoint.ZERO_POINT;
-        let f = ExtendedPoint.ZERO_POINT;
+        let p = ExtendedPoint.ZERO;
+        let f = ExtendedPoint.ZERO;
         const windows = 256 / W + 1;
         const windowSize = 2 ** (W - 1);
         const mask = BigInt(2 ** W - 1);
@@ -237,20 +239,17 @@ class Point {
         if (typeof scalar !== 'number' && typeof scalar !== 'bigint') {
             throw new TypeError('Point#multiply: expected number or bigint');
         }
-        let n = mod(BigInt(scalar), PRIME_ORDER);
+        const n = mod(BigInt(scalar), PRIME_ORDER);
         if (n <= 0) {
             throw new Error('Point#multiply: invalid scalar, expected positive integer');
         }
-        let point;
-        let fake;
-        [point, fake] = this.wNAF(n);
+        const [point, fake] = this.wNAF(n);
         return isAffine ? ExtendedPoint.batchAffine([point, fake])[0] : point;
     }
 }
 exports.Point = Point;
-Point.BASE_POINT = new Point(exports.CURVE_PARAMS.Gx, exports.CURVE_PARAMS.Gy);
-Point.ZERO_POINT = new Point(0n, 1n);
-const { BASE_POINT } = Point;
+Point.BASE = new Point(CURVE.Gx, CURVE.Gy);
+Point.ZERO = new Point(0n, 1n);
 class SignResult {
     constructor(r, s) {
         this.r = r;
@@ -433,17 +432,17 @@ function ensurePrivInputArray(privateKey) {
 }
 async function getPublicKey(privateKey) {
     const privBytes = await sha512(ensurePrivInputArray(privateKey));
-    const publicKey = BASE_POINT.multiply(encodePrivate(privBytes));
+    const publicKey = Point.BASE.multiply(encodePrivate(privBytes));
     return typeof privateKey === 'string' ? publicKey.toHex() : publicKey.toRawBytes();
 }
 exports.getPublicKey = getPublicKey;
 async function sign(hash, privateKey) {
     const privBytes = await sha512(ensurePrivInputArray(privateKey));
     const p = encodePrivate(privBytes);
-    const P = BASE_POINT.multiply(p);
+    const P = Point.BASE.multiply(p);
     const msg = ensureArray(hash);
     const r = await sha512ToNumberLE(keyPrefix(privBytes), msg);
-    const R = BASE_POINT.multiply(r);
+    const R = Point.BASE.multiply(r);
     const h = await sha512ToNumberLE(R.toRawBytes(), P.toRawBytes(), msg);
     const S = mod(r + h * p, PRIME_ORDER);
     const sig = new SignResult(R, S);
@@ -458,16 +457,16 @@ async function verify(signature, hash, publicKey) {
         signature = SignResult.fromHex(signature);
     const h = await sha512ToNumberLE(signature.r.toRawBytes(), publicKey.toRawBytes(), hash);
     const Ph = ExtendedPoint.fromAffine(publicKey).multiplyUnsafe(h);
-    const Gs = BASE_POINT.multiply(signature.s, false);
+    const Gs = Point.BASE.multiply(signature.s, false);
     const RPh = ExtendedPoint.fromAffine(signature.r).add(Ph);
     return Gs.equals(RPh);
 }
 exports.verify = verify;
-BASE_POINT._setWindowSize(8);
+Point.BASE._setWindowSize(8);
 exports.utils = {
     generateRandomPrivateKey,
-    precompute(windowSize = 8, point = BASE_POINT) {
-        const cached = point.equals(BASE_POINT) ? point : new Point(point.x, point.y);
+    precompute(windowSize = 8, point = Point.BASE) {
+        const cached = point.equals(Point.BASE) ? point : new Point(point.x, point.y);
         cached._setWindowSize(windowSize);
         cached.multiply(1n);
         return cached;

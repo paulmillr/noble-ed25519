@@ -78,7 +78,7 @@ describe('ed25519', () => {
     await fc.assert(
       fc.asyncProperty(
         fc.hexaString(1, 32),
-        fc.bigInt(1n, ed25519.CURVE_PARAMS.n),
+        fc.bigInt(1n, ed25519.CURVE.n),
         async (message: string, privateKey: bigint) => {
           const publicKey = await ed25519.getPublicKey(privateKey);
           const signature = await ed25519.sign(toBytes(message), toBytes(privateKey));
@@ -95,7 +95,7 @@ describe('ed25519', () => {
       fc.asyncProperty(
         fc.array(fc.integer(0x00, 0xff)),
         fc.array(fc.integer(0x00, 0xff)),
-        fc.bigInt(1n, ed25519.CURVE_PARAMS.n),
+        fc.bigInt(1n, ed25519.CURVE.n),
         async (bytes, wrongBytes, privateKey) => {
           const message = new Uint8Array(bytes);
           const wrongMessage = new Uint8Array(wrongBytes);
@@ -129,7 +129,7 @@ describe('ed25519', () => {
   describe('BASE_POINT.multiply()', () => {
     // https://xmr.llcoins.net/addresstests.html
     it('should create right publicKey without SHA-512 hashing TEST 1', () => {
-      const publicKey = ed25519.Point.BASE_POINT.multiply(
+      const publicKey = ed25519.Point.BASE.multiply(
         0x90af56259a4b6bfbc4337980d5d75fbe3c074630368ff3804d33028e5dbfa77n
       );
       expect(publicKey.toHex()).toBe(
@@ -137,7 +137,7 @@ describe('ed25519', () => {
       );
     });
     it('should create right publicKey without SHA-512 hashing TEST 2', () => {
-      const publicKey = ed25519.Point.BASE_POINT.multiply(
+      const publicKey = ed25519.Point.BASE.multiply(
         0x364e8711a60780382a5d57b061c126f039940f28a9e91fe039d4d3094d8b88n
       );
       expect(publicKey.toHex()).toBe(
@@ -145,7 +145,7 @@ describe('ed25519', () => {
       );
     });
     it('should create right publicKey without SHA-512 hashing TEST 3', () => {
-      const publicKey = ed25519.Point.BASE_POINT.multiply(
+      const publicKey = ed25519.Point.BASE.multiply(
         0xb9bf90ff3abec042752cac3a07a62f0c16cfb9d32a3fc2305d676ec2d86e941n
       );
       expect(publicKey.toHex()).toBe(
@@ -153,7 +153,7 @@ describe('ed25519', () => {
       );
     });
     it('should create right publicKey without SHA-512 hashing TEST 4', () => {
-      const publicKey = ed25519.Point.BASE_POINT.multiply(
+      const publicKey = ed25519.Point.BASE.multiply(
         0x69d896f02d79524c9878e080308180e2859d07f9f54454e0800e8db0847a46en
       );
       expect(publicKey.toHex()).toBe(
@@ -164,7 +164,7 @@ describe('ed25519', () => {
 
   describe('Point#toX25519()', () => {
     it('should convert base point to montgomery', async () => {
-      expect(ed25519.Point.BASE_POINT.toX25519()).toBe(9n);
+      expect(ed25519.Point.BASE.toX25519()).toBe(9n);
     });
 
     it('should convert TEST 1 to montgomery', async () => {

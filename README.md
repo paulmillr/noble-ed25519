@@ -112,19 +112,26 @@ https://blog.filippo.io/using-ed25519-keys-for-encryption
 
 ```typescript
 // 𝔽p
-ed25519.CURVE_PARAMS.P // 2 ^ 255 - 19
+ed25519.CURVE.P // 2 ^ 255 - 19
 
 // Subgroup order
-ed25519.CURVE_PARAMS.n // 2 ^ 252 - 27742317777372353535851937790883648493
+ed25519.CURVE.n // 2 ^ 252 - 27742317777372353535851937790883648493
 
-// Elliptic curve point
+ed25519.Point.BASE // new ed25519.Point(Gx, Gy) where
+// Gx = 15112221349535400772501151409588531511454012693041857206046113283949847762202n
+// Gy = 46316835694926478169428394003475163141307993866256225615783033603165251855960n;
+
+
+// Elliptic curve point in Affine (x, y) coordinates.
 ed25519.Point {
+  constructor(x: bigint, y: bigint);
   static fromY(y: bigint);
   static fromHex(hash: string);
-  constructor(x: bigint, y: bigint);
+  toX25519(): bigint; // Converts to Curve25519
+  toRawBytes(): Uint8Array;
   toHex(): string; // Compact representation of a Point
-  toX25519(): bigint; // To montgomery
-  encode(): Uint8Array;
+  equals(other: Point): boolean;
+  negate(): Point;
   add(other: Point): Point;
   subtract(other: Point): Point;
   multiply(scalar: bigint): Point;
