@@ -11,6 +11,16 @@ const CURVE = {
     Gy: 46316835694926478169428394003475163141307993866256225615783033603165251855960n
 };
 exports.CURVE = CURVE;
+const TORSION_SUBGROUP = [
+    '0100000000000000000000000000000000000000000000000000000000000000',
+    'c7176a703d4dd84fba3c0b760d10670f2a2053fa2c39ccc64ec7fd7792ac037a',
+    '0000000000000000000000000000000000000000000000000000000000000080',
+    '26e8958fc2b227b045c3f489f2ef98f0d5dfac05d3c63339b13802886d53fc05',
+    'ecffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7f',
+    '26e8958fc2b227b045c3f489f2ef98f0d5dfac05d3c63339b13802886d53fc85',
+    '0000000000000000000000000000000000000000000000000000000000000000',
+    'c7176a703d4dd84fba3c0b760d10670f2a2053fa2c39ccc64ec7fd7792ac03fa'
+];
 const ENCODING_LENGTH = 32;
 const P = CURVE.P;
 const PRIME_ORDER = CURVE.n;
@@ -204,7 +214,7 @@ class Point {
         }
         return points;
     }
-    wNAF(n, isHalf = false) {
+    wNAF(n) {
         const W = this.WINDOW_SIZE || 1;
         if (256 % W) {
             throw new Error('Point#multiply: Invalid precomputation window, must be power of 2');
@@ -276,7 +286,7 @@ class SignResult {
 }
 exports.SignResult = SignResult;
 let sha512;
-let generateRandomPrivateKey = (bytesLength = 32) => new Uint8Array(0);
+let generateRandomPrivateKey = (bytesLength = 32) => new Uint8Array(bytesLength);
 if (typeof window == 'object' && 'crypto' in window) {
     sha512 = async (message) => {
         const buffer = await window.crypto.subtle.digest('SHA-512', message.buffer);
