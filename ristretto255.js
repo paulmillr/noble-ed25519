@@ -3,279 +3,292 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 const mask64Bits = (1n << 64n) - 1n;
 const low51bitMask = (1n << 51n) - 1n;
-class FieldElement {
-    constructor(value) {
-        this.value = FieldElement.mod(value, FieldElement.P);
-    }
-    static load8(input, padding = 0) {
-        return (BigInt(input[0 + padding]) |
-            (BigInt(input[1 + padding]) << 8n) |
-            (BigInt(input[2 + padding]) << 16n) |
-            (BigInt(input[3 + padding]) << 24n) |
-            (BigInt(input[4 + padding]) << 32n) |
-            (BigInt(input[5 + padding]) << 40n) |
-            (BigInt(input[6 + padding]) << 48n) |
-            (BigInt(input[7 + padding]) << 56n));
-    }
-    static fromBytes(bytes) {
-        const octet1 = this.load8(bytes, 0) & low51bitMask;
-        const octet2 = (this.load8(bytes, 6) >> 3n) & low51bitMask;
-        const octet3 = (this.load8(bytes, 12) >> 6n) & low51bitMask;
-        const octet4 = (this.load8(bytes, 19) >> 1n) & low51bitMask;
-        const octet5 = (this.load8(bytes, 24) >> 12n) & low51bitMask;
-        return new FieldElement(octet1 + (octet2 << 51n) + (octet3 << 102n) + (octet4 << 153n) + (octet5 << 204n));
-    }
-    static one() {
-        return new FieldElement(1n);
-    }
-    static zero() {
-        return new FieldElement(0n);
-    }
-    static mod(a, b) {
-        const res = a % b;
-        return res >= 0 ? res : b + res;
-    }
-    toBytesBE(length = 0) {
-        let hex = this.value.toString(16);
-        hex = hex.length & 1 ? `0${hex}` : hex;
-        hex = hex.padStart(length * 2, '0');
-        const len = hex.length / 2;
-        const u8 = new Uint8Array(len);
-        for (let j = 0, i = 0; i < hex.length; i += 2, j++) {
-            u8[j] = parseInt(hex[i] + hex[i + 1], 16);
-        }
-        return u8;
-    }
-    toBytesLE(length = 0) {
-        return this.toBytesBE(length).reverse();
-    }
-    equals(other) {
-        return this.value === other.value;
-    }
-    isNegative() {
-        const bytes = this.toBytesLE();
-        return Boolean(bytes[0] & 1);
-    }
-    isZero() {
-        return this.value === 0n;
-    }
-    add(other) {
-        return new FieldElement(this.value + other.value);
-    }
-    subtract(other) {
-        return new FieldElement(this.value - other.value);
-    }
-    div(other) {
-        return new FieldElement(this.value / other.value);
-    }
-    multiply(other) {
-        return new FieldElement(this.value * other.value);
-    }
-    pow(power) {
-        let res = FieldElement.one();
-        let x = this;
-        while (power > 0) {
-            if (power & 1n) {
-                res = res.multiply(x);
-            }
-            power >>= 1n;
-            x = x.square();
-        }
-        return res;
-    }
-    pow2k(power) {
-        let res = this;
-        while (power-- > 0) {
-            res = res.square();
-        }
-        return res;
-    }
-    invert() {
-        const [t19, t3] = this.pow22501();
-        return t19.pow(5n).multiply(t3);
-    }
-    negative() {
-        return new FieldElement(-this.value);
-    }
-    square() {
-        return this.multiply(this);
-    }
-    pow22501() {
-        const t0 = this.square();
-        const t1 = t0.square().square();
-        const t2 = this.multiply(t1);
-        const t3 = t0.multiply(t2);
-        const t4 = t3.square();
-        const t5 = t2.multiply(t4);
-        const t6 = t5.pow2k(5n);
-        const t7 = t6.multiply(t5);
-        const t8 = t7.pow2k(10n);
-        const t9 = t8.multiply(t7);
-        const t10 = t9.pow2k(20n);
-        const t11 = t10.multiply(t9);
-        const t12 = t11.pow2k(10n);
-        const t13 = t12.multiply(t7);
-        const t14 = t13.pow2k(50n);
-        const t15 = t14.multiply(t13);
-        const t16 = t15.pow2k(100n);
-        const t17 = t16.multiply(t15);
-        const t18 = t17.pow2k(50n);
-        const t19 = t18.multiply(t13);
-        return [t19, t3];
-    }
-    powP58() {
-        const [t19] = this.pow22501();
-        return t19.pow2k(2n).multiply(this);
-    }
-    select(other, choice) {
-        return choice ? this : other;
-    }
-    condNegative(choice) {
-        return this.negative().select(this, choice);
-    }
-    condSwap(other, choice) {
-        choice = BigInt(choice);
-        const mask = choice !== 0n ? mask64Bits : choice;
-        const tmp = mask & (this.value ^ other.value);
-        return [new FieldElement(this.value ^ tmp), new FieldElement(other.value ^ tmp)];
-    }
-    sqrtRatio(v) {
-        const v3 = v.multiply(v).multiply(v);
-        const v7 = v3.multiply(v3).multiply(v);
-        let r = this.multiply(v7)
-            .powP58()
-            .multiply(this)
-            .multiply(v3);
-        const check = r.square().multiply(v);
-        const i = FieldElement.SQRT_M1;
-        const correctSignSqrt = check.equals(this);
-        const flippedSignSqrt = check.equals(this.negative());
-        const flippedSignSqrtI = check.equals(this.negative().multiply(i));
-        const rPrime = FieldElement.SQRT_M1.multiply(r);
-        r = rPrime.select(r, flippedSignSqrt || flippedSignSqrtI);
-        r = r.condNegative(r.isNegative());
-        const isNotZeroSquare = correctSignSqrt || flippedSignSqrt;
-        return { isNotZeroSquare, value: r };
-    }
-    invertSqrt() {
-        return FieldElement.one().sqrtRatio(this);
-    }
+const CURVE = {
+    a: -1n,
+    d: 37095705934669439343138083508754565189542113879843219016388785533085940283555n,
+    P: 2n ** 255n - 19n,
+    n: 2n ** 252n + 27742317777372353535851937790883648493n,
+    h: 8n,
+    Gx: 15112221349535400772501151409588531511454012693041857206046113283949847762202n,
+    Gy: 46316835694926478169428394003475163141307993866256225615783033603165251855960n,
+};
+const D2 = 16295367250680780974490674513165176452449235426866156013048779062215315747161n;
+const SQRT_M1 = 19681161376707505956807079304988542015446066515923890162744021073123829784752n;
+const INVSQRT_A_MINUS_D = 54469307008909316920995813868745141605393597292927456921205312896311721017578n;
+const SQRT_AD_MINUS_ONE = 25063068953384623474111414158702152701244531502492656460079210482610430750235n;
+function isNegative(t) {
+    const bytes = toBytesLE(mod(t));
+    return Boolean(bytes[0] & 1);
 }
-exports.FieldElement = FieldElement;
-FieldElement.P = 2n ** 255n - 19n;
-FieldElement.D = new FieldElement(37095705934669439343138083508754565189542113879843219016388785533085940283555n);
-FieldElement.D2 = new FieldElement(16295367250680780974490674513165176452449235426866156013048779062215315747161n);
-FieldElement.SQRT_M1 = new FieldElement(19681161376707505956807079304988542015446066515923890162744021073123829784752n);
-FieldElement.INVSQRT_A_MINUS_D = new FieldElement(54469307008909316920995813868745141605393597292927456921205312896311721017578n);
-FieldElement.SQRT_AD_MINUS_ONE = new FieldElement(25063068953384623474111414158702152701244531502492656460079210482610430750235n);
-FieldElement.PRIME_ORDER = 2n ** 252n + 27742317777372353535851937790883648493n;
-exports.P = FieldElement.P;
-exports.PRIME_ORDER = FieldElement.PRIME_ORDER;
+function mod(a, b = CURVE.P) {
+    const res = a % b;
+    return res >= 0 ? res : b + res;
+}
+function egcd(a, b) {
+    let [x, y, u, v] = [0n, 1n, 1n, 0n];
+    while (a !== 0n) {
+        let q = b / a;
+        let r = b % a;
+        let m = x - u * q;
+        let n = y - v * q;
+        [b, a] = [a, r];
+        [x, y] = [u, v];
+        [u, v] = [m, n];
+    }
+    let gcd = b;
+    return [gcd, x, y];
+}
+function modInverse(number, modulo = exports.P) {
+    if (number === 0n || modulo <= 0n) {
+        throw new Error('modInverse: expected positive integers');
+    }
+    let [gcd, x] = egcd(mod(number, modulo), modulo);
+    if (gcd !== 1n) {
+        throw new Error('modInverse: does not exist');
+    }
+    return mod(x, modulo);
+}
+exports.modInverse = modInverse;
+function select(t, other, choice) {
+    return choice ? mod(t) : mod(other);
+}
+function condNegative(t, choice) {
+    return select(mod(-t), t, choice);
+}
+function invertSqrt(t) {
+    return sqrtRatio(1n, t);
+}
+function pow2k(t, power) {
+    let res = t;
+    while (power-- > 0) {
+        res = res * res;
+    }
+    return res;
+}
+function pow22501(t) {
+    const t0 = mod(t * t);
+    const t1 = mod(t0 ** 4n);
+    const t2 = mod(t * t1);
+    const t3 = mod(t0 * t2);
+    const t5 = mod(t2 * t3 * t3);
+    let t7 = t5;
+    for (let i = 0; i < 5; i++) {
+        t7 *= t7;
+        t7 %= exports.P;
+    }
+    t7 *= t5;
+    t7 %= exports.P;
+    let t9 = t7;
+    for (let i = 0; i < 10; i++) {
+        t9 *= t9;
+        t9 %= exports.P;
+    }
+    t9 *= t7;
+    t9 %= exports.P;
+    let t13 = t9;
+    for (let i = 0; i < 20; i++) {
+        t13 *= t13;
+        t13 %= exports.P;
+    }
+    t13 *= t9;
+    t13 %= exports.P;
+    for (let i = 0; i < 10; i++) {
+        t13 *= t13;
+        t13 %= exports.P;
+    }
+    t13 *= t7;
+    t13 %= exports.P;
+    let t15 = t13;
+    for (let i = 0; i < 50; i++) {
+        t15 *= t15;
+        t15 %= exports.P;
+    }
+    t15 *= t13;
+    t15 %= exports.P;
+    let t19 = t15;
+    for (let i = 0; i < 100; i++) {
+        t19 *= t19;
+        t19 %= exports.P;
+    }
+    t19 *= t15;
+    t19 %= exports.P;
+    for (let i = 0; i < 50; i++) {
+        t19 *= t19;
+        t19 %= exports.P;
+    }
+    t19 *= t13;
+    t19 %= exports.P;
+    return [t19, t3];
+}
+function powP58(t) {
+    const [t19] = pow22501(t);
+    return pow2k(t19, 2n) * t;
+}
+function sqrtRatio(t, v) {
+    const v3 = mod(v * v * v);
+    const v7 = mod(v3 * v3 * v);
+    let r = mod(powP58(t * v7) * t * v3);
+    const check = mod(r * r * v);
+    const i = SQRT_M1;
+    const correctSignSqrt = check === t;
+    const flippedSignSqrt = check === mod(-t);
+    const flippedSignSqrtI = check === mod(mod(-t) * i);
+    const rPrime = mod(SQRT_M1 * r);
+    r = select(rPrime, r, flippedSignSqrt || flippedSignSqrtI);
+    r = condNegative(r, isNegative(r));
+    const isNotZeroSquare = correctSignSqrt || flippedSignSqrt;
+    return { isNotZeroSquare, value: mod(r) };
+}
+exports.sqrtRatio = sqrtRatio;
+function toBytesBE(t, length = 0) {
+    let hex = t.toString(16);
+    hex = hex.length & 1 ? `0${hex}` : hex;
+    hex = hex.padStart(length * 2, '0');
+    const len = hex.length / 2;
+    const u8 = new Uint8Array(len);
+    for (let j = 0, i = 0; i < hex.length; i += 2, j++) {
+        u8[j] = parseInt(hex[i] + hex[i + 1], 16);
+    }
+    return u8;
+}
+function toBytesLE(t, length = 0) {
+    return toBytesBE(t, length).reverse();
+}
+function condSwap(t, other, choice) {
+    choice = BigInt(choice);
+    const mask = choice !== 0n ? mask64Bits : choice;
+    const tmp = mask & (t ^ other);
+    return [mod(t ^ tmp), mod(other ^ tmp)];
+}
+function load8(input, padding = 0) {
+    return (BigInt(input[0 + padding]) |
+        (BigInt(input[1 + padding]) << 8n) |
+        (BigInt(input[2 + padding]) << 16n) |
+        (BigInt(input[3 + padding]) << 24n) |
+        (BigInt(input[4 + padding]) << 32n) |
+        (BigInt(input[5 + padding]) << 40n) |
+        (BigInt(input[6 + padding]) << 48n) |
+        (BigInt(input[7 + padding]) << 56n));
+}
+function BigInt_fromBytes(bytes) {
+    const octet1 = load8(bytes, 0) & low51bitMask;
+    const octet2 = (load8(bytes, 6) >> 3n) & low51bitMask;
+    const octet3 = (load8(bytes, 12) >> 6n) & low51bitMask;
+    const octet4 = (load8(bytes, 19) >> 1n) & low51bitMask;
+    const octet5 = (load8(bytes, 24) >> 12n) & low51bitMask;
+    return mod(octet1 + (octet2 << 51n) + (octet3 << 102n) + (octet4 << 153n) + (octet5 << 204n));
+}
+exports.P = CURVE.P;
+exports.PRIME_ORDER = CURVE.n;
 class ProjectiveP1xP1 {
     constructor(x, y, z, T) {
         this.x = x;
         this.y = y;
         this.z = z;
         this.T = T;
-    }
-    static zero() {
-        return new ProjectiveP1xP1(FieldElement.zero(), FieldElement.one(), FieldElement.one(), FieldElement.one());
+        this.x = mod(this.x);
+        this.y = mod(this.y);
+        this.z = mod(this.z);
+        this.T = mod(this.T);
     }
 }
 exports.ProjectiveP1xP1 = ProjectiveP1xP1;
+ProjectiveP1xP1.ZERO = new ProjectiveP1xP1(0n, 1n, 1n, 1n);
 class ProjectiveP2 {
     constructor(x, y, z) {
         this.x = x;
         this.y = y;
         this.z = z;
+        this.x = mod(this.x);
+        this.y = mod(this.y);
+        this.z = mod(this.z);
     }
     static fromP1xP1(point) {
-        return new ProjectiveP2(point.x.multiply(point.T), point.y.multiply(point.T), point.z.multiply(point.T));
+        return new ProjectiveP2(mod(point.x * point.T), mod(point.y * point.T), mod(point.z * point.T));
     }
     static fromP3(point) {
         return new ProjectiveP2(point.x, point.y, point.z);
     }
-    static zero() {
-        return new ProjectiveP2(FieldElement.zero(), FieldElement.one(), FieldElement.one());
-    }
     double() {
-        const squaredX = this.x.square();
-        const squaredY = this.y.square();
-        const squaredZ = this.z.square();
-        const squaredZ2 = squaredZ.add(squaredZ);
-        const xPlusYSquared = this.x.add(this.y).square();
-        const y = squaredY.add(squaredX);
-        const z = squaredY.subtract(squaredX);
-        const x = xPlusYSquared.subtract(y);
-        const T = squaredZ2.subtract(this.z);
+        const squaredX = this.x ** 2n;
+        const squaredY = this.y ** 2n;
+        const squaredZ = this.z ** 2n;
+        const squaredZ2 = mod(squaredZ + squaredZ);
+        const xPlusYSquared = mod(this.x + this.y) ** 2n;
+        const y = mod(squaredY + squaredX);
+        const z = mod(squaredY - squaredX);
+        const x = mod(xPlusYSquared - y);
+        const T = mod(squaredZ2 - this.z);
         return new ProjectiveP1xP1(x, y, z, T);
     }
 }
 exports.ProjectiveP2 = ProjectiveP2;
+ProjectiveP2.ZERO = new ProjectiveP2(0n, 1n, 1n);
 class ProjectiveP3 {
     constructor(x, y, z, T) {
         this.x = x;
         this.y = y;
         this.z = z;
         this.T = T;
+        this.x = mod(this.x);
+        this.y = mod(this.y);
+        this.z = mod(this.z);
+        this.T = mod(this.T);
     }
     static fromP1xP1(point) {
-        return new ProjectiveP3(point.x.multiply(point.T), point.y.multiply(point.z), point.z.multiply(point.T), point.x.multiply(point.y));
+        return new ProjectiveP3(mod(point.x * point.T), mod(point.y * point.z), mod(point.z * point.T), mod(point.x * point.y));
     }
     static fromP2(point) {
-        return new ProjectiveP3(point.x.multiply(point.z), point.y.multiply(point.z), point.z.square(), point.x.multiply(point.y));
-    }
-    static one() {
-        return new ProjectiveP3(FieldElement.zero(), FieldElement.one(), FieldElement.one(), FieldElement.zero());
+        return new ProjectiveP3(mod(point.x * point.z), mod(point.y * point.z), mod(point.z ** 2n), mod(point.x * point.y));
     }
     toProjectiveNielsPoint() {
-        return new ProjectiveP3(this.y.add(this.x), this.y.subtract(this.x), this.z, this.T.multiply(FieldElement.D2));
+        return new ProjectiveP3(mod(this.y + this.x), mod(this.y - this.x), this.z, mod(this.T * D2));
     }
     toExtendedProjective() {
-        return new ProjectiveP3(this.x.multiply(this.z), this.y.multiply(this.z), this.z.multiply(this.z), this.x.multiply(this.y));
+        return new ProjectiveP3(mod(this.x * this.z), mod(this.y * this.z), mod(this.z * this.z), mod(this.x * this.y));
     }
     toExtendedCompleted() {
-        return new ProjectiveP3(this.x.multiply(this.T), this.y.multiply(this.z), this.z.multiply(this.T), this.x.multiply(this.y));
+        return new ProjectiveP3(mod(this.x * this.T), mod(this.y * this.z), mod(this.z * this.T), mod(this.x * this.y));
     }
     addCached(other) {
-        const yPlusX = this.y.add(this.x);
-        const yMinusX = this.y.subtract(this.x);
-        const PP = yPlusX.multiply(other.yPlusX);
-        const MM = yMinusX.multiply(other.yMinusX);
-        const TT2 = this.T.multiply(other.T2d);
-        const ZZ = this.z.multiply(other.z);
-        const ZZ2 = ZZ.add(ZZ);
-        return new ProjectiveP1xP1(PP.subtract(MM), PP.add(MM), ZZ2.add(TT2), ZZ2.subtract(TT2));
+        const yPlusX = this.y + this.x;
+        const yMinusX = this.y - this.x;
+        const PP = yPlusX * other.yPlusX;
+        const MM = yMinusX * other.yMinusX;
+        const TT2 = this.T * other.T2d;
+        const ZZ = this.z * other.z;
+        const ZZ2 = ZZ + ZZ;
+        return new ProjectiveP1xP1(mod(PP - MM), mod(PP + MM), mod(ZZ2 + TT2), mod(ZZ2 - TT2));
     }
     subtractCached(other) {
-        const yPlusX = this.y.add(this.x);
-        const yMinusX = this.y.subtract(this.x);
-        const PP = yPlusX.multiply(other.yMinusX);
-        const MM = yMinusX.multiply(other.yPlusX);
-        const TT2 = this.T.multiply(other.T2d);
-        const ZZ = this.z.multiply(other.z);
-        const ZZ2 = ZZ.add(ZZ);
-        return new ProjectiveP1xP1(PP.subtract(MM), PP.add(MM), ZZ2.subtract(TT2), ZZ2.add(TT2));
+        const yPlusX = this.y + this.x;
+        const yMinusX = this.y - this.x;
+        const PP = yPlusX * other.yMinusX;
+        const MM = yMinusX * other.yPlusX;
+        const TT2 = this.T * other.T2d;
+        const ZZ = this.z * other.z;
+        const ZZ2 = ZZ + ZZ;
+        return new ProjectiveP1xP1(mod(PP - MM), mod(PP + MM), mod(ZZ2 - TT2), mod(ZZ2 + TT2));
     }
     addAffine(other) {
-        const yPlusX = this.y.add(this.x);
-        const yMinusX = this.y.subtract(this.x);
-        const PP = yPlusX.multiply(other.yPlusX);
-        const MM = yMinusX.multiply(other.yMinusX);
-        const TT2 = this.T.multiply(other.T2d);
-        const ZZ = this.z.multiply(this.z);
-        const ZZ2 = ZZ.add(ZZ);
-        return new ProjectiveP1xP1(PP.subtract(MM), PP.add(MM), ZZ2.add(TT2), ZZ2.subtract(TT2));
+        const yPlusX = this.y + this.x;
+        const yMinusX = this.y - this.x;
+        const PP = yPlusX * other.yPlusX;
+        const MM = yMinusX * other.yMinusX;
+        const TT2 = this.T * other.T2d;
+        const ZZ = this.z * this.z;
+        const ZZ2 = ZZ + ZZ;
+        return new ProjectiveP1xP1(mod(PP - MM), mod(PP + MM), mod(ZZ2 + TT2), mod(ZZ2 - TT2));
     }
     subtractAffine(other) {
-        const yPlusX = this.y.add(this.x);
-        const yMinusX = this.y.subtract(this.x);
-        const PP = yPlusX.multiply(other.yMinusX);
-        const MM = yMinusX.multiply(other.yPlusX);
-        const TT2 = this.T.multiply(other.T2d);
-        const ZZ = this.z.multiply(this.z);
-        const ZZ2 = ZZ.add(ZZ);
-        return new ProjectiveP1xP1(PP.subtract(MM), PP.add(MM), ZZ2.subtract(TT2), ZZ2.add(TT2));
+        const yPlusX = this.y + this.x;
+        const yMinusX = this.y - this.x;
+        const PP = yPlusX * other.yMinusX;
+        const MM = yMinusX * other.yPlusX;
+        const TT2 = this.T * other.T2d;
+        const ZZ = this.z * this.z;
+        const ZZ2 = ZZ + ZZ;
+        return new ProjectiveP1xP1(mod(PP - MM), mod(PP + MM), mod(ZZ2 - TT2), mod(ZZ2 + TT2));
     }
     add(other) {
         const cached = ProjectiveCached.fromP3(other);
@@ -288,19 +301,19 @@ class ProjectiveP3 {
         return ProjectiveP3.fromP1xP1(result);
     }
     double() {
-        const x2 = this.x.square();
-        const y2 = this.y.square();
-        const z2 = this.z.square();
-        const xPlusY2 = this.x.add(this.y).square();
-        const y2PlusX2 = y2.add(x2);
-        const y2MinusX2 = y2.subtract(x2);
-        return new ProjectiveP3(xPlusY2.subtract(y2MinusX2), y2PlusX2, y2MinusX2, z2.subtract(y2MinusX2));
+        const x2 = this.x * this.x;
+        const y2 = this.y * this.y;
+        const z2 = this.z * this.z;
+        const xPlusY2 = mod(this.x + this.y) ** 2n;
+        const y2PlusX2 = mod(y2 + x2);
+        const y2MinusX2 = mod(y2 - x2);
+        return new ProjectiveP3(mod(xPlusY2 - y2MinusX2), y2PlusX2, y2MinusX2, mod(z2 - y2MinusX2));
     }
     negative() {
-        return new ProjectiveP3(this.x.negative(), this.y, this.z, this.T.negative());
+        return new ProjectiveP3(mod(-this.x), this.y, this.z, mod(-this.T));
     }
     multiply(n) {
-        let q = ProjectiveP3.one();
+        let q = ProjectiveP3.ZERO;
         for (let db = this; n > 0n; n >>= 1n, db = db.double()) {
             if ((n & 1n) === 1n) {
                 q = q.add(db);
@@ -309,14 +322,15 @@ class ProjectiveP3 {
         return q;
     }
     equals(other) {
-        const t1 = this.x.multiply(other.z);
-        const t2 = other.x.multiply(this.z);
-        const t3 = this.y.multiply(other.z);
-        const t4 = other.y.multiply(this.z);
-        return t1.equals(t2) && t3.equals(t4);
+        const t1 = mod(this.x * other.z);
+        const t2 = mod(other.x * this.z);
+        const t3 = mod(this.y * other.z);
+        const t4 = mod(other.y * this.z);
+        return t1 === t2 && t3 === t4;
     }
 }
 exports.ProjectiveP3 = ProjectiveP3;
+ProjectiveP3.ZERO = new ProjectiveP3(0n, 1n, 1n, 0n);
 class ProjectiveCached {
     constructor(yPlusX, yMinusX, z, T2d) {
         this.yPlusX = yPlusX;
@@ -324,22 +338,22 @@ class ProjectiveCached {
         this.z = z;
         this.T2d = T2d;
     }
-    static one() {
-        return new ProjectiveCached(FieldElement.one(), FieldElement.one(), FieldElement.one(), FieldElement.zero());
+    static ZERO() {
+        return new ProjectiveCached(1n, 1n, 1n, 0n);
     }
     static fromP3(point) {
-        return new ProjectiveCached(point.y.add(point.x), point.y.subtract(point.x), point.z, point.T.multiply(FieldElement.D2));
+        return new ProjectiveCached(mod(point.y + point.x), mod(point.y - point.x), point.z, mod(point.T * D2));
     }
     select(other, cond) {
-        const yPlusX = this.yPlusX.select(other.yPlusX, cond);
-        const yMinusX = this.yMinusX.select(other.yMinusX, cond);
-        const z = this.z.select(other.z, cond);
-        const T2d = this.T2d.select(other.T2d, cond);
+        const yPlusX = select(this.yPlusX, other.yPlusX, cond);
+        const yMinusX = select(this.yMinusX, other.yMinusX, cond);
+        const z = select(this.z, other.z, cond);
+        const T2d = select(this.T2d, other.T2d, cond);
         return new ProjectiveCached(yPlusX, yMinusX, z, T2d);
     }
     condNegative(cond) {
-        const [yPlusX, yMinusX] = this.yPlusX.condSwap(this.yMinusX, cond);
-        const T2d = this.T2d.condNegative(cond);
+        const [yPlusX, yMinusX] = condSwap(this.yPlusX, this.yMinusX, cond);
+        const T2d = condNegative(this.T2d, cond);
         return new ProjectiveCached(yPlusX, yMinusX, this.z, T2d);
     }
 }
@@ -349,29 +363,32 @@ class AffineCached {
         this.yPlusX = yPlusX;
         this.yMinusX = yMinusX;
         this.T2d = T2d;
+        this.yPlusX = mod(this.yPlusX);
+        this.yMinusX = mod(this.yMinusX);
+        this.T2d = mod(this.T2d);
     }
     static fromP3(point) {
-        const yPlusX = point.y.add(point.x);
-        const yMinusX = point.y.subtract(point.x);
-        const T2d = point.T.multiply(FieldElement.D2);
-        const invertedZ = point.z.invert();
-        const newYPlusX = yPlusX.multiply(invertedZ);
-        const newYMinusX = yMinusX.multiply(invertedZ);
-        const newT2D = T2d.multiply(invertedZ);
+        const yPlusX = mod(point.y + point.x);
+        const yMinusX = mod(point.y - point.x);
+        const T2d = point.T * D2;
+        const invertedZ = modInverse(point.z);
+        const newYPlusX = mod(yPlusX * invertedZ);
+        const newYMinusX = mod(yMinusX * invertedZ);
+        const newT2D = mod(T2d * invertedZ);
         return new AffineCached(newYPlusX, newYMinusX, newT2D);
     }
-    static one() {
-        return new AffineCached(FieldElement.one(), FieldElement.one(), FieldElement.zero());
+    static ZERO() {
+        return new AffineCached(1n, 1n, 0n);
     }
     select(other, cond) {
-        const yPlusX = this.yPlusX.select(other.yPlusX, cond);
-        const yMinusX = this.yMinusX.select(other.yMinusX, cond);
-        const T2d = this.T2d.select(other.T2d, cond);
+        const yPlusX = select(this.yPlusX, other.yPlusX, cond);
+        const yMinusX = select(this.yMinusX, other.yMinusX, cond);
+        const T2d = select(this.T2d, other.T2d, cond);
         return new AffineCached(yPlusX, yMinusX, T2d);
     }
     condNegative(cond) {
-        const [yPlusX, yMinusX] = this.yPlusX.condSwap(this.yMinusX, cond);
-        const T2d = this.T2d.condNegative(cond);
+        const [yPlusX, yMinusX] = condSwap(this.yPlusX, this.yMinusX, cond);
+        const T2d = condNegative(this.T2d, cond);
         return new AffineCached(yPlusX, yMinusX, T2d);
     }
 }
@@ -460,10 +477,10 @@ function numberToBytes(num) {
     return u8;
 }
 exports.numberToBytes = numberToBytes;
-function concatTypedArrays(...args) {
-    const result = new Uint8Array(args.reduce((a, arr) => a + arr.length, 0));
-    for (let i = 0, pad = 0; i < args.length; i++) {
-        const arr = args[i];
+function concatTypedArrays(...arrays) {
+    const result = new Uint8Array(arrays.reduce((a, arr) => a + arr.length, 0));
+    for (let i = 0, pad = 0; i < arrays.length; i++) {
+        const arr = arrays[i];
         result.set(arr, pad);
         pad += arr.length;
     }
@@ -475,92 +492,78 @@ class RistrettoPoint {
     constructor(point) {
         this.point = point;
     }
-    static one() {
-        return new RistrettoPoint(ProjectiveP3.one());
-    }
     static fromHash(hash) {
-        const r1 = FieldElement.fromBytes(hash.slice(0, ENCODING_LENGTH));
+        const r1 = BigInt_fromBytes(hash.slice(0, ENCODING_LENGTH));
         const R1 = this.elligatorRistrettoFlavor(r1);
-        const r2 = FieldElement.fromBytes(hash.slice(ENCODING_LENGTH, ENCODING_LENGTH * 2));
+        const r2 = BigInt_fromBytes(hash.slice(ENCODING_LENGTH, ENCODING_LENGTH * 2));
         const R2 = this.elligatorRistrettoFlavor(r2);
         return new RistrettoPoint(R1.add(R2));
     }
     static elligatorRistrettoFlavor(r0) {
-        const one = FieldElement.one();
-        const oneMinusDSq = one.subtract(FieldElement.D.square());
-        const dMinusOneSq = FieldElement.D.subtract(one).square();
-        const r = FieldElement.SQRT_M1.multiply(r0.square());
-        const NS = r.add(one).multiply(oneMinusDSq);
-        let c = one.negative();
-        const D = c.subtract(FieldElement.D.multiply(r)).multiply(r.add(FieldElement.D));
-        let { isNotZeroSquare, value: S } = NS.sqrtRatio(D);
-        let sPrime = S.multiply(r0);
-        const sPrimeIsPos = !sPrime.isNegative();
-        sPrime = sPrime.condNegative(sPrimeIsPos);
-        S = S.select(sPrime, isNotZeroSquare);
-        c = c.select(r, isNotZeroSquare);
-        const NT = c
-            .multiply(r.subtract(one))
-            .multiply(dMinusOneSq)
-            .subtract(D);
-        const sSquared = S.square();
-        const projective = new ProjectiveP3(S.add(S).multiply(D), FieldElement.one().subtract(sSquared), NT.multiply(FieldElement.SQRT_AD_MINUS_ONE), FieldElement.one().add(sSquared));
+        const oneMinusDSq = mod(1n - CURVE.d ** 2n);
+        const dMinusOneSq = (CURVE.d - 1n) ** 2n;
+        const r = SQRT_M1 * (r0 * r0);
+        const NS = mod((r + 1n) * oneMinusDSq);
+        let c = mod(-1n);
+        const D = mod((c - CURVE.d * r) * mod(r + CURVE.d));
+        let { isNotZeroSquare, value: S } = sqrtRatio(NS, D);
+        let sPrime = S * r0;
+        const sPrimeIsPos = !isNegative(sPrime);
+        sPrime = condNegative(sPrime, sPrimeIsPos);
+        S = select(S, sPrime, isNotZeroSquare);
+        c = select(c, r, isNotZeroSquare);
+        const NT = c * (r - 1n) * dMinusOneSq - D;
+        const sSquared = S * S;
+        const projective = new ProjectiveP3(mod((S + S) * D), mod(1n - sSquared), mod(NT * SQRT_AD_MINUS_ONE), mod(1n + sSquared));
         return projective.toExtendedCompleted();
     }
     static fromBytes(bytes) {
-        const s = FieldElement.fromBytes(bytes);
-        const sEncodingIsCanonical = isBytesEquals(s.toBytesLE(ENCODING_LENGTH), bytes);
-        const sIsNegative = s.isNegative();
+        const s = BigInt_fromBytes(bytes);
+        const sEncodingIsCanonical = isBytesEquals(toBytesLE(s, ENCODING_LENGTH), bytes);
+        const sIsNegative = isNegative(s);
         if (!sEncodingIsCanonical || sIsNegative) {
             throw new Error('Cannot convert bytes to Ristretto Point');
         }
-        const one = FieldElement.one();
-        const s2 = s.square();
-        const u1 = one.subtract(s2);
-        const u2 = one.add(s2);
-        const squaredU2 = u2.square();
-        const v = u1
-            .square()
-            .multiply(FieldElement.D.negative())
-            .subtract(squaredU2);
-        const { isNotZeroSquare, value: I } = v.multiply(squaredU2).invertSqrt();
-        const Dx = I.multiply(u2);
-        const Dy = I.multiply(Dx).multiply(v);
-        let x = s.add(s).multiply(Dx);
-        const xIsNegative = BigInt(x.isNegative());
-        x = x.condNegative(xIsNegative);
-        const y = u1.multiply(Dy);
-        const t = x.multiply(y);
-        if (!isNotZeroSquare || t.isNegative() || y.isZero()) {
+        const s2 = mod(s * s);
+        const u1 = mod(1n - s2);
+        const u2 = mod(1n + s2);
+        const squaredU2 = mod(u2 * u2);
+        const v = mod(mod(u1 * u1 * -CURVE.d) - squaredU2);
+        const { isNotZeroSquare, value: I } = invertSqrt(mod(v * squaredU2));
+        const Dx = I * u2;
+        const Dy = I * Dx * v;
+        let x = mod((s + s) * Dx);
+        const xIsNegative = BigInt(isNegative(x));
+        x = condNegative(x, xIsNegative);
+        const y = mod(u1 * Dy);
+        const t = mod(x * y);
+        if (!isNotZeroSquare || isNegative(t) || y === 0n) {
             throw new Error('Cannot convert bytes to Ristretto Point');
         }
-        return new RistrettoPoint(new ProjectiveP3(x, y, one, t));
+        return new RistrettoPoint(new ProjectiveP3(x, y, 1n, t));
     }
     toBytes() {
         let { x, y, z, T } = this.point;
-        const u1 = z.add(y).multiply(z.subtract(y));
-        const u2 = x.multiply(y);
-        const { value: invsqrt } = u2
-            .square()
-            .multiply(u1)
-            .invertSqrt();
-        const i1 = invsqrt.multiply(u1);
-        const i2 = invsqrt.multiply(u2);
-        const invertedZ = i1.multiply(i2).multiply(T);
+        const u1 = mod((z + y) * (z - y));
+        const u2 = mod(x * y);
+        const { value: invsqrt } = invertSqrt(mod(u2 ** 2n * u1));
+        const i1 = mod(invsqrt * u1);
+        const i2 = mod(invsqrt * u2);
+        const invertedZ = mod(i1 * i2 * T);
         let invertedDenominator = i2;
-        const iX = x.multiply(FieldElement.SQRT_M1);
-        const iY = y.multiply(FieldElement.SQRT_M1);
-        const enchantedDenominator = i1.multiply(FieldElement.INVSQRT_A_MINUS_D);
-        const isRotated = BigInt(T.multiply(invertedZ).isNegative());
-        x = iY.select(x, isRotated);
-        y = iX.select(y, isRotated);
-        invertedDenominator = enchantedDenominator.select(i2, isRotated);
-        const yIsNegative = BigInt(x.multiply(invertedZ).isNegative());
-        y = y.condNegative(yIsNegative);
-        let s = z.subtract(y).multiply(invertedDenominator);
-        const sIsNegative = BigInt(s.isNegative());
-        s = s.condNegative(sIsNegative);
-        return s.toBytesLE(ENCODING_LENGTH);
+        const iX = mod(x * SQRT_M1);
+        const iY = mod(y * SQRT_M1);
+        const enchantedDenominator = mod(i1 * INVSQRT_A_MINUS_D);
+        const isRotated = BigInt(isNegative(T * invertedZ));
+        x = select(iY, x, isRotated);
+        y = select(iX, y, isRotated);
+        invertedDenominator = select(enchantedDenominator, i2, isRotated);
+        const yIsNegative = BigInt(isNegative(x * invertedZ));
+        y = condNegative(y, yIsNegative);
+        let s = mod((z - y) * invertedDenominator);
+        const sIsNegative = BigInt(isNegative(s));
+        s = condNegative(s, sIsNegative);
+        return toBytesLE(s, ENCODING_LENGTH);
     }
     add(other) {
         return new RistrettoPoint(this.point.add(other.point));
@@ -576,4 +579,5 @@ class RistrettoPoint {
     }
 }
 exports.RistrettoPoint = RistrettoPoint;
-exports.BASE_POINT = new RistrettoPoint(new ProjectiveP3(new FieldElement(15112221349535400772501151409588531511454012693041857206046113283949847762202n), new FieldElement(46316835694926478169428394003475163141307993866256225615783033603165251855960n), new FieldElement(1n), new FieldElement(46827403850823179245072216630277197565144205554125654976674165829533817101731n)));
+RistrettoPoint.ZERO = new RistrettoPoint(ProjectiveP3.ZERO);
+exports.BASE_POINT = new RistrettoPoint(new ProjectiveP3(15112221349535400772501151409588531511454012693041857206046113283949847762202n, 46316835694926478169428394003475163141307993866256225615783033603165251855960n, 1n, 46827403850823179245072216630277197565144205554125654976674165829533817101731n));

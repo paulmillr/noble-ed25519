@@ -361,6 +361,7 @@ export class Point {
     return isAffine ? ExtendedPoint.batchAffine([point, fake])[0] : point;
   }
 }
+export {ExtendedPoint};
 
 export class SignResult {
   constructor(public r: Point, public s: bigint) {}
@@ -501,7 +502,7 @@ function egcd(a: bigint, b: bigint) {
   return [gcd, x, y];
 }
 
-function modInverse(number: bigint, modulo: bigint = P) {
+export function modInverse(number: bigint, modulo: bigint = P) {
   if (number === 0n || modulo <= 0n) {
     console.log(number);
     throw new Error('modInverse: expected positive integers');

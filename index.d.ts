@@ -50,6 +50,7 @@ export declare class Point {
     multiply(scalar: bigint, isAffine: false): ExtendedPoint;
     multiply(scalar: bigint, isAffine?: true): Point;
 }
+export { ExtendedPoint };
 export declare class SignResult {
     r: Point;
     s: bigint;
@@ -58,6 +59,7 @@ export declare class SignResult {
     toRawBytes(): Uint8Array;
     toHex(): string;
 }
+export declare function modInverse(number: bigint, modulo?: bigint): bigint;
 export declare function getPublicKey(privateKey: Uint8Array): Promise<Uint8Array>;
 export declare function getPublicKey(privateKey: string): Promise<string>;
 export declare function getPublicKey(privateKey: bigint | number): Promise<Uint8Array>;

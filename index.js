@@ -118,6 +118,7 @@ class ExtendedPoint {
         return new Point(x, y);
     }
 }
+exports.ExtendedPoint = ExtendedPoint;
 ExtendedPoint.BASE = new ExtendedPoint(CURVE.Gx, CURVE.Gy, 1n, mod(CURVE.Gx * CURVE.Gy));
 ExtendedPoint.ZERO = new ExtendedPoint(0n, 1n, 1n, 0n);
 const pointPrecomputes = new WeakMap();
@@ -393,6 +394,7 @@ function modInverse(number, modulo = P) {
     }
     return mod(x, modulo);
 }
+exports.modInverse = modInverse;
 function batchInverse(nums, n = P) {
     const len = nums.length;
     const scratch = new Array(len);

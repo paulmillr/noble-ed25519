@@ -274,7 +274,7 @@ describe('rfc8032 vectors', () => {
   });
 });
 
-describe('ristretto255', () => {
+describe.only('ristretto255', () => {
   async function sha512(message: Uint8Array) {
     const hash = createHash('sha512');
     hash.update(message);
@@ -483,6 +483,7 @@ describe('ristretto255', () => {
 
     for (let i = 0; i < labels.length; i++) {
       const hash = await sha512(Buffer.from(labels[i]));
+      console.log({hash: hash, to: encodedHashToPoints[i]})
       const point = RistrettoPoint.fromHash(hash);
       expect(arrayToHex(point.toBytes())).toBe(encodedHashToPoints[i]);
     }
