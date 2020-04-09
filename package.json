@@ -5,9 +5,7 @@
   "main": "index.js",
   "files": [
     "index.js",
-    "index.d.ts",
-    "ristretto255.js",
-    "ristretto255.d.ts"
+    "index.d.ts"
   ],
   "scripts": {
     "build": "tsc -d",
