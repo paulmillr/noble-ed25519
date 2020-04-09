@@ -25,7 +25,7 @@ Includes [ristretto255](https://ristretto.group) support. Ristretto is a techniq
 
 Benchmarks done with 2.9Ghz Coffee Lake.
 
-    getPublicKey x 4233 ops/sec @ 236μs/op
+    getPublicKey(utils.randomPrivateKey()) x 4175 ops/sec @ 239μs/op
     sign x 2042 ops/sec @ 489μs/op
     verify x 417 ops/sec @ 2ms/op
     ristretto255#fromHash x 3294 ops/sec @ 303μs/op

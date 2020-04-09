@@ -12,7 +12,7 @@ const CURVE = {
   d: 37095705934669439343138083508754565189542113879843219016388785533085940283555n,
   // Finite field 𝔽p over which we'll do calculations
   P: 2n ** 255n - 19n,
-  // Subgroup order aka prime_order
+  // Subgroup order aka C
   n: 2n ** 252n + 27742317777372353535851937790883648493n,
   // Cofactor
   h: 8n,
@@ -21,16 +21,19 @@ const CURVE = {
   Gy: 46316835694926478169428394003475163141307993866256225615783033603165251855960n,
 };
 
-const P_DIV8_MINUS_3 = (P + 3n) / 8n;
-const I = powMod(2n, (CURVE.P + 1n) / 4n, P);
+// (P + 3) / 8
+const DIV_8_MINUS_3 = (CURVE.P + 3n) / 8n;
+
+// 2 ** (P + 1) / 4
+const I = powMod(2n, (CURVE.P + 1n) / 4n, CURVE.P);
 
 // sqrt(-1 % P)
 const SQRT_M1 = 19681161376707505956807079304988542015446066515923890162744021073123829784752n;
 
-// `= 1/sqrt(a-d)`, where `a = -1 (mod p)`, `d` are the Edwards curve parameters.
+// 1 / sqrt(a-d)
 const INVSQRT_A_MINUS_D = 54469307008909316920995813868745141605393597292927456921205312896311721017578n;
 
-// `= sqrt(a*d - 1)`, where `a = -1 (mod p)`, `d` are the Edwards curve parameters.
+// sqrt(a*d - 1)
 const SQRT_AD_MINUS_ONE = 25063068953384623474111414158702152701244531502492656460079210482610430750235n;
 
 // Cleaner output this way.
@@ -54,10 +57,7 @@ type PrivKey = Uint8Array | string | bigint | number;
 type PubKey = Uint8Array | string | Point;
 type Hex = Uint8Array | string;
 type Signature = Uint8Array | string | SignResult;
-
 const ENCODING_LENGTH = 32;
-const P = CURVE.P;
-const PRIME_ORDER = CURVE.n;
 
 // Default Point works in default aka affine coordinates: (x, y)
 // Extended Point works in extended coordinates: (x, y, z, t) ∋ (x=x/z, y=y/z, t=xy)
@@ -260,7 +260,7 @@ class ExtendedPoint {
     if (typeof scalar !== 'number' && typeof scalar !== 'bigint') {
       throw new TypeError('Point#multiply: expected number or bigint');
     }
-    let n = mod(BigInt(scalar), PRIME_ORDER);
+    let n = mod(BigInt(scalar), CURVE.n);
     if (n <= 0) {
       throw new Error('Point#multiply: invalid scalar, expected positive integer');
     }
@@ -309,7 +309,7 @@ class Point {
   // Converts hash string or Uint8Array to Point.
   // Uses algo from RFC8032 5.1.3.
   static fromHex(hash: Hex) {
-    const { d } = CURVE;
+    const { d, P } = CURVE;
     const bytes = hash instanceof Uint8Array ? hash : hexToArray(hash);
     const len = bytes.length - 1;
     const normedLast = bytes[len] & ~0x80;
@@ -320,9 +320,9 @@ class Point {
       throw new Error('Point#fromHex expects hex <= Fp');
     }
     const sqrY = y * y;
-    const sqrX = mod((sqrY - 1n) * invert(d * sqrY + 1n), P);
+    const sqrX = mod((sqrY - 1n) * invert(d * sqrY + 1n));
     // let x = pow_2_252_3(sqrX);
-    let x = powMod(sqrX, P_DIV8_MINUS_3, P);
+    let x = powMod(sqrX, DIV_8_MINUS_3);
     if (mod(x * x - sqrX) !== 0n) {
       x = mod(x * I);
     }
@@ -468,7 +468,7 @@ class Point {
     if (typeof scalar !== 'number' && typeof scalar !== 'bigint') {
       throw new TypeError('Point#multiply: expected number or bigint');
     }
-    const n = mod(BigInt(scalar), PRIME_ORDER);
+    const n = mod(BigInt(scalar), CURVE.n);
     if (n <= 0) {
       throw new Error('Point#multiply: invalid scalar, expected positive integer');
     }
@@ -617,19 +617,19 @@ function arrayToNumberRst(bytes: Uint8Array) {
 }
 // -------------------------
 
-function mod(a: bigint, b: bigint = P) {
+function mod(a: bigint, b: bigint = CURVE.P) {
   const res = a % b;
   return res >= 0n ? res : b + res;
 }
 
-function powMod(x: bigint, power: bigint, order: bigint) {
+function powMod(a: bigint, power: bigint, m: bigint = CURVE.P) {
   let res = 1n;
-  while (power > 0) {
+  while (power > 0n) {
     if (power & 1n) {
-      res = mod(res * x, order);
+      res = mod(res * a, m);
     }
     power >>= 1n;
-    x = mod(x * x, order);
+    a = mod(a * a, m);
   }
   return res;
 }
@@ -651,7 +651,7 @@ function egcd(a: bigint, b: bigint) {
   return [gcd, x, y];
 }
 
-export function invert(number: bigint, modulo: bigint = P) {
+export function invert(number: bigint, modulo: bigint = CURVE.P) {
   if (number === 0n || modulo <= 0n) {
     throw new Error('invert: expected positive integers');
   }
@@ -662,7 +662,7 @@ export function invert(number: bigint, modulo: bigint = P) {
   return mod(x, modulo);
 }
 
-function invertBatch(nums: bigint[], n: bigint = P): bigint[] {
+function invertBatch(nums: bigint[], n: bigint = CURVE.P): bigint[] {
   const len = nums.length;
   const scratch = new Array(len);
   let acc = 1n;
@@ -687,6 +687,7 @@ function invertSqrt(t: bigint) {
 }
 
 function powMod2(t: bigint, power: bigint) {
+  const {P} = CURVE;
   let res = t;
   while (power-- > 0n) {
     res *= res;
@@ -698,6 +699,7 @@ function powMod2(t: bigint, power: bigint) {
 // Pow to P_DIV4_1.
 function pow_2_252_3(t: bigint) {
   t = mod(t);
+  const {P} = CURVE;
   const t0 = (t * t) % P;
   const t1 = t0 ** 4n % P;
   const t2 = (t * t1) % P;
@@ -770,7 +772,7 @@ async function sha512ToNumberLE(...args: Uint8Array[]): Promise<bigint> {
   const messageArray = concatTypedArrays(...args);
   const hash = await sha512(messageArray);
   const value = arrayToNumberLE(hash);
-  return mod(value, PRIME_ORDER);
+  return mod(value, CURVE.n);
 }
 
 function keyPrefix(privateBytes: Uint8Array) {
@@ -829,7 +831,7 @@ export async function sign(hash: Hex, privateKey: Hex) {
   const r = await sha512ToNumberLE(keyPrefix(privBytes), msg);
   const R = Point.BASE.multiply(r);
   const h = await sha512ToNumberLE(R.toRawBytes(), P.toRawBytes(), msg);
-  const S = mod(r + h * p, PRIME_ORDER);
+  const S = mod(r + h * p, CURVE.n);
   const sig = new SignResult(R, S);
   return typeof hash === 'string' ? sig.toHex() : sig.toRawBytes();
 }
