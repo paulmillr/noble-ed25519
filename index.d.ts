@@ -22,11 +22,10 @@ declare class ExtendedPoint {
     static ZERO: ExtendedPoint;
     static fromAffine(p: Point): ExtendedPoint;
     static fromAffineBatch(points: ExtendedPoint[]): Point[];
-    static fromUncompleteExtended(x: bigint, y: bigint, z: bigint, t: bigint): ExtendedPoint;
     static fromRistrettoHash(hash: Uint8Array): ExtendedPoint;
     private static elligatorRistrettoFlavor;
     static fromRistrettoBytes(bytes: Uint8Array): ExtendedPoint;
-    toRistrettoRawBytes(): Uint8Array;
+    toRistrettoBytes(): Uint8Array;
     equals(other: ExtendedPoint): boolean;
     negate(): ExtendedPoint;
     double(): ExtendedPoint;

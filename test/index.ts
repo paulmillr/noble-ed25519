@@ -415,8 +415,8 @@ describe('ristretto255', () => {
     let B = ExtendedPoint.BASE;
     let P = ExtendedPoint.ZERO;
     for (const encoded of encodingsOfSmallMultiples) {
-      expect(arrayToHex(P.toRistrettoRawBytes())).toBe(encoded);
-      expect(arrayToHex(ExtendedPoint.fromRistrettoBytes(hexToArray(encoded)).toRistrettoRawBytes())).toBe(encoded);
+      expect(arrayToHex(P.toRistrettoBytes())).toBe(encoded);
+      expect(arrayToHex(ExtendedPoint.fromRistrettoBytes(hexToArray(encoded)).toRistrettoBytes())).toBe(encoded);
       P = P.add(B);
     }
   });
@@ -483,9 +483,8 @@ describe('ristretto255', () => {
 
     for (let i = 0; i < labels.length; i++) {
       const hash = await sha512(Buffer.from(labels[i]));
-      console.log({hash: hash, to: encodedHashToPoints[i]})
       const point = ExtendedPoint.fromRistrettoHash(hash);
-      expect(arrayToHex(point.toRistrettoRawBytes())).toBe(encodedHashToPoints[i]);
+      expect(arrayToHex(point.toRistrettoBytes())).toBe(encodedHashToPoints[i]);
     }
   });
 });

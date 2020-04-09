@@ -21,32 +21,32 @@ run(async () => {
     return array;
   }
 
-  const priv1 = toBytes(2n);
-  let pubHex;
-  await mark('getPublicKey 1 bit', 1000, async () => {
-    pubHex = await ed.getPublicKey(priv1);
-  });
+  // const priv1 = toBytes(2n);
+  // let pubHex;
+  // await mark('getPublicKey 1 bit', 1000, async () => {
+  //   pubHex = await ed.getPublicKey(priv1);
+  // });
 
-  const priv2 = toBytes(0x9d61b19deffd5a60ba844af492ec2cc44449c5697b326919703bac031cae7f60n);
-  await mark('getPublicKey(utils.randomPrivateKey())', 1000, async () => {
-    pubHex = await ed.getPublicKey(priv2);
-  });
+  // const priv2 = toBytes(0x9d61b19deffd5a60ba844af492ec2cc44449c5697b326919703bac031cae7f60n);
+  // await mark('getPublicKey(utils.randomPrivateKey())', 1000, async () => {
+  //   pubHex = await ed.getPublicKey(priv2);
+  // });
 
-  const msg = toBytes('deadbeefdeadbeefdeadbeefdeadbeefdeadbeef');
-  let sigHex;
-  await mark('sign', 1000, async () => {
-    sigHex = await ed.sign(msg, priv2);
-  });
+  // const msg = toBytes('deadbeefdeadbeefdeadbeefdeadbeefdeadbeef');
+  // let sigHex;
+  // await mark('sign', 1000, async () => {
+  //   sigHex = await ed.sign(msg, priv2);
+  // });
 
-  await mark('verify', 1000, async () => {
-    const verified = await ed.verify(sigHex, msg, pubHex);
-  });
+  // await mark('verify', 1000, async () => {
+  //   const verified = await ed.verify(sigHex, msg, pubHex);
+  // });
 
-  const sig = ed.SignResult.fromHex(sigHex);
-  const pub = ed.Point.fromHex(pubHex);
-  await mark('verifyBatch', 1000, async () => {
-    const verified = await ed.verify(sig, msg, pub);
-  });
+  // const sig = ed.SignResult.fromHex(sigHex);
+  // const pub = ed.Point.fromHex(pubHex);
+  // await mark('verifyBatch', 1000, async () => {
+  //   const verified = await ed.verify(sig, msg, pub);
+  // });
 
   function arrayToHex(bytes) {
     return Array.from(bytes)
@@ -108,8 +108,8 @@ run(async () => {
     let B = ExtendedPoint.BASE;
     let P = ExtendedPoint.ZERO;
     for (const encoded of encodingsOfSmallMultiples.slice(0, 2)) {
-      arrayToHex(P.toRistrettoRawBytes());
-      ExtendedPoint.fromRistrettoBytes(hexToArray(encoded)).toRistrettoRawBytes();
+      arrayToHex(P.toRistrettoBytes());
+      ExtendedPoint.fromRistrettoBytes(hexToArray(encoded)).toRistrettoBytes();
       P = P.add(B);
     }
   });

@@ -80,11 +80,9 @@ class ExtendedPoint {
   }
 
   // Ristretto-related methods.
-  static fromUncompleteExtended(x: bigint, y: bigint, z: bigint, t: bigint) {
-    return new ExtendedPoint(mod(x * t), mod(y * z), mod(z * t), mod(x * y));
-  }
 
-  static fromRistrettoHash(hash: Uint8Array) {
+  // The hash-to-group operation applies Elligator twice and adds the results.
+  static fromRistrettoHash(hash: Uint8Array): ExtendedPoint {
     const r1 = arrayToNumberRst(hash.slice(0, ENCODING_LENGTH));
     const R1 = this.elligatorRistrettoFlavor(r1);
     const r2 = arrayToNumberRst(hash.slice(ENCODING_LENGTH, ENCODING_LENGTH * 2));
@@ -96,12 +94,13 @@ class ExtendedPoint {
   // This method is not public because it's just used for hashing
   // to a point -- proper elligator support is deferred for now.
   private static elligatorRistrettoFlavor(r0: bigint) {
-    const oneMinusDSq = mod(1n - CURVE.d ** 2n);
-    const dMinusOneSq = (CURVE.d - 1n) ** 2n;
+    const { d } = CURVE;
+    const oneMinusDSq = mod(1n - d ** 2n);
+    const dMinusOneSq = (d - 1n) ** 2n;
     const r = SQRT_M1 * (r0 * r0);
     const NS = mod((r + 1n) * oneMinusDSq);
     let c = mod(-1n);
-    const D = mod((c - CURVE.d * r) * mod(r + CURVE.d));
+    const D = mod((c - d * r) * mod(r + d));
     let { isNotZeroSquare, value: S } = sqrtRatio(NS, D);
     let sPrime = mod(S * r0);
     sPrime = edIsNegative(sPrime) ? sPrime : mod(-sPrime);
@@ -109,12 +108,11 @@ class ExtendedPoint {
     c = isNotZeroSquare ? c : r;
     const NT = c * (r - 1n) * dMinusOneSq - D;
     const sSquared = S * S;
-    return ExtendedPoint.fromUncompleteExtended(
-      (S + S) * D,
-      1n - sSquared,
-      NT * SQRT_AD_MINUS_ONE,
-      1n + sSquared
-    );
+    const W0 = (S + S) * D;
+    const W1 = NT * SQRT_AD_MINUS_ONE;
+    const W2 = 1n - sSquared;
+    const W3 = 1n + sSquared;
+    return new ExtendedPoint(mod(W0 * W3), mod(W2 * W1), mod(W1 * W3), mod(W0 * W2));
   }
 
   static fromRistrettoBytes(bytes: Uint8Array) {
@@ -134,12 +132,12 @@ class ExtendedPoint {
     if (!sEncodingIsCanonical || sIsNegative) {
       throw new Error('Cannot convert bytes to Ristretto Point');
     }
-    const s2 = mod(s * s);
-    const u1 = mod(1n - s2); // 1 + as²
-    const u2 = mod(1n + s2); // 1 - as² where a=-1
-    const squaredU2 = mod(u2 * u2); // (1 - as²)²
+    const s2 = s * s;
+    const u1 = 1n - s2; // 1 + as²
+    const u2 = 1n + s2; // 1 - as² where a=-1
+    const squaredU2 = u2 * u2; // (1 - as²)²
     // v == ad(1+as²)² - (1-as²)² where d=-121665/121666
-    const v = mod(mod(u1 * u1 * -CURVE.d) - squaredU2);
+    const v = u1 * u1 * -CURVE.d - squaredU2;
     const { isNotZeroSquare, value: I } = invertSqrt(mod(v * squaredU2)); // 1/sqrt(v*u_2²)
     const Dx = I * u2;
     const Dy = I * Dx * v; // 1/u2
@@ -156,26 +154,27 @@ class ExtendedPoint {
     return new ExtendedPoint(x, y, 1n, t);
   }
 
-  toRistrettoRawBytes() {
+  toRistrettoBytes() {
     let { x, y, z, t } = this;
     // u1 = (z0 + y0) * (z0 - y0)
-    const u1 = mod((z + y) * (z - y));
-    const u2 = mod(x * y);
+    const u1 = (z + y) * (z - y);
+    const u2 = x * y;
     // Ignore return value since this is always square
     const { value: invsqrt } = invertSqrt(mod(u2 ** 2n * u1));
-    const i1 = mod(invsqrt * u1);
-    const i2 = mod(invsqrt * u2);
-    const invertedZ = mod(i1 * i2 * t);
-    let invertedDenominator = i2;
-    const iX = mod(x * SQRT_M1);
-    const iY = mod(y * SQRT_M1);
-    const enchantedDenominator = mod(i1 * INVSQRT_A_MINUS_D);
-    const isRotated = BigInt(edIsNegative(t * invertedZ)) as 0n | 1n;
-    x = isRotated ? iY : x;
-    y = isRotated ? iX : y;
-    invertedDenominator = isRotated ? enchantedDenominator : i2;
-    if (edIsNegative(x * invertedZ)) y = mod(-y);
-    let s = mod((z - y) * invertedDenominator);
+    const i1 = invsqrt * u1;
+    const i2 = invsqrt * u2;
+    const invz = i1 * i2 * t;
+    let invDeno = i2;
+    if (edIsNegative(t * invz)) {
+      // Is rotated
+      const iX = mod(x * SQRT_M1);
+      const iY = mod(y * SQRT_M1);
+      x = iY;
+      y = iX;
+      invDeno = mod(i1 * INVSQRT_A_MINUS_D);
+    }
+    if (edIsNegative(x * invz)) y = mod(-y);
+    let s = mod((z - y) * invDeno);
     if (edIsNegative(s)) s = mod(-s);
     return numberToArrayPadded(s, ENCODING_LENGTH);
   }
@@ -574,14 +573,20 @@ function numberToHex(num: number | bigint): string {
   return hex.length & 1 ? `0${hex}` : hex;
 }
 
-function numberToArrayPadded(num: bigint, length = 0) {
+function numberToArrayPadded(num: bigint, length: number = ENCODING_LENGTH) {
   const hex = numberToHex(num).padStart(length * 2, '0');
   return hexToArray(hex).reverse();
 }
 
-function edIsNegative(t: bigint) {
-  const bytes = numberToArrayPadded(mod(t));
-  return Boolean(bytes[0] & 1);
+// function edIsNegativez(t: bigint) {
+//   const bytes = numberToArrayPadded(mod(t));
+//   return Boolean(bytes[0] & 1);
+// }
+
+function edIsNegative(num: bigint) {
+  const hex = numberToHex(mod(num));
+  const byte = Number.parseInt(hex.slice(hex.length - 2, hex.length), 16);
+  return Boolean(byte & 1);
 }
 
 // Little Endian
@@ -681,13 +686,13 @@ function invertBatch(nums: bigint[], n: bigint = CURVE.P): bigint[] {
   return nums;
 }
 
-// Attempt to compute `sqrt(1/self)` in constant time.
-function invertSqrt(t: bigint) {
-  return sqrtRatio(1n, t);
+// Attempt to compute `sqrt(1/number)` in constant time.
+function invertSqrt(number: bigint) {
+  return sqrtRatio(1n, number);
 }
 
 function powMod2(t: bigint, power: bigint) {
-  const {P} = CURVE;
+  const { P } = CURVE;
   let res = t;
   while (power-- > 0n) {
     res *= res;
@@ -699,7 +704,7 @@ function powMod2(t: bigint, power: bigint) {
 // Pow to P_DIV4_1.
 function pow_2_252_3(t: bigint) {
   t = mod(t);
-  const {P} = CURVE;
+  const { P } = CURVE;
   const t0 = (t * t) % P;
   const t1 = t0 ** 4n % P;
   const t2 = (t * t1) % P;

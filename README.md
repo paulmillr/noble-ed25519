@@ -25,11 +25,11 @@ Includes [ristretto255](https://ristretto.group) support. Ristretto is a techniq
 
 Benchmarks done with 2.9Ghz Coffee Lake.
 
-    getPublicKey(utils.randomPrivateKey()) x 4175 ops/sec @ 239μs/op
+    getPublicKey(utils.randomPrivateKey()) x 4309 ops/sec @ 232μs/op
     sign x 2042 ops/sec @ 489μs/op
     verify x 417 ops/sec @ 2ms/op
-    ristretto255#fromHash x 3294 ops/sec @ 303μs/op
-    ristretto255 getRandom x 3263 ops/sec @ 306μs/op
+    ristretto255#fromHash x 3377 ops/sec @ 296μs/op
+    ristretto255 random x 3393 ops/sec @ 294μs/op
     ristretto255#scalarMult x 475 ops/sec @ 2ms/op
 
 ## Usage
@@ -96,9 +96,14 @@ function verify(
 ##### Ristretto
 
 ```
-ExtendedPoint.fromRistrettoHash(hash: Uint8Array)
+// The hash-to-group operation applies Elligator twice and adds the results.
+ExtendedPoint.fromRistrettoHash(hash: Uint8Array): ExtendedPoint;
+
+// Decode a byte-string s_bytes representing a compressed Ristretto point into extended coordinates.
 ExtendedPoint.fromRistrettoBytes(bytes: Uint8Array)
-ExtendedPoint.toRistrettoRawBytes(): Uint8Array
+
+// Encode a Ristretto point represented by the point (X:Y:Z:T) in extended coordinates to Uint8Array.
+ExtendedPoint.toRistrettoBytes(): Uint8Array
 ```
 
 It extends Mike Hamburg's Decaf approach to cofactor elimination to support cofactor-8 curves such as Curve25519.
