@@ -28,7 +28,7 @@ run(async () => {
   });
 
   const priv2 = toBytes(0x9d61b19deffd5a60ba844af492ec2cc44449c5697b326919703bac031cae7f60n);
-  await mark('getPublicKey', 1000, async () => {
+  await mark('getPublicKey(utils.randomPrivateKey())', 1000, async () => {
     pubHex = await ed.getPublicKey(priv2);
   });
 
@@ -97,7 +97,7 @@ run(async () => {
   await mark('ristretto255#fromHash', 2000, () => {
     ExtendedPoint.fromRistrettoHash(hash);
   });
-  await mark('ristretto255 getRandom', 2000, () => {
+  await mark('ristretto255 random', 2000, () => {
     ExtendedPoint.fromRistrettoHash(ed.utils.randomPrivateKey(64));
   });
   const ep = ExtendedPoint.fromRistrettoHash(hash);

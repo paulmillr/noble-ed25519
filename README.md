@@ -6,17 +6,6 @@ Very fast, algorithmically resistant to timing attacks.
 
 Includes [ristretto255](https://ristretto.group) support. Ristretto is a technique for constructing prime order elliptic curve groups with non-malleable encodings.
 
-## Speed
-
-Benchmarks done with 2.9Ghz Coffee Lake.
-
-    getPublicKey x 4233 ops/sec @ 236μs/op
-    sign x 2042 ops/sec @ 489μs/op
-    verify x 417 ops/sec @ 2ms/op
-    ristretto255#fromHash x 3294 ops/sec @ 303μs/op
-    ristretto255 getRandom x 3263 ops/sec @ 306μs/op
-    ristretto255#scalarMult x 475 ops/sec @ 2ms/op
-
 ### This library belongs to *noble* crypto
 
 > **noble-crypto** — high-security, easily auditable set of contained cryptographic libraries and tools.
@@ -31,6 +20,17 @@ Benchmarks done with 2.9Ghz Coffee Lake.
   [bls12-381](https://github.com/paulmillr/noble-bls12-381),
   [ripemd160](https://github.com/paulmillr/noble-ripemd160),
   [secretbox-aes-gcm](https://github.com/paulmillr/noble-secretbox-aes-gcm)
+
+## Speed
+
+Benchmarks done with 2.9Ghz Coffee Lake.
+
+    getPublicKey x 4233 ops/sec @ 236μs/op
+    sign x 2042 ops/sec @ 489μs/op
+    verify x 417 ops/sec @ 2ms/op
+    ristretto255#fromHash x 3294 ops/sec @ 303μs/op
+    ristretto255 getRandom x 3263 ops/sec @ 306μs/op
+    ristretto255#scalarMult x 475 ops/sec @ 2ms/op
 
 ## Usage
 
