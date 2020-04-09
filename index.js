@@ -41,8 +41,8 @@ class ExtendedPoint {
             return ExtendedPoint.ZERO;
         return new ExtendedPoint(p.x, p.y, 1n, mod(p.x * p.y));
     }
-    static batchAffine(points) {
-        const toInv = batchInverse(points.map((p) => p.z));
+    static fromAffineBatch(points) {
+        const toInv = invertBatch(points.map((p) => p.z));
         return points.map((p, i) => p.toAffine(toInv[i]));
     }
     static fromUncompleteExtended(x, y, z, t) {
@@ -193,7 +193,7 @@ class ExtendedPoint {
         }
         return p;
     }
-    toAffine(invZ = modInverse(this.z)) {
+    toAffine(invZ = invert(this.z)) {
         const x = mod(this.x * invZ);
         const y = mod(this.y * invZ);
         return new Point(x, y);
@@ -224,7 +224,7 @@ class Point {
             throw new Error('Point#fromHex expects hex <= Fp');
         }
         const sqrY = y * y;
-        const sqrX = mod((sqrY - 1n) * modInverse(d * sqrY + 1n), P);
+        const sqrX = mod((sqrY - 1n) * invert(d * sqrY + 1n), P);
         let x = pow_2_252_3(sqrX);
         if (mod(x * x - sqrX) !== 0n) {
             x = mod(x * I);
@@ -249,7 +249,7 @@ class Point {
         return arrayToHex(this.toRawBytes());
     }
     toX25519() {
-        return mod((1n + this.y) * modInverse(1n - this.y));
+        return mod((1n + this.y) * invert(1n - this.y));
     }
     equals(other) {
         return this.x === other.x && this.y === other.y;
@@ -266,8 +266,8 @@ class Point {
         const Y1 = this.y;
         const X2 = other.x;
         const Y2 = other.y;
-        const X3 = (X1 * Y2 + Y1 * X2) * modInverse(1n + d * X1 * X2 * Y1 * Y2);
-        const Y3 = (Y1 * Y2 + X1 * X2) * modInverse(1n - d * X1 * X2 * Y1 * Y2);
+        const X3 = (X1 * Y2 + Y1 * X2) * invert(1n + d * X1 * X2 * Y1 * Y2);
+        const Y3 = (Y1 * Y2 + X1 * X2) * invert(1n - d * X1 * X2 * Y1 * Y2);
         return new Point(mod(X3), mod(Y3));
     }
     subtract(other) {
@@ -291,7 +291,7 @@ class Point {
             p = base.double();
         }
         if (W !== 1) {
-            points = ExtendedPoint.batchAffine(points).map(ExtendedPoint.fromAffine);
+            points = ExtendedPoint.fromAffineBatch(points).map(ExtendedPoint.fromAffine);
             pointPrecomputes.set(this, points);
         }
         return points;
@@ -336,7 +336,7 @@ class Point {
             throw new Error('Point#multiply: invalid scalar, expected positive integer');
         }
         const [point, fake] = this.wNAF(n);
-        return isAffine ? ExtendedPoint.batchAffine([point, fake])[0] : point;
+        return isAffine ? ExtendedPoint.fromAffineBatch([point, fake])[0] : point;
     }
 }
 exports.Point = Point;
@@ -491,19 +491,19 @@ function egcd(a, b) {
     let gcd = b;
     return [gcd, x, y];
 }
-function modInverse(number, modulo = P) {
+function invert(number, modulo = P) {
     if (number === 0n || modulo <= 0n) {
         console.log(number);
-        throw new Error('modInverse: expected positive integers');
+        throw new Error('invert: expected positive integers');
     }
     let [gcd, x] = egcd(mod(number, modulo), modulo);
     if (gcd !== 1n) {
-        throw new Error('modInverse: does not exist');
+        throw new Error('invert: does not exist');
     }
     return mod(x, modulo);
 }
-exports.modInverse = modInverse;
-function batchInverse(nums, n = P) {
+exports.invert = invert;
+function invertBatch(nums, n = P) {
     const len = nums.length;
     const scratch = new Array(len);
     let acc = 1n;
@@ -513,7 +513,7 @@ function batchInverse(nums, n = P) {
         scratch[i] = acc;
         acc = mod(acc * nums[i], n);
     }
-    acc = modInverse(acc, n);
+    acc = invert(acc, n);
     for (let i = len - 1; i >= 0; i--) {
         if (nums[i] === 0n)
             continue;

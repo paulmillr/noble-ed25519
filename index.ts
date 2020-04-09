@@ -8,7 +8,7 @@ const CURVE = {
   // Params: a, b
   a: -1n,
   // Equal to -121665/121666 over finite field.
-  // Negative number is P - number, and division is modInverse(number, P)
+  // Negative number is P - number, and division is invert(number, P)
   d: 37095705934669439343138083508754565189542113879843219016388785533085940283555n,
   // Finite field 𝔽p over which we'll do calculations
   P: 2n ** 255n - 19n,
@@ -64,20 +64,19 @@ const I = powMod(2n, (P - 1n) / 4n, P);
 // Extended Point works in extended coordinates: (x, y, z, t) ∋ (x=x/z, y=y/z, t=xy)
 // https://en.wikipedia.org/wiki/Twisted_Edwards_curve#Extended_coordinates
 class ExtendedPoint {
+  constructor(public x: bigint, public y: bigint, public z: bigint, public t: bigint) {}
+
   static BASE = new ExtendedPoint(CURVE.Gx, CURVE.Gy, 1n, mod(CURVE.Gx * CURVE.Gy));
   static ZERO = new ExtendedPoint(0n, 1n, 1n, 0n);
   static fromAffine(p: Point): ExtendedPoint {
     if (p.equals(Point.ZERO)) return ExtendedPoint.ZERO;
     return new ExtendedPoint(p.x, p.y, 1n, mod(p.x * p.y));
   }
-
-  constructor(public x: bigint, public y: bigint, public z: bigint, public t: bigint) {}
-
   // Takes a bunch of Jacobian Points but executes only one
-  // modInverse on all of them. modInverse is very slow operation,
+  // invert on all of them. invert is very slow operation,
   // so this improves performance massively.
-  static batchAffine(points: ExtendedPoint[]): Point[] {
-    const toInv = batchInverse(points.map((p) => p.z));
+  static fromAffineBatch(points: ExtendedPoint[]): Point[] {
+    const toInv = invertBatch(points.map((p) => p.z));
     return points.map((p, i) => p.toAffine(toInv[i]));
   }
 
@@ -277,8 +276,8 @@ class ExtendedPoint {
   }
 
   // Converts Extended point to default (x, y) coordinates.
-  // Can accept precomputed Z^-1 - for example, from batchInverse.
-  toAffine(invZ: bigint = modInverse(this.z)): Point {
+  // Can accept precomputed Z^-1 - for example, from invertBatch.
+  toAffine(invZ: bigint = invert(this.z)): Point {
     const x = mod(this.x * invZ);
     const y = mod(this.y * invZ);
     return new Point(x, y);
@@ -322,7 +321,7 @@ class Point {
       throw new Error('Point#fromHex expects hex <= Fp');
     }
     const sqrY = y * y;
-    const sqrX = mod((sqrY - 1n) * modInverse(d * sqrY + 1n), P);
+    const sqrX = mod((sqrY - 1n) * invert(d * sqrY + 1n), P);
     let x = pow_2_252_3(sqrX);
     if (mod(x * x - sqrX) !== 0n) {
       x = mod(x * I);
@@ -365,7 +364,7 @@ class Point {
     // u, v: x25519 coordinates
     // u = (1 + y) / (1 - y)
     // See https://blog.filippo.io/using-ed25519-keys-for-encryption
-    return mod((1n + this.y) * modInverse(1n - this.y));
+    return mod((1n + this.y) * invert(1n - this.y));
   }
 
   equals(other: Point): boolean {
@@ -386,8 +385,8 @@ class Point {
     const Y1 = this.y;
     const X2 = other.x;
     const Y2 = other.y;
-    const X3 = (X1 * Y2 + Y1 * X2) * modInverse(1n + d * X1 * X2 * Y1 * Y2);
-    const Y3 = (Y1 * Y2 + X1 * X2) * modInverse(1n - d * X1 * X2 * Y1 * Y2);
+    const X3 = (X1 * Y2 + Y1 * X2) * invert(1n + d * X1 * X2 * Y1 * Y2);
+    const Y3 = (Y1 * Y2 + X1 * X2) * invert(1n - d * X1 * X2 * Y1 * Y2);
     return new Point(mod(X3), mod(Y3));
   }
 
@@ -412,7 +411,7 @@ class Point {
       p = base.double();
     }
     if (W !== 1) {
-      points = ExtendedPoint.batchAffine(points).map(ExtendedPoint.fromAffine);
+      points = ExtendedPoint.fromAffineBatch(points).map(ExtendedPoint.fromAffine);
       pointPrecomputes.set(this, points);
     }
     return points;
@@ -474,7 +473,7 @@ class Point {
       throw new Error('Point#multiply: invalid scalar, expected positive integer');
     }
     const [point, fake] = this.wNAF(n);
-    return isAffine ? ExtendedPoint.batchAffine([point, fake])[0] : point;
+    return isAffine ? ExtendedPoint.fromAffineBatch([point, fake])[0] : point;
   }
 }
 
@@ -652,19 +651,19 @@ function egcd(a: bigint, b: bigint) {
   return [gcd, x, y];
 }
 
-export function modInverse(number: bigint, modulo: bigint = P) {
+export function invert(number: bigint, modulo: bigint = P) {
   if (number === 0n || modulo <= 0n) {
     console.log(number);
-    throw new Error('modInverse: expected positive integers');
+    throw new Error('invert: expected positive integers');
   }
   let [gcd, x] = egcd(mod(number, modulo), modulo);
   if (gcd !== 1n) {
-    throw new Error('modInverse: does not exist');
+    throw new Error('invert: does not exist');
   }
   return mod(x, modulo);
 }
 
-function batchInverse(nums: bigint[], n: bigint = P): bigint[] {
+function invertBatch(nums: bigint[], n: bigint = P): bigint[] {
   const len = nums.length;
   const scratch = new Array(len);
   let acc = 1n;
@@ -673,7 +672,7 @@ function batchInverse(nums: bigint[], n: bigint = P): bigint[] {
     scratch[i] = acc;
     acc = mod(acc * nums[i], n);
   }
-  acc = modInverse(acc, n);
+  acc = invert(acc, n);
   for (let i = len - 1; i >= 0; i--) {
     if (nums[i] === 0n) continue;
     let tmp = mod(acc * nums[i], n);

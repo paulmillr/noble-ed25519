@@ -21,7 +21,7 @@ declare class ExtendedPoint {
     static ZERO: ExtendedPoint;
     static fromAffine(p: Point): ExtendedPoint;
     constructor(x: bigint, y: bigint, z: bigint, t: bigint);
-    static batchAffine(points: ExtendedPoint[]): Point[];
+    static fromAffineBatch(points: ExtendedPoint[]): Point[];
     static fromUncompleteExtended(x: bigint, y: bigint, z: bigint, t: bigint): ExtendedPoint;
     static fromRistrettoHash(hash: Uint8Array): ExtendedPoint;
     private static elligatorRistrettoFlavor;
@@ -65,7 +65,7 @@ declare class SignResult {
     toHex(): string;
 }
 export { ExtendedPoint, Point, SignResult };
-export declare function modInverse(number: bigint, modulo?: bigint): bigint;
+export declare function invert(number: bigint, modulo?: bigint): bigint;
 export declare function getPublicKey(privateKey: Uint8Array): Promise<Uint8Array>;
 export declare function getPublicKey(privateKey: string): Promise<string>;
 export declare function getPublicKey(privateKey: bigint | number): Promise<Uint8Array>;
