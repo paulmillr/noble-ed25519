@@ -274,7 +274,7 @@ describe('rfc8032 vectors', () => {
 });
 
 describe.only('ristretto255', () => {
-  const {RistrettoPoint} = ed25519;
+  const {ExtendedPoint} = ed25519;
   async function sha512(message: Uint8Array) {
     const hash = createHash('sha512');
     hash.update(message);
@@ -412,11 +412,11 @@ describe.only('ristretto255', () => {
       '46376b80f409b29dc2b5f6f0c52591990896e5716f41477cd30085ab7f10301e',
       'e0c418f7c8d9c4cdd7395b93ea124f3ad99021bb681dfc3302a9d99a2e53e64e'
     ];
-    let B = RistrettoPoint.BASE;
-    let P = RistrettoPoint.ZERO;
+    let B = ExtendedPoint.BASE;
+    let P = ExtendedPoint.ZERO;
     for (const encoded of encodingsOfSmallMultiples) {
-      expect(arrayToHex(P.toBytes())).toBe(encoded);
-      expect(arrayToHex(RistrettoPoint.fromBytes(hexToArray(encoded)).toBytes())).toBe(encoded);
+      expect(arrayToHex(P.toRistrettoRawBytes())).toBe(encoded);
+      expect(arrayToHex(ExtendedPoint.fromRistrettoBytes(hexToArray(encoded)).toRistrettoRawBytes())).toBe(encoded);
       P = P.add(B);
     }
   });
@@ -458,7 +458,7 @@ describe.only('ristretto255', () => {
       'ecffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7f'
     ];
     for (const badBytes of badEncodings) {
-      expect(() => RistrettoPoint.fromBytes(hexToArray(badBytes))).toThrow();
+      expect(() => ExtendedPoint.fromRistrettoBytes(hexToArray(badBytes))).toThrow();
     }
   });
   it('should create right points from hash', async () => {
@@ -484,8 +484,8 @@ describe.only('ristretto255', () => {
     for (let i = 0; i < labels.length; i++) {
       const hash = await sha512(Buffer.from(labels[i]));
       console.log({hash: hash, to: encodedHashToPoints[i]})
-      const point = RistrettoPoint.fromHash(hash);
-      expect(arrayToHex(point.toBytes())).toBe(encodedHashToPoints[i]);
+      const point = ExtendedPoint.fromRistrettoHash(hash);
+      expect(arrayToHex(point.toRistrettoRawBytes())).toBe(encodedHashToPoints[i]);
     }
   });
 });

@@ -1,9 +1,19 @@
 /*! noble-ed25519 - MIT License (c) Paul Miller (paulmillr.com) */
 
-// https://ed25519.cr.yp.to
-// https://tools.ietf.org/html/rfc8032
-// https://en.wikipedia.org/wiki/EdDSA
-// Thanks DJB!
+// Thanks DJB. https://ed25519.cr.yp.to
+// https://tools.ietf.org/html/rfc8032, https://en.wikipedia.org/wiki/EdDSA
+
+// Includes Ristretto.
+// Ristretto is a technique for constructing prime order elliptic curve
+// groups with non-malleable encodings. It extends Mike Hamburg's Decaf
+// approach to cofactor elimination to support cofactor-8 curves such as Curve25519.
+//
+// In particular, this allows an existing Curve25519 library to implement
+// a prime-order group with only a thin abstraction layer, and makes it
+// possible for systems using Ed25519 signatures to be safely extended
+// with zero-knowledge protocols, with no additional cryptographic assumptions
+// and minimal code changes.
+// https://ristretto.group
 
 const CURVE = {
   // Params: a, b
@@ -82,9 +92,107 @@ class ExtendedPoint {
     return points.map((p, i) => p.toAffine(toInv[i]));
   }
 
+  // Ristretto-related methods.
   static fromUncompleteExtended(x: bigint, y: bigint, z: bigint, t: bigint) {
     return new ExtendedPoint(mod(x * t), mod(y * z), mod(z * t), mod(x * y));
   }
+
+  static fromRistrettoHash(hash: Uint8Array) {
+    const r1 = arrayToNumberRst(hash.slice(0, ENCODING_LENGTH));
+    const R1 = this.elligatorRistrettoFlavor(r1);
+    const r2 = arrayToNumberRst(hash.slice(ENCODING_LENGTH, ENCODING_LENGTH * 2));
+    const R2 = this.elligatorRistrettoFlavor(r2);
+    return R1.add(R2);
+  }
+
+  // Computes the Ristretto Elligator map.
+  // This method is not public because it's just used for hashing
+  // to a point -- proper elligator support is deferred for now.
+  private static elligatorRistrettoFlavor(r0: bigint) {
+    const oneMinusDSq = mod(1n - CURVE.d ** 2n);
+    const dMinusOneSq = (CURVE.d - 1n) ** 2n;
+    const r = SQRT_M1 * (r0 * r0);
+    const NS = mod((r + 1n) * oneMinusDSq);
+    let c = mod(-1n);
+    const D = mod((c - CURVE.d * r) * mod(r + CURVE.d));
+    let { isNotZeroSquare, value: S } = sqrtRatio(NS, D);
+    let sPrime = mod(S * r0);
+    sPrime = edIsNegative(sPrime) ? sPrime : mod(-sPrime);
+    S = isNotZeroSquare ? S : sPrime;
+    c = isNotZeroSquare ? c : r;
+    const NT = c * (r - 1n) * dMinusOneSq - D;
+    const sSquared = S * S;
+    return ExtendedPoint.fromUncompleteExtended(
+      (S + S) * D,
+      1n - sSquared,
+      NT * SQRT_AD_MINUS_ONE,
+      1n + sSquared
+    );
+  }
+
+  static fromRistrettoBytes(bytes: Uint8Array) {
+    // Step 1. Check s for validity:
+    // 1.a) s must be 32 bytes (we get this from the type system)
+    // 1.b) s < p
+    // 1.c) s is nonnegative
+    //
+    // Our decoding routine ignores the high bit, so the only
+    // possible failure for 1.b) is if someone encodes s in 0..18
+    // as s+p in 2^255-19..2^255-1.  We can check this by
+    // converting back to bytes, and checking that we get the
+    // original input, since our encoding routine is canonical.
+    const s = arrayToNumberRst(bytes);
+    const sEncodingIsCanonical = arraysAreEqual(numberToArrayPadded(s, ENCODING_LENGTH), bytes);
+    const sIsNegative = edIsNegative(s);
+    if (!sEncodingIsCanonical || sIsNegative) {
+      throw new Error('Cannot convert bytes to Ristretto Point');
+    }
+    const s2 = mod(s * s);
+    const u1 = mod(1n - s2); // 1 + as²
+    const u2 = mod(1n + s2); // 1 - as² where a=-1
+    const squaredU2 = mod(u2 * u2); // (1 - as²)²
+    // v == ad(1+as²)² - (1-as²)² where d=-121665/121666
+    const v = mod(mod(u1 * u1 * -CURVE.d) - squaredU2);
+    const { isNotZeroSquare, value: I } = invertSqrt(mod(v * squaredU2)); // 1/sqrt(v*u_2²)
+    const Dx = I * u2;
+    const Dy = I * Dx * v; // 1/u2
+    // x == | 2s/sqrt(v) | == + sqrt(4s²/(ad(1+as²)² - (1-as²)²))
+    let x = mod((s + s) * Dx);
+    if (edIsNegative(x)) x = mod(-x);
+    // y == (1-as²)/(1+as²)
+    const y = mod(u1 * Dy);
+    // t == ((1+as²) sqrt(4s²/(ad(1+as²)² - (1-as²)²)))/(1-as²)
+    const t = mod(x * y);
+    if (!isNotZeroSquare || edIsNegative(t) || y === 0n) {
+      throw new Error('Cannot convert bytes to Ristretto Point');
+    }
+    return new ExtendedPoint(x, y, 1n, t);
+  }
+
+  toRistrettoRawBytes() {
+    let { x, y, z, t } = this;
+    // u1 = (z0 + y0) * (z0 - y0)
+    const u1 = mod((z + y) * (z - y));
+    const u2 = mod(x * y);
+    // Ignore return value since this is always square
+    const { value: invsqrt } = invertSqrt(mod(u2 ** 2n * u1));
+    const i1 = mod(invsqrt * u1);
+    const i2 = mod(invsqrt * u2);
+    const invertedZ = mod(i1 * i2 * t);
+    let invertedDenominator = i2;
+    const iX = mod(x * SQRT_M1);
+    const iY = mod(y * SQRT_M1);
+    const enchantedDenominator = mod(i1 * INVSQRT_A_MINUS_D);
+    const isRotated = BigInt(edIsNegative(t * invertedZ)) as 0n | 1n;
+    x = isRotated ? iY : x;
+    y = isRotated ? iX : y;
+    invertedDenominator = isRotated ? enchantedDenominator : i2;
+    if (edIsNegative(x * invertedZ)) y = mod(-y);
+    let s = mod((z - y) * invertedDenominator);
+    if (edIsNegative(s)) s = mod(-s);
+    return numberToArrayPadded(s, ENCODING_LENGTH);
+  }
+  // Ristretto methods end.
 
   // Compare one point to another.
   equals(other: ExtendedPoint): boolean {
@@ -188,134 +296,6 @@ class ExtendedPoint {
   }
 }
 
-/**
- * Ristretto is a technique for constructing prime order elliptic curve
- * groups with non-malleable encodings. It extends Mike Hamburg's Decaf
- * approach to cofactor elimination to support cofactor-8 curves such as Curve25519.
- *
- * In particular, this allows an existing Curve25519 library to implement
- * a prime-order group with only a thin abstraction layer, and makes it
- * possible for systems using Ed25519 signatures to be safely extended
- * with zero-knowledge protocols, with no additional cryptographic assumptions
- * and minimal code changes.
- * https://ristretto.group
- */
-class RistrettoPoint {
-  static BASE = new RistrettoPoint(ExtendedPoint.BASE);
-  static ZERO = new RistrettoPoint(ExtendedPoint.ZERO);
-
-  static fromHash(hash: Uint8Array) {
-    const r1 = arrayToNumberRst(hash.slice(0, ENCODING_LENGTH));
-    const R1 = this.elligatorRistrettoFlavor(r1);
-    const r2 = arrayToNumberRst(hash.slice(ENCODING_LENGTH, ENCODING_LENGTH * 2));
-    const R2 = this.elligatorRistrettoFlavor(r2);
-    return new RistrettoPoint(R1.add(R2));
-  }
-
-  // Computes the Ristretto Elligator map.
-  // This method is not public because it's just used for hashing
-  // to a point -- proper elligator support is deferred for now.
-  private static elligatorRistrettoFlavor(r0: bigint) {
-    const oneMinusDSq = mod(1n - CURVE.d ** 2n);
-    const dMinusOneSq = (CURVE.d - 1n) ** 2n;
-    const r = SQRT_M1 * (r0 * r0);
-    const NS = mod((r + 1n) * oneMinusDSq);
-    let c = mod(-1n);
-    const D = mod((c - CURVE.d * r) * mod(r + CURVE.d));
-    let { isNotZeroSquare, value: S } = sqrtRatio(NS, D);
-    let sPrime = mod(S * r0);
-    sPrime = edIsNegative(sPrime) ? sPrime : mod(-sPrime);
-    S = isNotZeroSquare ? S : sPrime;
-    c = isNotZeroSquare ? c : r;
-    const NT = c * (r - 1n) * dMinusOneSq - D;
-    const sSquared = S * S;
-    return ExtendedPoint.fromUncompleteExtended(
-      (S + S) * D, 1n - sSquared, NT * SQRT_AD_MINUS_ONE, 1n + sSquared
-    );
-  }
-
-  static fromBytes(bytes: Uint8Array) {
-    // Step 1. Check s for validity:
-    // 1.a) s must be 32 bytes (we get this from the type system)
-    // 1.b) s < p
-    // 1.c) s is nonnegative
-    //
-    // Our decoding routine ignores the high bit, so the only
-    // possible failure for 1.b) is if someone encodes s in 0..18
-    // as s+p in 2^255-19..2^255-1.  We can check this by
-    // converting back to bytes, and checking that we get the
-    // original input, since our encoding routine is canonical.
-    const s = arrayToNumberRst(bytes);
-    const sEncodingIsCanonical = arraysAreEqual(numberToArrayPadded(s, ENCODING_LENGTH), bytes);
-    const sIsNegative = edIsNegative(s);
-    if (!sEncodingIsCanonical || sIsNegative) {
-      throw new Error('Cannot convert bytes to Ristretto Point');
-    }
-    const s2 = mod(s * s);
-    const u1 = mod(1n - s2); // 1 + as²
-    const u2 = mod(1n + s2); // 1 - as² where a=-1
-    const squaredU2 = mod(u2 * u2); // (1 - as²)²
-    // v == ad(1+as²)² - (1-as²)² where d=-121665/121666
-    const v = mod(mod(u1 * u1 * -CURVE.d) - squaredU2);
-    const { isNotZeroSquare, value: I } = invertSqrt(mod(v * squaredU2)); // 1/sqrt(v*u_2²)
-    const Dx = I * u2;
-    const Dy = I * Dx * v; // 1/u2
-    // x == | 2s/sqrt(v) | == + sqrt(4s²/(ad(1+as²)² - (1-as²)²))
-    let x = mod((s + s) * Dx);
-    if (edIsNegative(x)) x = mod(-x);
-    // y == (1-as²)/(1+as²)
-    const y = mod(u1 * Dy);
-    // t == ((1+as²) sqrt(4s²/(ad(1+as²)² - (1-as²)²)))/(1-as²)
-    const t = mod(x * y);
-    if (!isNotZeroSquare || edIsNegative(t) || y === 0n) {
-      throw new Error('Cannot convert bytes to Ristretto Point');
-    }
-    return new RistrettoPoint(new ExtendedPoint(x, y, 1n, t));
-  }
-
-  constructor(private point: ExtendedPoint) {}
-
-  toBytes() {
-    let { x, y, z, t } = this.point;
-    // u1 = (z0 + y0) * (z0 - y0)
-    const u1 = mod((z + y) * (z - y));
-    const u2 = mod(x * y);
-    // Ignore return value since this is always square
-    const { value: invsqrt } = invertSqrt(mod(u2 ** 2n * u1));
-    const i1 = mod(invsqrt * u1);
-    const i2 = mod(invsqrt * u2);
-    const invertedZ = mod(i1 * i2 * t);
-    let invertedDenominator = i2;
-    const iX = mod(x * SQRT_M1);
-    const iY = mod(y * SQRT_M1);
-    const enchantedDenominator = mod(i1 * INVSQRT_A_MINUS_D);
-    const isRotated = BigInt(edIsNegative(t * invertedZ)) as 0n | 1n;
-    x = isRotated ? iY : x;
-    y = isRotated ? iX : y;
-    invertedDenominator = isRotated ? enchantedDenominator : i2;
-    if (edIsNegative(x * invertedZ)) y = mod(-y);
-    let s = mod((z - y) * invertedDenominator);
-    if (edIsNegative(s)) s = mod(-s);
-    return numberToArrayPadded(s, ENCODING_LENGTH);
-  }
-
-  equals(other: RistrettoPoint) {
-    return this.point.equals(other.point);
-  }
-
-  add(other: RistrettoPoint) {
-    return new RistrettoPoint(this.point.add(other.point));
-  }
-
-  subtract(other: RistrettoPoint) {
-    return new RistrettoPoint(this.point.subtract(other.point));
-  }
-
-  multiplyUnsafe(n: bigint) {
-    return new RistrettoPoint(this.point.multiplyUnsafe(n));
-  }
-}
-
 // Stores precomputed values for points.
 const pointPrecomputes = new WeakMap();
 
@@ -354,7 +334,7 @@ class Point {
     }
     const sqrY = y * y;
     const sqrX = mod((sqrY - 1n) * modInverse(d * sqrY + 1n), P);
-    let x = powMod(sqrX, (P + 3n) / 8n, P);
+    let x = pow_2_252_3(sqrX);
     if (mod(x * x - sqrX) !== 0n) {
       x = mod(x * I);
     }
@@ -535,18 +515,18 @@ class SignResult {
   }
 }
 
-export { ExtendedPoint, RistrettoPoint, Point, SignResult };
+export { ExtendedPoint, Point, SignResult };
 
 // SHA512 implementation.
 let sha512: (message: Uint8Array) => Promise<Uint8Array>;
-let generateRandomPrivateKey = (bytesLength: number = 32) => new Uint8Array(bytesLength);
+let randomPrivateKey = (bytesLength: number = 32) => new Uint8Array(bytesLength);
 
 if (typeof window == 'object' && 'crypto' in window) {
   sha512 = async (message: Uint8Array) => {
     const buffer = await window.crypto.subtle.digest('SHA-512', message.buffer);
     return new Uint8Array(buffer);
   };
-  generateRandomPrivateKey = (bytesLength: number = 32): Uint8Array => {
+  randomPrivateKey = (bytesLength: number = 32): Uint8Array => {
     return window.crypto.getRandomValues(new Uint8Array(bytesLength));
   };
 } else if (typeof process === 'object' && 'node' in process.versions) {
@@ -557,7 +537,7 @@ if (typeof window == 'object' && 'crypto' in window) {
     hash.update(message);
     return Uint8Array.from(hash.digest());
   };
-  generateRandomPrivateKey = (bytesLength: number = 32): Uint8Array => {
+  randomPrivateKey = (bytesLength: number = 32): Uint8Array => {
     return new Uint8Array(randomBytes(bytesLength).buffer);
   };
 } else {
@@ -728,12 +708,13 @@ function pow2k(t: bigint, power: bigint) {
   return res;
 }
 function pow_2_252_3(t: bigint) {
-  const t0 = t * t;
-  const t1 = t0 ** 4n;
-  const t2 = t * t1;
-  const t3 = t0 * t2;
+  t = mod(t);
+  const t0 = (t * t) % P;
+  const t1 = t0 ** 4n % P;
+  const t2 = (t * t1) % P;
+  const t3 = (t0 * t2) % P;
   const t4 = t3 ** 2n;
-  const t5 = t2 * t4;
+  const t5 = (t2 * t4) % P;
   const t6 = pow2k(t5, 5n);
   const t7 = (t6 * t5) % P;
   const t8 = pow2k(t7, 10n);
@@ -752,66 +733,6 @@ function pow_2_252_3(t: bigint) {
   // t19 = t ** (2 ** 250 - 1)
   const t20 = (t19 * t19) % P;
   const t21 = (t20 * t20 * t) % P;
-  return t21;
-}
-
-function pow_2_252_3_fast(t: bigint) {
-  const t0 = mod(t * t);
-  const t1 = mod(t0 ** 4n);
-  const t2 = mod(t * t1);
-  const t3 = mod(t0 * t2);
-  const t5 = mod(t2 * t3 * t3);
-  let t7 = t5;
-  for (let i = 0; i < 5; i++) {
-    t7 *= t7;
-    t7 %= P;
-  }
-  t7 *= t5;
-  t7 %= P;
-  let t9 = t7;
-  for (let i = 0; i < 10; i++) {
-    t9 *= t9;
-    t9 %= P;
-  }
-  t9 *= t7;
-  t9 %= P;
-  let t13 = t9;
-  for (let i = 0; i < 20; i++) {
-    t13 *= t13;
-    t13 %= P;
-  }
-  t13 *= t9;
-  t13 %= P;
-  for (let i = 0; i < 10; i++) {
-    t13 *= t13;
-    t13 %= P;
-  }
-  t13 *= t7;
-  t13 %= P;
-  let t15 = t13;
-  for (let i = 0; i < 50; i++) {
-    t15 *= t15;
-    t15 %= P;
-  }
-  t15 *= t13;
-  t15 %= P;
-  let t19 = t15;
-  for (let i = 0; i < 100; i++) {
-    t19 *= t19;
-    t19 %= P;
-  }
-  t19 *= t15;
-  t19 %= P;
-  for (let i = 0; i < 50; i++) {
-    t19 *= t19;
-    t19 %= P;
-  }
-  t19 *= t13;
-  t19 %= P;
-
-  // t19 = t ** (2 ** 250 - 1)
-  let t20 = (t19 * t19) % P;
-  let t21 = (t20 * t20 * t) % P;
   return t21;
 }
 
@@ -841,7 +762,7 @@ function sqrtRatio(t: bigint, v: bigint) {
   // If v is zero, r is also zero.
   const v3 = mod(v * v * v);
   const v7 = mod(v3 * v3 * v);
-  let r = mod(pow_2_252_3_fast(t * v7) * t * v3);
+  let r = mod(pow_2_252_3(t * v7) * t * v3);
   const check = mod(r * r * v);
   const i = SQRT_M1;
   const correctSignSqrt = check === t;
@@ -939,10 +860,8 @@ export async function verify(signature: Signature, hash: Hex, publicKey: PubKey)
 Point.BASE._setWindowSize(8);
 
 export const utils = {
-  generateRandomPrivateKey,
-
+  randomPrivateKey,
   sha512,
-
   precompute(windowSize = 8, point = Point.BASE): Point {
     const cached = point.equals(Point.BASE) ? point : new Point(point.x, point.y);
     cached._setWindowSize(windowSize);

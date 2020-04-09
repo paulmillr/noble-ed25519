@@ -48,6 +48,77 @@ class ExtendedPoint {
     static fromUncompleteExtended(x, y, z, t) {
         return new ExtendedPoint(mod(x * t), mod(y * z), mod(z * t), mod(x * y));
     }
+    static fromRistrettoHash(hash) {
+        const r1 = arrayToNumberRst(hash.slice(0, ENCODING_LENGTH));
+        const R1 = this.elligatorRistrettoFlavor(r1);
+        const r2 = arrayToNumberRst(hash.slice(ENCODING_LENGTH, ENCODING_LENGTH * 2));
+        const R2 = this.elligatorRistrettoFlavor(r2);
+        return R1.add(R2);
+    }
+    static elligatorRistrettoFlavor(r0) {
+        const oneMinusDSq = mod(1n - CURVE.d ** 2n);
+        const dMinusOneSq = (CURVE.d - 1n) ** 2n;
+        const r = SQRT_M1 * (r0 * r0);
+        const NS = mod((r + 1n) * oneMinusDSq);
+        let c = mod(-1n);
+        const D = mod((c - CURVE.d * r) * mod(r + CURVE.d));
+        let { isNotZeroSquare, value: S } = sqrtRatio(NS, D);
+        let sPrime = mod(S * r0);
+        sPrime = edIsNegative(sPrime) ? sPrime : mod(-sPrime);
+        S = isNotZeroSquare ? S : sPrime;
+        c = isNotZeroSquare ? c : r;
+        const NT = c * (r - 1n) * dMinusOneSq - D;
+        const sSquared = S * S;
+        return ExtendedPoint.fromUncompleteExtended((S + S) * D, 1n - sSquared, NT * SQRT_AD_MINUS_ONE, 1n + sSquared);
+    }
+    static fromRistrettoBytes(bytes) {
+        const s = arrayToNumberRst(bytes);
+        const sEncodingIsCanonical = arraysAreEqual(numberToArrayPadded(s, ENCODING_LENGTH), bytes);
+        const sIsNegative = edIsNegative(s);
+        if (!sEncodingIsCanonical || sIsNegative) {
+            throw new Error('Cannot convert bytes to Ristretto Point');
+        }
+        const s2 = mod(s * s);
+        const u1 = mod(1n - s2);
+        const u2 = mod(1n + s2);
+        const squaredU2 = mod(u2 * u2);
+        const v = mod(mod(u1 * u1 * -CURVE.d) - squaredU2);
+        const { isNotZeroSquare, value: I } = invertSqrt(mod(v * squaredU2));
+        const Dx = I * u2;
+        const Dy = I * Dx * v;
+        let x = mod((s + s) * Dx);
+        if (edIsNegative(x))
+            x = mod(-x);
+        const y = mod(u1 * Dy);
+        const t = mod(x * y);
+        if (!isNotZeroSquare || edIsNegative(t) || y === 0n) {
+            throw new Error('Cannot convert bytes to Ristretto Point');
+        }
+        return new ExtendedPoint(x, y, 1n, t);
+    }
+    toRistrettoRawBytes() {
+        let { x, y, z, t } = this;
+        const u1 = mod((z + y) * (z - y));
+        const u2 = mod(x * y);
+        const { value: invsqrt } = invertSqrt(mod(u2 ** 2n * u1));
+        const i1 = mod(invsqrt * u1);
+        const i2 = mod(invsqrt * u2);
+        const invertedZ = mod(i1 * i2 * t);
+        let invertedDenominator = i2;
+        const iX = mod(x * SQRT_M1);
+        const iY = mod(y * SQRT_M1);
+        const enchantedDenominator = mod(i1 * INVSQRT_A_MINUS_D);
+        const isRotated = BigInt(edIsNegative(t * invertedZ));
+        x = isRotated ? iY : x;
+        y = isRotated ? iX : y;
+        invertedDenominator = isRotated ? enchantedDenominator : i2;
+        if (edIsNegative(x * invertedZ))
+            y = mod(-y);
+        let s = mod((z - y) * invertedDenominator);
+        if (edIsNegative(s))
+            s = mod(-s);
+        return numberToArrayPadded(s, ENCODING_LENGTH);
+    }
     equals(other) {
         const a = this;
         const b = other;
@@ -131,97 +202,6 @@ class ExtendedPoint {
 exports.ExtendedPoint = ExtendedPoint;
 ExtendedPoint.BASE = new ExtendedPoint(CURVE.Gx, CURVE.Gy, 1n, mod(CURVE.Gx * CURVE.Gy));
 ExtendedPoint.ZERO = new ExtendedPoint(0n, 1n, 1n, 0n);
-class RistrettoPoint {
-    constructor(point) {
-        this.point = point;
-    }
-    static fromHash(hash) {
-        const r1 = arrayToNumberRst(hash.slice(0, ENCODING_LENGTH));
-        const R1 = this.elligatorRistrettoFlavor(r1);
-        const r2 = arrayToNumberRst(hash.slice(ENCODING_LENGTH, ENCODING_LENGTH * 2));
-        const R2 = this.elligatorRistrettoFlavor(r2);
-        return new RistrettoPoint(R1.add(R2));
-    }
-    static elligatorRistrettoFlavor(r0) {
-        const oneMinusDSq = mod(1n - CURVE.d ** 2n);
-        const dMinusOneSq = (CURVE.d - 1n) ** 2n;
-        const r = SQRT_M1 * (r0 * r0);
-        const NS = mod((r + 1n) * oneMinusDSq);
-        let c = mod(-1n);
-        const D = mod((c - CURVE.d * r) * mod(r + CURVE.d));
-        let { isNotZeroSquare, value: S } = sqrtRatio(NS, D);
-        let sPrime = mod(S * r0);
-        sPrime = edIsNegative(sPrime) ? sPrime : mod(-sPrime);
-        S = isNotZeroSquare ? S : sPrime;
-        c = isNotZeroSquare ? c : r;
-        const NT = c * (r - 1n) * dMinusOneSq - D;
-        const sSquared = S * S;
-        return ExtendedPoint.fromUncompleteExtended((S + S) * D, 1n - sSquared, NT * SQRT_AD_MINUS_ONE, 1n + sSquared);
-    }
-    static fromBytes(bytes) {
-        const s = arrayToNumberRst(bytes);
-        const sEncodingIsCanonical = arraysAreEqual(numberToArrayPadded(s, ENCODING_LENGTH), bytes);
-        const sIsNegative = edIsNegative(s);
-        if (!sEncodingIsCanonical || sIsNegative) {
-            throw new Error('Cannot convert bytes to Ristretto Point');
-        }
-        const s2 = mod(s * s);
-        const u1 = mod(1n - s2);
-        const u2 = mod(1n + s2);
-        const squaredU2 = mod(u2 * u2);
-        const v = mod(mod(u1 * u1 * -CURVE.d) - squaredU2);
-        const { isNotZeroSquare, value: I } = invertSqrt(mod(v * squaredU2));
-        const Dx = I * u2;
-        const Dy = I * Dx * v;
-        let x = mod((s + s) * Dx);
-        if (edIsNegative(x))
-            x = mod(-x);
-        const y = mod(u1 * Dy);
-        const t = mod(x * y);
-        if (!isNotZeroSquare || edIsNegative(t) || y === 0n) {
-            throw new Error('Cannot convert bytes to Ristretto Point');
-        }
-        return new RistrettoPoint(new ExtendedPoint(x, y, 1n, t));
-    }
-    toBytes() {
-        let { x, y, z, t } = this.point;
-        const u1 = mod((z + y) * (z - y));
-        const u2 = mod(x * y);
-        const { value: invsqrt } = invertSqrt(mod(u2 ** 2n * u1));
-        const i1 = mod(invsqrt * u1);
-        const i2 = mod(invsqrt * u2);
-        const invertedZ = mod(i1 * i2 * t);
-        let invertedDenominator = i2;
-        const iX = mod(x * SQRT_M1);
-        const iY = mod(y * SQRT_M1);
-        const enchantedDenominator = mod(i1 * INVSQRT_A_MINUS_D);
-        const isRotated = BigInt(edIsNegative(t * invertedZ));
-        x = isRotated ? iY : x;
-        y = isRotated ? iX : y;
-        invertedDenominator = isRotated ? enchantedDenominator : i2;
-        if (edIsNegative(x * invertedZ))
-            y = mod(-y);
-        let s = mod((z - y) * invertedDenominator);
-        if (edIsNegative(s))
-            s = mod(-s);
-        return numberToArrayPadded(s, ENCODING_LENGTH);
-    }
-    equals(other) {
-        return this.point.equals(other.point);
-    }
-    add(other) {
-        return new RistrettoPoint(this.point.add(other.point));
-    }
-    subtract(other) {
-        return new RistrettoPoint(this.point.subtract(other.point));
-    }
-    multiplyUnsafe(n) {
-        return new RistrettoPoint(this.point.multiplyUnsafe(n));
-    }
-}
-exports.RistrettoPoint = RistrettoPoint;
-RistrettoPoint.BASE = new RistrettoPoint(ExtendedPoint.BASE);
-RistrettoPoint.ZERO = new RistrettoPoint(ExtendedPoint.ZERO);
 const pointPrecomputes = new WeakMap();
 class Point {
     constructor(x, y) {
@@ -245,7 +225,7 @@ class Point {
         }
         const sqrY = y * y;
         const sqrX = mod((sqrY - 1n) * modInverse(d * sqrY + 1n), P);
-        let x = powMod(sqrX, (P + 3n) / 8n, P);
+        let x = pow_2_252_3(sqrX);
         if (mod(x * x - sqrX) !== 0n) {
             x = mod(x * I);
         }
@@ -388,13 +368,13 @@ class SignResult {
 }
 exports.SignResult = SignResult;
 let sha512;
-let generateRandomPrivateKey = (bytesLength = 32) => new Uint8Array(bytesLength);
+let randomPrivateKey = (bytesLength = 32) => new Uint8Array(bytesLength);
 if (typeof window == 'object' && 'crypto' in window) {
     sha512 = async (message) => {
         const buffer = await window.crypto.subtle.digest('SHA-512', message.buffer);
         return new Uint8Array(buffer);
     };
-    generateRandomPrivateKey = (bytesLength = 32) => {
+    randomPrivateKey = (bytesLength = 32) => {
         return window.crypto.getRandomValues(new Uint8Array(bytesLength));
     };
 }
@@ -406,7 +386,7 @@ else if (typeof process === 'object' && 'node' in process.versions) {
         hash.update(message);
         return Uint8Array.from(hash.digest());
     };
-    generateRandomPrivateKey = (bytesLength = 32) => {
+    randomPrivateKey = (bytesLength = 32) => {
         return new Uint8Array(randomBytes(bytesLength).buffer);
     };
 }
@@ -555,12 +535,13 @@ function pow2k(t, power) {
     return res;
 }
 function pow_2_252_3(t) {
-    const t0 = t * t;
-    const t1 = t0 ** 4n;
-    const t2 = t * t1;
-    const t3 = t0 * t2;
+    t = mod(t);
+    const t0 = (t * t) % P;
+    const t1 = t0 ** 4n % P;
+    const t2 = (t * t1) % P;
+    const t3 = (t0 * t2) % P;
     const t4 = t3 ** 2n;
-    const t5 = t2 * t4;
+    const t5 = (t2 * t4) % P;
     const t6 = pow2k(t5, 5n);
     const t7 = (t6 * t5) % P;
     const t8 = pow2k(t7, 10n);
@@ -579,67 +560,10 @@ function pow_2_252_3(t) {
     const t21 = (t20 * t20 * t) % P;
     return t21;
 }
-function pow_2_252_3_fast(t) {
-    const t0 = mod(t * t);
-    const t1 = mod(t0 ** 4n);
-    const t2 = mod(t * t1);
-    const t3 = mod(t0 * t2);
-    const t5 = mod(t2 * t3 * t3);
-    let t7 = t5;
-    for (let i = 0; i < 5; i++) {
-        t7 *= t7;
-        t7 %= P;
-    }
-    t7 *= t5;
-    t7 %= P;
-    let t9 = t7;
-    for (let i = 0; i < 10; i++) {
-        t9 *= t9;
-        t9 %= P;
-    }
-    t9 *= t7;
-    t9 %= P;
-    let t13 = t9;
-    for (let i = 0; i < 20; i++) {
-        t13 *= t13;
-        t13 %= P;
-    }
-    t13 *= t9;
-    t13 %= P;
-    for (let i = 0; i < 10; i++) {
-        t13 *= t13;
-        t13 %= P;
-    }
-    t13 *= t7;
-    t13 %= P;
-    let t15 = t13;
-    for (let i = 0; i < 50; i++) {
-        t15 *= t15;
-        t15 %= P;
-    }
-    t15 *= t13;
-    t15 %= P;
-    let t19 = t15;
-    for (let i = 0; i < 100; i++) {
-        t19 *= t19;
-        t19 %= P;
-    }
-    t19 *= t15;
-    t19 %= P;
-    for (let i = 0; i < 50; i++) {
-        t19 *= t19;
-        t19 %= P;
-    }
-    t19 *= t13;
-    t19 %= P;
-    let t20 = (t19 * t19) % P;
-    let t21 = (t20 * t20 * t) % P;
-    return t21;
-}
 function sqrtRatio(t, v) {
     const v3 = mod(v * v * v);
     const v7 = mod(v3 * v3 * v);
-    let r = mod(pow_2_252_3_fast(t * v7) * t * v3);
+    let r = mod(pow_2_252_3(t * v7) * t * v3);
     const check = mod(r * r * v);
     const i = SQRT_M1;
     const correctSignSqrt = check === t;
@@ -724,7 +648,7 @@ async function verify(signature, hash, publicKey) {
 exports.verify = verify;
 Point.BASE._setWindowSize(8);
 exports.utils = {
-    generateRandomPrivateKey,
+    randomPrivateKey,
     sha512,
     precompute(windowSize = 8, point = Point.BASE) {
         const cached = point.equals(Point.BASE) ? point : new Point(point.x, point.y);

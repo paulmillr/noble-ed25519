@@ -84,7 +84,7 @@ function verify(
 
 ##### Helpers & Point
 
-`utils.generateRandomPrivateKey()`
+`utils.randomPrivateKey()`
 
 Returns cryptographically random `Uint8Array` that could be used as Private Key.
 
