@@ -37,15 +37,15 @@ Benchmarks done with 2.9Ghz Coffee Lake.
 > npm install noble-ed25519
 
 ```js
-import * as ed25519 from "noble-ed25519";
+import * as ed from 'noble-ed25519';
 
-const PRIVATE_KEY = 0xa665a45920422f9d417e4867efn;
-const HASH_MESSSAGE = new Uint8Array([99, 100, 101, 102, 103]);
+const key = ed.utils.randomPrivateKey(); // 32-byte Uint8Array or string.
+const HASH_MESSSAGE = 'deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef';
 
 (async () => {
-  const publicKey = await ed25519.getPublicKey(PRIVATE_KEY);
-  const signature = await ed25519.sign(HASH_MESSAGE, PRIVATE_KEY);
-  const isMessageSigned = await ed25519.verify(signature, HASH_MESSAGE, publicKey);
+  const publicKey = await ed.getPublicKey(PRIVATE_KEY);
+  const signature = await ed.sign(HASH_MESSAGE, PRIVATE_KEY);
+  const isMessageSigned = await ed.verify(signature, HASH_MESSAGE, publicKey);
 })();
 ```
 
