@@ -21,32 +21,32 @@ run(async () => {
     return array;
   }
 
-  // const priv1 = toBytes(2n);
-  // let pubHex;
-  // await mark('getPublicKey 1 bit', 1000, async () => {
-  //   pubHex = await ed.getPublicKey(priv1);
-  // });
+  const priv1 = toBytes(2n);
+  let pubHex;
+  await mark('getPublicKey 1 bit', 1000, async () => {
+    pubHex = await ed.getPublicKey(priv1);
+  });
 
-  // const priv2 = toBytes(0x9d61b19deffd5a60ba844af492ec2cc44449c5697b326919703bac031cae7f60n);
-  // await mark('getPublicKey(utils.randomPrivateKey())', 1000, async () => {
-  //   pubHex = await ed.getPublicKey(priv2);
-  // });
+  const priv2 = toBytes(0x9d61b19deffd5a60ba844af492ec2cc44449c5697b326919703bac031cae7f60n);
+  await mark('getPublicKey(utils.randomPrivateKey())', 1000, async () => {
+    pubHex = await ed.getPublicKey(priv2);
+  });
 
-  // const msg = toBytes('deadbeefdeadbeefdeadbeefdeadbeefdeadbeef');
-  // let sigHex;
-  // await mark('sign', 1000, async () => {
-  //   sigHex = await ed.sign(msg, priv2);
-  // });
+  const msg = toBytes('deadbeefdeadbeefdeadbeefdeadbeefdeadbeef');
+  let sigHex;
+  await mark('sign', 1000, async () => {
+    sigHex = await ed.sign(msg, priv2);
+  });
 
-  // await mark('verify', 1000, async () => {
-  //   const verified = await ed.verify(sigHex, msg, pubHex);
-  // });
+  await mark('verify', 1000, async () => {
+    const verified = await ed.verify(sigHex, msg, pubHex);
+  });
 
-  // const sig = ed.SignResult.fromHex(sigHex);
-  // const pub = ed.Point.fromHex(pubHex);
-  // await mark('verifyBatch', 1000, async () => {
-  //   const verified = await ed.verify(sig, msg, pub);
-  // });
+  const sig = ed.SignResult.fromHex(sigHex);
+  const pub = ed.Point.fromHex(pubHex);
+  await mark('verifyBatch', 1000, async () => {
+    const verified = await ed.verify(sig, msg, pub);
+  });
 
   function arrayToHex(bytes) {
     return Array.from(bytes)
@@ -96,13 +96,6 @@ run(async () => {
   ])
   await mark('ristretto255#fromHash', 2000, () => {
     ExtendedPoint.fromRistrettoHash(hash);
-  });
-  await mark('ristretto255 random', 2000, () => {
-    ExtendedPoint.fromRistrettoHash(ed.utils.randomPrivateKey(64));
-  });
-  const ep = ExtendedPoint.fromRistrettoHash(hash);
-  await mark('ristretto255#scalarMult', 2000, () => {
-    ep.multiplyUnsafe(2n ** 250n - 18n);
   });
   await mark('ristretto255 round', 2000, () => {
     let B = ExtendedPoint.BASE;

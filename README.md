@@ -29,8 +29,6 @@ Benchmarks done with 2.9Ghz Coffee Lake.
     sign x 2042 ops/sec @ 489μs/op
     verify x 417 ops/sec @ 2ms/op
     ristretto255#fromHash x 3377 ops/sec @ 296μs/op
-    ristretto255 random x 3393 ops/sec @ 294μs/op
-    ristretto255#scalarMult x 475 ops/sec @ 2ms/op
 
 ## Usage
 
