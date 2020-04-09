@@ -17,10 +17,10 @@ declare class ExtendedPoint {
     y: bigint;
     z: bigint;
     t: bigint;
+    constructor(x: bigint, y: bigint, z: bigint, t: bigint);
     static BASE: ExtendedPoint;
     static ZERO: ExtendedPoint;
     static fromAffine(p: Point): ExtendedPoint;
-    constructor(x: bigint, y: bigint, z: bigint, t: bigint);
     static fromAffineBatch(points: ExtendedPoint[]): Point[];
     static fromUncompleteExtended(x: bigint, y: bigint, z: bigint, t: bigint): ExtendedPoint;
     static fromRistrettoHash(hash: Uint8Array): ExtendedPoint;

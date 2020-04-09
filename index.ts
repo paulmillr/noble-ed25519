@@ -58,7 +58,8 @@ type Signature = Uint8Array | string | SignResult;
 const ENCODING_LENGTH = 32;
 const P = CURVE.P;
 const PRIME_ORDER = CURVE.n;
-const I = powMod(2n, (P - 1n) / 4n, P);
+const P_DIV8_3 = (P + 3n) / 8n;
+const I = powMod(2n, (CURVE.P + 1n) / 4n, P);
 
 // Default Point works in default aka affine coordinates: (x, y)
 // Extended Point works in extended coordinates: (x, y, z, t) ∋ (x=x/z, y=y/z, t=xy)
@@ -322,7 +323,8 @@ class Point {
     }
     const sqrY = y * y;
     const sqrX = mod((sqrY - 1n) * invert(d * sqrY + 1n), P);
-    let x = pow_2_252_3(sqrX);
+    // let x = pow_2_252_3(sqrX);
+    let x = powMod(sqrX, P_DIV8_3, P);
     if (mod(x * x - sqrX) !== 0n) {
       x = mod(x * I);
     }
@@ -653,7 +655,6 @@ function egcd(a: bigint, b: bigint) {
 
 export function invert(number: bigint, modulo: bigint = P) {
   if (number === 0n || modulo <= 0n) {
-    console.log(number);
     throw new Error('invert: expected positive integers');
   }
   let [gcd, x] = egcd(mod(number, modulo), modulo);
@@ -687,35 +688,37 @@ function invertSqrt(t: bigint) {
   return sqrtRatio(1n, t);
 }
 
-function pow2k(t: bigint, power: bigint) {
+function powMod2(t: bigint, power: bigint) {
   let res = t;
   while (power-- > 0n) {
-    res = res * res;
+    res *= res;
     res %= P;
   }
   return res;
 }
+
+// Pow to P_DIV4_1.
 function pow_2_252_3(t: bigint) {
   t = mod(t);
   const t0 = (t * t) % P;
   const t1 = t0 ** 4n % P;
   const t2 = (t * t1) % P;
   const t3 = (t0 * t2) % P;
-  const t4 = t3 ** 2n;
+  const t4 = t3 ** 2n % P;
   const t5 = (t2 * t4) % P;
-  const t6 = pow2k(t5, 5n);
+  const t6 = powMod2(t5, 5n);
   const t7 = (t6 * t5) % P;
-  const t8 = pow2k(t7, 10n);
+  const t8 = powMod2(t7, 10n);
   const t9 = (t8 * t7) % P;
-  const t10 = pow2k(t9, 20n);
+  const t10 = powMod2(t9, 20n);
   const t11 = (t10 * t9) % P;
-  const t12 = pow2k(t11, 10n);
+  const t12 = powMod2(t11, 10n);
   const t13 = (t12 * t7) % P;
-  const t14 = pow2k(t13, 50n);
+  const t14 = powMod2(t13, 50n);
   const t15 = (t14 * t13) % P;
-  const t16 = pow2k(t15, 100n);
+  const t16 = powMod2(t15, 100n);
   const t17 = (t16 * t15) % P;
-  const t18 = pow2k(t17, 50n);
+  const t18 = powMod2(t17, 50n);
   const t19 = (t18 * t13) % P;
 
   // t19 = t ** (2 ** 250 - 1)

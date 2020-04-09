@@ -77,7 +77,7 @@ describe('ed25519', () => {
     await fc.assert(
       fc.asyncProperty(
         fc.hexaString(1, 32),
-        fc.bigInt(1n, ed25519.CURVE.n),
+        fc.bigInt(2n, ed25519.CURVE.n),
         async (message: string, privateKey: bigint) => {
           const publicKey = await ed25519.getPublicKey(privateKey);
           const signature = await ed25519.sign(toBytes(message), toBytes(privateKey));
@@ -273,7 +273,7 @@ describe('rfc8032 vectors', () => {
   });
 });
 
-describe.only('ristretto255', () => {
+describe('ristretto255', () => {
   const {ExtendedPoint} = ed25519;
   async function sha512(message: Uint8Array) {
     const hash = createHash('sha512');

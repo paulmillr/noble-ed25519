@@ -2,9 +2,20 @@
 
 [ed25519](https://en.wikipedia.org/wiki/EdDSA), an elliptic curve that could be used for assymetric encryption and EDDSA signature scheme.
 
-[Very fast](#speed), algorithmically resistant to timing attacks.
+Very fast, algorithmically resistant to timing attacks.
 
 Includes [ristretto255](https://ristretto.group) support. Ristretto is a technique for constructing prime order elliptic curve groups with non-malleable encodings.
+
+## Speed
+
+Benchmarks done with 2.9Ghz Coffee Lake.
+
+    getPublicKey x 4233 ops/sec @ 236μs/op
+    sign x 2042 ops/sec @ 489μs/op
+    verify x 417 ops/sec @ 2ms/op
+    ristretto255#fromHash x 3294 ops/sec @ 303μs/op
+    ristretto255 getRandom x 3263 ops/sec @ 306μs/op
+    ristretto255#scalarMult x 475 ops/sec @ 2ms/op
 
 ### This library belongs to *noble* crypto
 
@@ -159,14 +170,6 @@ utils.precompute(W, point);
 ```
 
 There are additional `ristretto255` helpers in `ristretto255.js` file.
-
-## Speed
-
-Measured with 2.9Ghz Coffee Lake.
-
-    getPublicKey x 4016 ops/sec @ 248μs/op
-    sign x 1914 ops/sec @ 522μs/op
-    verify x 384 ops/sec @ 2ms/op
 
 ## Security
 
