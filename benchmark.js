@@ -22,51 +22,32 @@ run(async () => {
     return array;
   }
 
-  const priv1 = toBytes(2n);
-  let pubHex;
-  await mark('getPublicKey 1 bit', 1000, async () => {
-    pubHex = await ed.getPublicKey(priv1);
-  });
+  // const priv1 = toBytes(2n);
+  // let pubHex;
+  // await mark('getPublicKey 1 bit', 1000, async () => {
+  //   pubHex = await ed.getPublicKey(priv1);
+  // });
 
-  const priv2 = toBytes(0x9d61b19deffd5a60ba844af492ec2cc44449c5697b326919703bac031cae7f60n);
-  await mark('getPublicKey', 1000, async () => {
-    pubHex = await ed.getPublicKey(priv2);
-  });
+  // const priv2 = toBytes(0x9d61b19deffd5a60ba844af492ec2cc44449c5697b326919703bac031cae7f60n);
+  // await mark('getPublicKey', 1000, async () => {
+  //   pubHex = await ed.getPublicKey(priv2);
+  // });
 
-  const msg = toBytes('deadbeefdeadbeefdeadbeefdeadbeefdeadbeef');
-  let sigHex;
-  await mark('sign', 1000, async () => {
-    sigHex = await ed.sign(msg, priv2);
-  });
+  // const msg = toBytes('deadbeefdeadbeefdeadbeefdeadbeefdeadbeef');
+  // let sigHex;
+  // await mark('sign', 1000, async () => {
+  //   sigHex = await ed.sign(msg, priv2);
+  // });
 
-  await mark('verify', 1000, async () => {
-    const verified = await ed.verify(sigHex, msg, pubHex);
-  });
+  // await mark('verify', 1000, async () => {
+  //   const verified = await ed.verify(sigHex, msg, pubHex);
+  // });
 
-  const sig = ed.SignResult.fromHex(sigHex);
-  const pub = ed.Point.fromHex(pubHex);
-  await mark('verifyBatch', 1000, async () => {
-    const verified = await ed.verify(sig, msg, pub);
-  });
-
-  const {FieldElement} = rs;
-  const num = 2n ** 255n - 19n - 10n;
-  // const num = 10n;
-  const f1 = new FieldElement(num);
-  // console.log('init', f1, num);
-  console.log(f1.invert());
-  console.log(f1.invertF());
-  console.log(ed.modInverse(num));
-  let res = undefined;
-  mark('FieldElement: pow inverse', 10000, () => {
-    return res = f1.invert();
-  });
-  mark('FieldElement: gcd inverse', 10000, () => {
-    return res = f1.invertF();
-  });
-  mark('bigint: gcd inverse', 10000, () => {
-    return res = ed.modInverse(num);
-  });
+  // const sig = ed.SignResult.fromHex(sigHex);
+  // const pub = ed.Point.fromHex(pubHex);
+  // await mark('verifyBatch', 1000, async () => {
+  //   const verified = await ed.verify(sig, msg, pub);
+  // });
 
   function arrayToHex(bytes) {
     return Array.from(bytes)
@@ -104,7 +85,7 @@ run(async () => {
     '46376b80f409b29dc2b5f6f0c52591990896e5716f41477cd30085ab7f10301e',
     'e0c418f7c8d9c4cdd7395b93ea124f3ad99021bb681dfc3302a9d99a2e53e64e'
   ];
-  mark('ristretto255', 1000, () => {
+  mark('ristretto255', 2000, () => {
     const {BASE_POINT, RistrettoPoint} = r;
     let B = BASE_POINT;
     let P = RistrettoPoint.ZERO;

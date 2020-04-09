@@ -49,23 +49,43 @@ function modInverse(number, modulo = exports.P) {
     return mod(x, modulo);
 }
 exports.modInverse = modInverse;
-function select(t, other, choice) {
-    return choice ? mod(t) : mod(other);
-}
-function condNegative(t, choice) {
-    return select(mod(-t), t, choice);
-}
 function invertSqrt(t) {
     return sqrtRatio(1n, t);
 }
 function pow2k(t, power) {
     let res = t;
-    while (power-- > 0) {
+    while (power-- > 0n) {
         res = res * res;
+        res %= exports.P;
     }
     return res;
 }
-function pow22501(t) {
+function pow_2_252_3(t) {
+    const t0 = t * t;
+    const t1 = t0 ** 4n;
+    const t2 = t * t1;
+    const t3 = t0 * t2;
+    const t4 = t3 ** 2n;
+    const t5 = t2 * t4;
+    const t6 = pow2k(t5, 5n);
+    const t7 = (t6 * t5) % exports.P;
+    const t8 = pow2k(t7, 10n);
+    const t9 = (t8 * t7) % exports.P;
+    const t10 = pow2k(t9, 20n);
+    const t11 = (t10 * t9) % exports.P;
+    const t12 = pow2k(t11, 10n);
+    const t13 = (t12 * t7) % exports.P;
+    const t14 = pow2k(t13, 50n);
+    const t15 = (t14 * t13) % exports.P;
+    const t16 = pow2k(t15, 100n);
+    const t17 = (t16 * t15) % exports.P;
+    const t18 = pow2k(t17, 50n);
+    const t19 = (t18 * t13) % exports.P;
+    const t20 = (t19 * t19) % exports.P;
+    const t21 = (t20 * t20 * t) % exports.P;
+    return t21;
+}
+function pow_2_252_3_fast(t) {
     const t0 = mod(t * t);
     const t1 = mod(t0 ** 4n);
     const t2 = mod(t * t1);
@@ -118,24 +138,23 @@ function pow22501(t) {
     }
     t19 *= t13;
     t19 %= exports.P;
-    return [t19, t3];
-}
-function powP58(t) {
-    const [t19] = pow22501(t);
-    return pow2k(t19, 2n) * t;
+    let t20 = (t19 * t19) % exports.P;
+    let t21 = (t20 * t20 * t) % exports.P;
+    return t21;
 }
 function sqrtRatio(t, v) {
     const v3 = mod(v * v * v);
     const v7 = mod(v3 * v3 * v);
-    let r = mod(powP58(t * v7) * t * v3);
+    let r = mod(pow_2_252_3_fast(t * v7) * t * v3);
     const check = mod(r * r * v);
     const i = SQRT_M1;
     const correctSignSqrt = check === t;
     const flippedSignSqrt = check === mod(-t);
     const flippedSignSqrtI = check === mod(mod(-t) * i);
     const rPrime = mod(SQRT_M1 * r);
-    r = select(rPrime, r, flippedSignSqrt || flippedSignSqrtI);
-    r = condNegative(r, isNegative(r));
+    r = flippedSignSqrt || flippedSignSqrtI ? rPrime : r;
+    if (isNegative(r))
+        r = mod(-r);
     const isNotZeroSquare = correctSignSqrt || flippedSignSqrt;
     return { isNotZeroSquare, value: mod(r) };
 }
@@ -344,18 +363,6 @@ class ProjectiveCached {
     static fromP3(point) {
         return new ProjectiveCached(mod(point.y + point.x), mod(point.y - point.x), point.z, mod(point.T * D2));
     }
-    select(other, cond) {
-        const yPlusX = select(this.yPlusX, other.yPlusX, cond);
-        const yMinusX = select(this.yMinusX, other.yMinusX, cond);
-        const z = select(this.z, other.z, cond);
-        const T2d = select(this.T2d, other.T2d, cond);
-        return new ProjectiveCached(yPlusX, yMinusX, z, T2d);
-    }
-    condNegative(cond) {
-        const [yPlusX, yMinusX] = condSwap(this.yPlusX, this.yMinusX, cond);
-        const T2d = condNegative(this.T2d, cond);
-        return new ProjectiveCached(yPlusX, yMinusX, this.z, T2d);
-    }
 }
 exports.ProjectiveCached = ProjectiveCached;
 class AffineCached {
@@ -379,17 +386,6 @@ class AffineCached {
     }
     static ZERO() {
         return new AffineCached(1n, 1n, 0n);
-    }
-    select(other, cond) {
-        const yPlusX = select(this.yPlusX, other.yPlusX, cond);
-        const yMinusX = select(this.yMinusX, other.yMinusX, cond);
-        const T2d = select(this.T2d, other.T2d, cond);
-        return new AffineCached(yPlusX, yMinusX, T2d);
-    }
-    condNegative(cond) {
-        const [yPlusX, yMinusX] = condSwap(this.yPlusX, this.yMinusX, cond);
-        const T2d = condNegative(this.T2d, cond);
-        return new AffineCached(yPlusX, yMinusX, T2d);
     }
 }
 exports.AffineCached = AffineCached;
@@ -507,11 +503,10 @@ class RistrettoPoint {
         let c = mod(-1n);
         const D = mod((c - CURVE.d * r) * mod(r + CURVE.d));
         let { isNotZeroSquare, value: S } = sqrtRatio(NS, D);
-        let sPrime = S * r0;
-        const sPrimeIsPos = !isNegative(sPrime);
-        sPrime = condNegative(sPrime, sPrimeIsPos);
-        S = select(S, sPrime, isNotZeroSquare);
-        c = select(c, r, isNotZeroSquare);
+        let sPrime = mod(S * r0);
+        sPrime = isNegative(sPrime) ? sPrime : mod(-sPrime);
+        S = isNotZeroSquare ? S : sPrime;
+        c = isNotZeroSquare ? c : r;
         const NT = c * (r - 1n) * dMinusOneSq - D;
         const sSquared = S * S;
         const projective = new ProjectiveP3(mod((S + S) * D), mod(1n - sSquared), mod(NT * SQRT_AD_MINUS_ONE), mod(1n + sSquared));
@@ -533,8 +528,8 @@ class RistrettoPoint {
         const Dx = I * u2;
         const Dy = I * Dx * v;
         let x = mod((s + s) * Dx);
-        const xIsNegative = BigInt(isNegative(x));
-        x = condNegative(x, xIsNegative);
+        if (isNegative(x))
+            x = mod(-x);
         const y = mod(u1 * Dy);
         const t = mod(x * y);
         if (!isNotZeroSquare || isNegative(t) || y === 0n) {
@@ -555,14 +550,14 @@ class RistrettoPoint {
         const iY = mod(y * SQRT_M1);
         const enchantedDenominator = mod(i1 * INVSQRT_A_MINUS_D);
         const isRotated = BigInt(isNegative(T * invertedZ));
-        x = select(iY, x, isRotated);
-        y = select(iX, y, isRotated);
-        invertedDenominator = select(enchantedDenominator, i2, isRotated);
-        const yIsNegative = BigInt(isNegative(x * invertedZ));
-        y = condNegative(y, yIsNegative);
+        x = isRotated ? iY : x;
+        y = isRotated ? iX : y;
+        invertedDenominator = isRotated ? enchantedDenominator : i2;
+        if (isNegative(x * invertedZ))
+            y = mod(-y);
         let s = mod((z - y) * invertedDenominator);
-        const sIsNegative = BigInt(isNegative(s));
-        s = condNegative(s, sIsNegative);
+        if (isNegative(s))
+            s = mod(-s);
         return toBytesLE(s, ENCODING_LENGTH);
     }
     add(other) {

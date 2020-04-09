@@ -413,7 +413,7 @@ describe.only('ristretto255', () => {
       'e0c418f7c8d9c4cdd7395b93ea124f3ad99021bb681dfc3302a9d99a2e53e64e'
     ];
     let B = BASE_POINT;
-    let P = RistrettoPoint.one();
+    let P = RistrettoPoint.ZERO;
     for (const encoded of encodingsOfSmallMultiples) {
       expect(arrayToHex(P.toBytes())).toBe(encoded);
       expect(arrayToHex(RistrettoPoint.fromBytes(hexToArray(encoded)).toBytes())).toBe(encoded);

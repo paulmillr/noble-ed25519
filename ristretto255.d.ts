@@ -55,8 +55,6 @@ export declare class ProjectiveCached {
     static ZERO(): ProjectiveCached;
     static fromP3(point: ProjectiveP3): ProjectiveCached;
     constructor(yPlusX: bigint, yMinusX: bigint, z: bigint, T2d: bigint);
-    select(other: ProjectiveCached, cond: 0 | 1 | 0n | 1n | boolean): ProjectiveCached;
-    condNegative(cond: 0 | 1 | 0n | 1n | boolean): ProjectiveCached;
 }
 export declare class AffineCached {
     yPlusX: bigint;
@@ -65,8 +63,6 @@ export declare class AffineCached {
     static fromP3(point: ProjectiveP3): AffineCached;
     static ZERO(): AffineCached;
     constructor(yPlusX: bigint, yMinusX: bigint, T2d: bigint);
-    select(other: AffineCached, cond: 0 | 1 | 0n | 1n | boolean): AffineCached;
-    condNegative(cond: 0 | 1 | 0n | 1n | boolean): AffineCached;
 }
 export declare let sha512: (a: Uint8Array) => Promise<Uint8Array>;
 export declare function fromBytesLE(bytes: Uint8Array): bigint;

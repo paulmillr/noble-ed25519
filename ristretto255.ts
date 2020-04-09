@@ -84,15 +84,6 @@ export function modInverse(number: bigint, modulo: bigint = P) {
   return mod(x, modulo);
 }
 
-// Select sets v to a if cond == 1, and to b if cond == 0.
-function select(t: bigint, other: bigint, choice: 0n | 1n | 0 | 1 | boolean) {
-  return choice ? mod(t) : mod(other);
-}
-
-function condNegative(t: bigint, choice: 0n | 1n | 0 | 1 | boolean) {
-  return select(mod(-t), t, choice);
-}
-
 // Attempt to compute `sqrt(1/self)` in constant time.
 function invertSqrt(t: bigint) {
   return sqrtRatio(1n, t);
@@ -100,13 +91,41 @@ function invertSqrt(t: bigint) {
 
 function pow2k(t: bigint, power: bigint) {
   let res = t;
-  while (power-- > 0) {
+  while (power-- > 0n) {
     res = res * res;
+    res %= P;
   }
   return res;
 }
+function pow_2_252_3(t: bigint) {
+  const t0 = t * t;
+  const t1 = t0 ** 4n;
+  const t2 = t * t1;
+  const t3 = t0 * t2;
+  const t4 = t3 ** 2n;
+  const t5 = t2 * t4;
+  const t6 = pow2k(t5, 5n);
+  const t7 = (t6 * t5) % P;
+  const t8 = pow2k(t7, 10n);
+  const t9 = (t8 * t7) % P;
+  const t10 = pow2k(t9, 20n);
+  const t11 = (t10 * t9) % P;
+  const t12 = pow2k(t11, 10n);
+  const t13 = (t12 * t7) % P;
+  const t14 = pow2k(t13, 50n);
+  const t15 = (t14 * t13) % P;
+  const t16 = pow2k(t15, 100n);
+  const t17 = (t16 * t15) % P;
+  const t18 = pow2k(t17, 50n);
+  const t19 = (t18 * t13) % P;
 
-function pow22501(t: bigint) {
+  // t19 = t ** (2 ** 250 - 1)
+  const t20 = (t19 * t19) % P;
+  const t21 = (t20 * t20 * t) % P;
+  return t21;
+}
+
+function pow_2_252_3_fast(t: bigint) {
   const t0 = mod(t * t);
   const t1 = mod(t0 ** 4n);
   const t2 = mod(t * t1);
@@ -159,12 +178,11 @@ function pow22501(t: bigint) {
   }
   t19 *= t13;
   t19 %= P;
-  return [t19, t3];
-}
 
-function powP58(t: bigint) {
-  const [t19] = pow22501(t);
-  return pow2k(t19, 2n) * t;
+  // t19 = t ** (2 ** 250 - 1)
+  let t20 = (t19 * t19) % P;
+  let t21 = (t20 * t20 * t) % P;
+  return t21;
 }
 
 export function sqrtRatio(t: bigint, v: bigint) {
@@ -193,15 +211,15 @@ export function sqrtRatio(t: bigint, v: bigint) {
   // If v is zero, r is also zero.
   const v3 = mod(v * v * v);
   const v7 = mod(v3 * v3 * v);
-  let r = mod(powP58(t * v7) * t * v3);
+  let r = mod(pow_2_252_3_fast(t * v7) * t * v3);
   const check = mod(r * r * v);
   const i = SQRT_M1;
   const correctSignSqrt = check === t;
   const flippedSignSqrt = check === mod(-t);
   const flippedSignSqrtI = check === mod(mod(-t) * i);
   const rPrime = mod(SQRT_M1 * r);
-  r = select(rPrime, r, flippedSignSqrt || flippedSignSqrtI);
-  r = condNegative(r, isNegative(r));
+  r = flippedSignSqrt || flippedSignSqrtI ? rPrime : r;
+  if (isNegative(r)) r = mod(-r);
   const isNotZeroSquare = correctSignSqrt || flippedSignSqrt;
   return { isNotZeroSquare, value: mod(r) };
 }
@@ -316,7 +334,6 @@ export class ProjectiveP3 {
       mod(point.x * point.y)
     );
   }
-
 
   constructor(public x: bigint, public y: bigint, public z: bigint, public T: bigint) {
     this.x = mod(this.x);
@@ -458,22 +475,6 @@ export class ProjectiveCached {
     public z: bigint,
     public T2d: bigint
   ) {}
-
-  // Select sets v to a if cond == 1 and to b if cond == 0.
-  select(other: ProjectiveCached, cond: 0 | 1 | 0n | 1n | boolean) {
-    const yPlusX = select(this.yPlusX, other.yPlusX, cond);
-    const yMinusX = select(this.yMinusX, other.yMinusX, cond);
-    const z = select(this.z, other.z, cond);
-    const T2d = select(this.T2d, other.T2d, cond);
-    return new ProjectiveCached(yPlusX, yMinusX, z, T2d);
-  }
-
-  // Select sets v to a if cond == 1 and to b if cond == 0.
-  condNegative(cond: 0 | 1 | 0n | 1n | boolean) {
-    const [yPlusX, yMinusX] = condSwap(this.yPlusX, this.yMinusX, cond);
-    const T2d = condNegative(this.T2d, cond);
-    return new ProjectiveCached(yPlusX, yMinusX, this.z, T2d);
-  }
 }
 
 export class AffineCached {
@@ -496,20 +497,6 @@ export class AffineCached {
     this.yPlusX = mod(this.yPlusX);
     this.yMinusX = mod(this.yMinusX);
     this.T2d = mod(this.T2d);
-  }
-
-  // Select sets v to a if cond == 1 and to b if cond == 0.
-  select(other: AffineCached, cond: 0 | 1 | 0n | 1n | boolean) {
-    const yPlusX = select(this.yPlusX, other.yPlusX, cond);
-    const yMinusX = select(this.yMinusX, other.yMinusX, cond);
-    const T2d = select(this.T2d, other.T2d, cond);
-    return new AffineCached(yPlusX, yMinusX, T2d);
-  }
-
-  condNegative(cond: 0 | 1 | 0n | 1n | boolean) {
-    const [yPlusX, yMinusX] = condSwap(this.yPlusX, this.yMinusX, cond);
-    const T2d = condNegative(this.T2d, cond);
-    return new AffineCached(yPlusX, yMinusX, T2d);
   }
 }
 
@@ -634,11 +621,10 @@ export class RistrettoPoint {
     let c = mod(-1n);
     const D = mod((c - CURVE.d * r) * mod(r + CURVE.d));
     let { isNotZeroSquare, value: S } = sqrtRatio(NS, D);
-    let sPrime = S * r0;
-    const sPrimeIsPos = !isNegative(sPrime);
-    sPrime = condNegative(sPrime, sPrimeIsPos);
-    S = select(S, sPrime, isNotZeroSquare);
-    c = select(c, r, isNotZeroSquare);
+    let sPrime = mod(S * r0);
+    sPrime = isNegative(sPrime) ? sPrime : mod(-sPrime);
+    S = isNotZeroSquare ? S : sPrime;
+    c = isNotZeroSquare ? c : r;
     const NT = c * (r - 1n) * dMinusOneSq - D;
     const sSquared = S * S;
     const projective = new ProjectiveP3(
@@ -678,8 +664,7 @@ export class RistrettoPoint {
     const Dy = I * Dx * v; // 1/u2
     // x == | 2s/sqrt(v) | == + sqrt(4s²/(ad(1+as²)² - (1-as²)²))
     let x = mod((s + s) * Dx);
-    const xIsNegative = BigInt(isNegative(x)) as 0n | 1n;
-    x = condNegative(x, xIsNegative);
+    if (isNegative(x)) x = mod(-x);
     // y == (1-as²)/(1+as²)
     const y = mod(u1 * Dy);
     // t == ((1+as²) sqrt(4s²/(ad(1+as²)² - (1-as²)²)))/(1-as²)
@@ -707,14 +692,12 @@ export class RistrettoPoint {
     const iY = mod(y * SQRT_M1);
     const enchantedDenominator = mod(i1 * INVSQRT_A_MINUS_D);
     const isRotated = BigInt(isNegative(T * invertedZ)) as 0n | 1n;
-    x = select(iY, x, isRotated);
-    y = select(iX, y, isRotated);
-    invertedDenominator = select(enchantedDenominator, i2, isRotated);
-    const yIsNegative = BigInt(isNegative(x * invertedZ)) as 0n | 1n;
-    y = condNegative(y, yIsNegative);
+    x = isRotated ? iY : x;
+    y = isRotated ? iX : y;
+    invertedDenominator = isRotated ? enchantedDenominator : i2;
+    if (isNegative(x * invertedZ)) y = mod(-y);
     let s = mod((z - y) * invertedDenominator);
-    const sIsNegative = BigInt(isNegative(s)) as 0n | 1n;
-    s = condNegative(s, sIsNegative);
+    if (isNegative(s)) s = mod(-s);
     return toBytesLE(s, ENCODING_LENGTH);
   }
 
@@ -744,108 +727,3 @@ export const BASE_POINT = new RistrettoPoint(
     46827403850823179245072216630277197565144205554125654976674165829533817101731n
   )
 );
-
-// Commented out signature implementation.
-// ristretto255 doesn't specify details for ecdsa/eddsa signatures.
-// For the future work.
-
-// type PrivateKey = Uint8Array | string | bigint | number;
-// type PublicKey = Uint8Array | string | RistrettoPoint;
-// type Signature = Uint8Array | string | SignatureResult;
-// type Bytes = Uint8Array | string;
-
-// const ENCODING_LENGTH = 32;
-// class SignatureResult {
-//   constructor(public r: RistrettoPoint, public s: bigint) {}
-
-//   static fromBytes(hex: Bytes) {
-//     hex = typeof hex === "string" ? hexToBytes(hex) : hex;
-//     const r = RistrettoPoint.fromBytes(hex.slice(0, 32));
-//     const s = fromBytesLE(hex.slice(32));
-//     return new SignatureResult(r, s);
-//   }
-
-//   toBytes() {
-//     const sBytes = numberToBytes(this.s).reverse();
-//     const rBytes = this.r.toBytes();
-//     return concatTypedArrays(rBytes, sBytes);
-//   }
-// }
-
-// function getPrivateBytes(privateKey: bigint) {
-//   return sha512(numberToBytes(privateKey));
-// }
-
-// function encodePrivate(privateBytes: Uint8Array) {
-//   const last = ENCODING_LENGTH - 1;
-//   const head = privateBytes.slice(0, ENCODING_LENGTH);
-//   head[0] &= 248;
-//   head[last] &= 127;
-//   head[last] |= 64;
-//   return fromBytesLE(head);
-// }
-
-// function normalizeHash(hash: Bytes) {
-//   return typeof hash === "string" ? hexToBytes(hash) : hash;
-// }
-
-// function normalizePublicKey(publicKey: PublicKey) {
-//   if (publicKey instanceof RistrettoPoint) {
-//     return publicKey;
-//   }
-//   publicKey = normalizeHash(publicKey);
-//   return RistrettoPoint.fromBytes(publicKey);
-// }
-
-// function normalizeSignature(signature: Signature) {
-//   if (signature instanceof SignatureResult) {
-//     return signature;
-//   }
-//   signature = normalizeHash(signature);
-//   return SignatureResult.fromBytes(signature);
-// }
-
-// async function hashNumber(...args: Uint8Array[]) {
-//   const messageArray = concatTypedArrays(...args);
-//   const hash = await sha512(messageArray);
-//   const value = fromBytesLE(hash);
-//   return FieldElement.mod(value, PRIME_ORDER);
-// }
-
-// export async function getPublicKey(privateKey: PrivateKey, shouldBeRaw = false) {
-//   const multiplier = toBigInt(privateKey);
-//   const privateBytes = await getPrivateBytes(multiplier);
-//   const privateInt = encodePrivate(privateBytes);
-//   const publicKey = exports.BASE_POINT.multiply(privateInt);
-//   return shouldBeRaw ? publicKey : publicKey.toBytes();
-// }
-
-// export async function sign(message: Bytes, privateKey: PrivateKey) {
-//   privateKey = toBigInt(privateKey);
-//   message = normalizeHash(message);
-//   const [publicKey, privateBytes] = await Promise.all([
-//     getPublicKey(privateKey, true),
-//     getPrivateBytes(privateKey)
-//   ]);
-//   const privatePrefix = privateBytes.slice(ENCODING_LENGTH);
-//   const r = await hashNumber(privatePrefix, message);
-//   const R = B.multiply(r);
-//   const h = await hashNumber(R.toBytes(), publicKey.toBytes(), message);
-//   const S = FieldElement.mod(r + h * encodePrivate(privateBytes), PRIME_ORDER);
-//   const signature = new SignatureResult(R, S);
-//   return signature.toBytes();
-// }
-
-// export async function verify(
-//   signature: Signature,
-//   message: Bytes,
-//   publicKey: PublicKey
-// ) {
-//   message = normalizeHash(message);
-//   publicKey = normalizePublicKey(publicKey);
-//   signature = normalizeSignature(signature);
-//   const h = await hashNumber(signature.r.toBytes(), publicKey.toBytes(), message);
-//   const S = BASE_POINT.multiply(signature.s);
-//   const R = signature.r.add(mod(publicKey * h));
-//   return S.equals(R);
-// }
