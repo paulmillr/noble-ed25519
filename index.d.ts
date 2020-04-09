@@ -75,5 +75,6 @@ export declare function verify(signature: Signature, hash: Hex, publicKey: PubKe
 export declare const utils: {
     randomPrivateKey: (bytesLength?: number) => Uint8Array;
     sha512: (message: Uint8Array) => Promise<Uint8Array>;
+    TORSION_SUBGROUP: string[];
     precompute(windowSize?: number, point?: Point): Point;
 };

@@ -650,6 +650,7 @@ Point.BASE._setWindowSize(8);
 exports.utils = {
     randomPrivateKey,
     sha512,
+    TORSION_SUBGROUP,
     precompute(windowSize = 8, point = Point.BASE) {
         const cached = point.equals(Point.BASE) ? point : new Point(point.x, point.y);
         cached._setWindowSize(windowSize);
