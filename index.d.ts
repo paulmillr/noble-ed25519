@@ -22,14 +22,30 @@ declare class ExtendedPoint {
     static fromAffine(p: Point): ExtendedPoint;
     constructor(x: bigint, y: bigint, z: bigint, t: bigint);
     static batchAffine(points: ExtendedPoint[]): Point[];
+    static fromUncompleteExtended(x: bigint, y: bigint, z: bigint, t: bigint): ExtendedPoint;
     equals(other: ExtendedPoint): boolean;
     negate(): ExtendedPoint;
     double(): ExtendedPoint;
     add(other: ExtendedPoint): ExtendedPoint;
+    subtract(other: ExtendedPoint): ExtendedPoint;
     multiplyUnsafe(scalar: bigint): ExtendedPoint;
     toAffine(invZ?: bigint): Point;
 }
-export declare class Point {
+declare class RistrettoPoint {
+    private point;
+    static BASE: RistrettoPoint;
+    static ZERO: RistrettoPoint;
+    static fromHash(hash: Uint8Array): RistrettoPoint;
+    private static elligatorRistrettoFlavor;
+    static fromBytes(bytes: Uint8Array): RistrettoPoint;
+    constructor(point: ExtendedPoint);
+    toBytes(): Uint8Array;
+    equals(other: RistrettoPoint): boolean;
+    add(other: RistrettoPoint): RistrettoPoint;
+    subtract(other: RistrettoPoint): RistrettoPoint;
+    multiplyUnsafe(n: bigint): RistrettoPoint;
+}
+declare class Point {
     x: bigint;
     y: bigint;
     static BASE: Point;
@@ -50,8 +66,7 @@ export declare class Point {
     multiply(scalar: bigint, isAffine: false): ExtendedPoint;
     multiply(scalar: bigint, isAffine?: true): Point;
 }
-export { ExtendedPoint };
-export declare class SignResult {
+declare class SignResult {
     r: Point;
     s: bigint;
     constructor(r: Point, s: bigint);
@@ -59,6 +74,7 @@ export declare class SignResult {
     toRawBytes(): Uint8Array;
     toHex(): string;
 }
+export { ExtendedPoint, RistrettoPoint, Point, SignResult };
 export declare function modInverse(number: bigint, modulo?: bigint): bigint;
 export declare function getPublicKey(privateKey: Uint8Array): Promise<Uint8Array>;
 export declare function getPublicKey(privateKey: string): Promise<string>;
@@ -68,5 +84,6 @@ export declare function sign(hash: string, privateKey: Hex): Promise<string>;
 export declare function verify(signature: Signature, hash: Hex, publicKey: PubKey): Promise<boolean>;
 export declare const utils: {
     generateRandomPrivateKey: (bytesLength?: number) => Uint8Array;
+    sha512: (message: Uint8Array) => Promise<Uint8Array>;
     precompute(windowSize?: number, point?: Point): Point;
 };

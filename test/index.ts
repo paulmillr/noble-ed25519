@@ -3,7 +3,6 @@ import * as ed25519 from '../';
 import { readFileSync } from 'fs';
 import { join } from 'path';
 import { createHash } from 'crypto';
-import { RistrettoPoint, BASE_POINT } from '../ristretto255';
 
 const PRIVATE_KEY = toBytes('a665a45920422f9d417e4867ef');
 // const MESSAGE = ripemd160(new Uint8Array([97, 98, 99, 100, 101, 102, 103]));
@@ -275,6 +274,7 @@ describe('rfc8032 vectors', () => {
 });
 
 describe.only('ristretto255', () => {
+  const {RistrettoPoint} = ed25519;
   async function sha512(message: Uint8Array) {
     const hash = createHash('sha512');
     hash.update(message);
@@ -412,7 +412,7 @@ describe.only('ristretto255', () => {
       '46376b80f409b29dc2b5f6f0c52591990896e5716f41477cd30085ab7f10301e',
       'e0c418f7c8d9c4cdd7395b93ea124f3ad99021bb681dfc3302a9d99a2e53e64e'
     ];
-    let B = BASE_POINT;
+    let B = RistrettoPoint.BASE;
     let P = RistrettoPoint.ZERO;
     for (const encoded of encodingsOfSmallMultiples) {
       expect(arrayToHex(P.toBytes())).toBe(encoded);

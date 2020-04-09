@@ -1,6 +1,5 @@
 const {run, mark, logMem} = require('micro-bmark');
 let ed = require('.');
-let rs = require('./ristretto255');
 
 run(async () => {
   // warm-up
@@ -63,7 +62,6 @@ run(async () => {
     }
     return result;
   }
-  const r = require('./ristretto255');
   const encodingsOfSmallMultiples = [
     // This is the identity point
     '0000000000000000000000000000000000000000000000000000000000000000',
@@ -86,8 +84,8 @@ run(async () => {
     'e0c418f7c8d9c4cdd7395b93ea124f3ad99021bb681dfc3302a9d99a2e53e64e'
   ];
   mark('ristretto255', 2000, () => {
-    const {BASE_POINT, RistrettoPoint} = r;
-    let B = BASE_POINT;
+    const {RistrettoPoint} = ed;
+    let B = RistrettoPoint.BASE;
     let P = RistrettoPoint.ZERO;
     for (const encoded of encodingsOfSmallMultiples.slice(0, 2)) {
       arrayToHex(P.toBytes());

@@ -19,11 +19,23 @@ const CURVE = {
   h: 8n,
   // Base point (x, y) aka generator point
   Gx: 15112221349535400772501151409588531511454012693041857206046113283949847762202n,
-  Gy: 46316835694926478169428394003475163141307993866256225615783033603165251855960n
+  Gy: 46316835694926478169428394003475163141307993866256225615783033603165251855960n,
 };
 
+// Edwards `2*d` value, equal to `2*(-121665/121666) mod p`.
+const D2 = 16295367250680780974490674513165176452449235426866156013048779062215315747161n;
+
+// sqrt(-1 % P)
+const SQRT_M1 = 19681161376707505956807079304988542015446066515923890162744021073123829784752n;
+
+// `= 1/sqrt(a-d)`, where `a = -1 (mod p)`, `d` are the Edwards curve parameters.
+const INVSQRT_A_MINUS_D = 54469307008909316920995813868745141605393597292927456921205312896311721017578n;
+
+// `= sqrt(a*d - 1)`, where `a = -1 (mod p)`, `d` are the Edwards curve parameters.
+const SQRT_AD_MINUS_ONE = 25063068953384623474111414158702152701244531502492656460079210482610430750235n;
+
 // Cleaner output this way.
-export {CURVE};
+export { CURVE };
 
 // The 8-torsion subgroup ℰ8.
 // Those are "buggy" points, if you multiply them by 8, you'll receive Point.ZERO.
@@ -36,7 +48,7 @@ const TORSION_SUBGROUP = [
   'ecffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7f',
   '26e8958fc2b227b045c3f489f2ef98f0d5dfac05d3c63339b13802886d53fc85',
   '0000000000000000000000000000000000000000000000000000000000000000',
-  'c7176a703d4dd84fba3c0b760d10670f2a2053fa2c39ccc64ec7fd7792ac03fa'
+  'c7176a703d4dd84fba3c0b760d10670f2a2053fa2c39ccc64ec7fd7792ac03fa',
 ];
 
 type PrivKey = Uint8Array | string | bigint | number;
@@ -66,8 +78,12 @@ class ExtendedPoint {
   // modInverse on all of them. modInverse is very slow operation,
   // so this improves performance massively.
   static batchAffine(points: ExtendedPoint[]): Point[] {
-    const toInv = batchInverse(points.map(p => p.z));
+    const toInv = batchInverse(points.map((p) => p.z));
     return points.map((p, i) => p.toAffine(toInv[i]));
+  }
+
+  static fromUncompleteExtended(x: bigint, y: bigint, z: bigint, t: bigint) {
+    return new ExtendedPoint(mod(x * t), mod(y * z), mod(z * t), mod(x * y));
   }
 
   // Compare one point to another.
@@ -138,6 +154,10 @@ class ExtendedPoint {
     return new ExtendedPoint(X3, Y3, Z3, T3);
   }
 
+  subtract(other: ExtendedPoint): ExtendedPoint {
+    return this.add(other.negate());
+  }
+
   // Non-constant-time multiplication. Uses double-and-add algorithm.
   // It's faster, but should only be used when you don't care about
   // an exposed private key e.g. sig verification.
@@ -168,11 +188,139 @@ class ExtendedPoint {
   }
 }
 
+/**
+ * Ristretto is a technique for constructing prime order elliptic curve
+ * groups with non-malleable encodings. It extends Mike Hamburg's Decaf
+ * approach to cofactor elimination to support cofactor-8 curves such as Curve25519.
+ *
+ * In particular, this allows an existing Curve25519 library to implement
+ * a prime-order group with only a thin abstraction layer, and makes it
+ * possible for systems using Ed25519 signatures to be safely extended
+ * with zero-knowledge protocols, with no additional cryptographic assumptions
+ * and minimal code changes.
+ * https://ristretto.group
+ */
+class RistrettoPoint {
+  static BASE = new RistrettoPoint(ExtendedPoint.BASE);
+  static ZERO = new RistrettoPoint(ExtendedPoint.ZERO);
+
+  static fromHash(hash: Uint8Array) {
+    const r1 = arrayToNumberRst(hash.slice(0, ENCODING_LENGTH));
+    const R1 = this.elligatorRistrettoFlavor(r1);
+    const r2 = arrayToNumberRst(hash.slice(ENCODING_LENGTH, ENCODING_LENGTH * 2));
+    const R2 = this.elligatorRistrettoFlavor(r2);
+    return new RistrettoPoint(R1.add(R2));
+  }
+
+  // Computes the Ristretto Elligator map.
+  // This method is not public because it's just used for hashing
+  // to a point -- proper elligator support is deferred for now.
+  private static elligatorRistrettoFlavor(r0: bigint) {
+    const oneMinusDSq = mod(1n - CURVE.d ** 2n);
+    const dMinusOneSq = (CURVE.d - 1n) ** 2n;
+    const r = SQRT_M1 * (r0 * r0);
+    const NS = mod((r + 1n) * oneMinusDSq);
+    let c = mod(-1n);
+    const D = mod((c - CURVE.d * r) * mod(r + CURVE.d));
+    let { isNotZeroSquare, value: S } = sqrtRatio(NS, D);
+    let sPrime = mod(S * r0);
+    sPrime = edIsNegative(sPrime) ? sPrime : mod(-sPrime);
+    S = isNotZeroSquare ? S : sPrime;
+    c = isNotZeroSquare ? c : r;
+    const NT = c * (r - 1n) * dMinusOneSq - D;
+    const sSquared = S * S;
+    return ExtendedPoint.fromUncompleteExtended(
+      (S + S) * D, 1n - sSquared, NT * SQRT_AD_MINUS_ONE, 1n + sSquared
+    );
+  }
+
+  static fromBytes(bytes: Uint8Array) {
+    // Step 1. Check s for validity:
+    // 1.a) s must be 32 bytes (we get this from the type system)
+    // 1.b) s < p
+    // 1.c) s is nonnegative
+    //
+    // Our decoding routine ignores the high bit, so the only
+    // possible failure for 1.b) is if someone encodes s in 0..18
+    // as s+p in 2^255-19..2^255-1.  We can check this by
+    // converting back to bytes, and checking that we get the
+    // original input, since our encoding routine is canonical.
+    const s = arrayToNumberRst(bytes);
+    const sEncodingIsCanonical = arraysAreEqual(numberToArrayPadded(s, ENCODING_LENGTH), bytes);
+    const sIsNegative = edIsNegative(s);
+    if (!sEncodingIsCanonical || sIsNegative) {
+      throw new Error('Cannot convert bytes to Ristretto Point');
+    }
+    const s2 = mod(s * s);
+    const u1 = mod(1n - s2); // 1 + as²
+    const u2 = mod(1n + s2); // 1 - as² where a=-1
+    const squaredU2 = mod(u2 * u2); // (1 - as²)²
+    // v == ad(1+as²)² - (1-as²)² where d=-121665/121666
+    const v = mod(mod(u1 * u1 * -CURVE.d) - squaredU2);
+    const { isNotZeroSquare, value: I } = invertSqrt(mod(v * squaredU2)); // 1/sqrt(v*u_2²)
+    const Dx = I * u2;
+    const Dy = I * Dx * v; // 1/u2
+    // x == | 2s/sqrt(v) | == + sqrt(4s²/(ad(1+as²)² - (1-as²)²))
+    let x = mod((s + s) * Dx);
+    if (edIsNegative(x)) x = mod(-x);
+    // y == (1-as²)/(1+as²)
+    const y = mod(u1 * Dy);
+    // t == ((1+as²) sqrt(4s²/(ad(1+as²)² - (1-as²)²)))/(1-as²)
+    const t = mod(x * y);
+    if (!isNotZeroSquare || edIsNegative(t) || y === 0n) {
+      throw new Error('Cannot convert bytes to Ristretto Point');
+    }
+    return new RistrettoPoint(new ExtendedPoint(x, y, 1n, t));
+  }
+
+  constructor(private point: ExtendedPoint) {}
+
+  toBytes() {
+    let { x, y, z, t } = this.point;
+    // u1 = (z0 + y0) * (z0 - y0)
+    const u1 = mod((z + y) * (z - y));
+    const u2 = mod(x * y);
+    // Ignore return value since this is always square
+    const { value: invsqrt } = invertSqrt(mod(u2 ** 2n * u1));
+    const i1 = mod(invsqrt * u1);
+    const i2 = mod(invsqrt * u2);
+    const invertedZ = mod(i1 * i2 * t);
+    let invertedDenominator = i2;
+    const iX = mod(x * SQRT_M1);
+    const iY = mod(y * SQRT_M1);
+    const enchantedDenominator = mod(i1 * INVSQRT_A_MINUS_D);
+    const isRotated = BigInt(edIsNegative(t * invertedZ)) as 0n | 1n;
+    x = isRotated ? iY : x;
+    y = isRotated ? iX : y;
+    invertedDenominator = isRotated ? enchantedDenominator : i2;
+    if (edIsNegative(x * invertedZ)) y = mod(-y);
+    let s = mod((z - y) * invertedDenominator);
+    if (edIsNegative(s)) s = mod(-s);
+    return numberToArrayPadded(s, ENCODING_LENGTH);
+  }
+
+  equals(other: RistrettoPoint) {
+    return this.point.equals(other.point);
+  }
+
+  add(other: RistrettoPoint) {
+    return new RistrettoPoint(this.point.add(other.point));
+  }
+
+  subtract(other: RistrettoPoint) {
+    return new RistrettoPoint(this.point.subtract(other.point));
+  }
+
+  multiplyUnsafe(n: bigint) {
+    return new RistrettoPoint(this.point.multiplyUnsafe(n));
+  }
+}
+
 // Stores precomputed values for points.
 const pointPrecomputes = new WeakMap();
 
 // Default Point works in default aka affine coordinates: (x, y)
-export class Point {
+class Point {
   // Base point aka generator
   // public_key = Point.BASE * private_key
   static BASE: Point = new Point(CURVE.Gx, CURVE.Gy);
@@ -216,7 +364,6 @@ export class Point {
     }
     return new Point(x, y);
   }
-
 
   /**
    * Converts point to compressed representation of its Y.
@@ -309,7 +456,7 @@ export class Point {
     }
     const precomputes = this.precomputeWindow(W);
     let p = ExtendedPoint.ZERO;
-    let f = ExtendedPoint.ZERO
+    let f = ExtendedPoint.ZERO;
 
     const windows = 256 / W + 1;
     const windowSize = 2 ** (W - 1);
@@ -361,9 +508,8 @@ export class Point {
     return isAffine ? ExtendedPoint.batchAffine([point, fake])[0] : point;
   }
 }
-export {ExtendedPoint};
 
-export class SignResult {
+class SignResult {
   constructor(public r: Point, public s: bigint) {}
 
   static fromHex(hex: Hex) {
@@ -377,7 +523,7 @@ export class SignResult {
     const numberBytes = hexToArray(numberToHex(this.s)).reverse();
     const sBytes = new Uint8Array(ENCODING_LENGTH);
     sBytes.set(numberBytes);
-    const res = new Uint8Array(64);
+    const res = new Uint8Array(ENCODING_LENGTH * 2);
     res.set(this.r.toRawBytes());
     res.set(sBytes, 32);
     return res;
@@ -388,6 +534,8 @@ export class SignResult {
     return arrayToHex(this.toRawBytes());
   }
 }
+
+export { ExtendedPoint, RistrettoPoint, Point, SignResult };
 
 // SHA512 implementation.
 let sha512: (message: Uint8Array) => Promise<Uint8Array>;
@@ -440,12 +588,7 @@ function arrayToHex(uint8a: Uint8Array): string {
 }
 
 function pad64(num: number | bigint): string {
-  return num.toString(16).padStart(64, '0');
-}
-
-function numberToHex(num: number | bigint): string {
-  const hex = num.toString(16);
-  return hex.length & 1 ? `0${hex}` : hex;
+  return num.toString(16).padStart(ENCODING_LENGTH * 2, '0');
 }
 
 function hexToArray(hex: string): Uint8Array {
@@ -458,6 +601,21 @@ function hexToArray(hex: string): Uint8Array {
   return array;
 }
 
+function numberToHex(num: number | bigint): string {
+  const hex = num.toString(16);
+  return hex.length & 1 ? `0${hex}` : hex;
+}
+
+function numberToArrayPadded(num: bigint, length = 0) {
+  const hex = numberToHex(num).padStart(length * 2, '0');
+  return hexToArray(hex).reverse();
+}
+
+function edIsNegative(t: bigint) {
+  const bytes = numberToArrayPadded(mod(t));
+  return Boolean(bytes[0] & 1);
+}
+
 // Little Endian
 function arrayToNumberLE(uint8a: Uint8Array): bigint {
   let value = 0n;
@@ -465,6 +623,29 @@ function arrayToNumberLE(uint8a: Uint8Array): bigint {
     value += BigInt(uint8a[i]) << (8n * BigInt(i));
   }
   return value;
+}
+
+function load8(input: Uint8Array, padding = 0) {
+  return (
+    BigInt(input[0 + padding]) |
+    (BigInt(input[1 + padding]) << 8n) |
+    (BigInt(input[2 + padding]) << 16n) |
+    (BigInt(input[3 + padding]) << 24n) |
+    (BigInt(input[4 + padding]) << 32n) |
+    (BigInt(input[5 + padding]) << 40n) |
+    (BigInt(input[6 + padding]) << 48n) |
+    (BigInt(input[7 + padding]) << 56n)
+  );
+}
+const low51bitMask = (1n << 51n) - 1n;
+// CUSTOM array to number.
+function arrayToNumberRst(bytes: Uint8Array) {
+  const octet1 = load8(bytes, 0) & low51bitMask;
+  const octet2 = (load8(bytes, 6) >> 3n) & low51bitMask;
+  const octet3 = (load8(bytes, 12) >> 6n) & low51bitMask;
+  const octet4 = (load8(bytes, 19) >> 1n) & low51bitMask;
+  const octet5 = (load8(bytes, 24) >> 12n) & low51bitMask;
+  return mod(octet1 + (octet2 << 51n) + (octet3 << 102n) + (octet4 << 153n) + (octet5 << 204n));
 }
 // -------------------------
 
@@ -533,6 +714,148 @@ function batchInverse(nums: bigint[], n: bigint = P): bigint[] {
   return nums;
 }
 
+// Attempt to compute `sqrt(1/self)` in constant time.
+function invertSqrt(t: bigint) {
+  return sqrtRatio(1n, t);
+}
+
+function pow2k(t: bigint, power: bigint) {
+  let res = t;
+  while (power-- > 0n) {
+    res = res * res;
+    res %= P;
+  }
+  return res;
+}
+function pow_2_252_3(t: bigint) {
+  const t0 = t * t;
+  const t1 = t0 ** 4n;
+  const t2 = t * t1;
+  const t3 = t0 * t2;
+  const t4 = t3 ** 2n;
+  const t5 = t2 * t4;
+  const t6 = pow2k(t5, 5n);
+  const t7 = (t6 * t5) % P;
+  const t8 = pow2k(t7, 10n);
+  const t9 = (t8 * t7) % P;
+  const t10 = pow2k(t9, 20n);
+  const t11 = (t10 * t9) % P;
+  const t12 = pow2k(t11, 10n);
+  const t13 = (t12 * t7) % P;
+  const t14 = pow2k(t13, 50n);
+  const t15 = (t14 * t13) % P;
+  const t16 = pow2k(t15, 100n);
+  const t17 = (t16 * t15) % P;
+  const t18 = pow2k(t17, 50n);
+  const t19 = (t18 * t13) % P;
+
+  // t19 = t ** (2 ** 250 - 1)
+  const t20 = (t19 * t19) % P;
+  const t21 = (t20 * t20 * t) % P;
+  return t21;
+}
+
+function pow_2_252_3_fast(t: bigint) {
+  const t0 = mod(t * t);
+  const t1 = mod(t0 ** 4n);
+  const t2 = mod(t * t1);
+  const t3 = mod(t0 * t2);
+  const t5 = mod(t2 * t3 * t3);
+  let t7 = t5;
+  for (let i = 0; i < 5; i++) {
+    t7 *= t7;
+    t7 %= P;
+  }
+  t7 *= t5;
+  t7 %= P;
+  let t9 = t7;
+  for (let i = 0; i < 10; i++) {
+    t9 *= t9;
+    t9 %= P;
+  }
+  t9 *= t7;
+  t9 %= P;
+  let t13 = t9;
+  for (let i = 0; i < 20; i++) {
+    t13 *= t13;
+    t13 %= P;
+  }
+  t13 *= t9;
+  t13 %= P;
+  for (let i = 0; i < 10; i++) {
+    t13 *= t13;
+    t13 %= P;
+  }
+  t13 *= t7;
+  t13 %= P;
+  let t15 = t13;
+  for (let i = 0; i < 50; i++) {
+    t15 *= t15;
+    t15 %= P;
+  }
+  t15 *= t13;
+  t15 %= P;
+  let t19 = t15;
+  for (let i = 0; i < 100; i++) {
+    t19 *= t19;
+    t19 %= P;
+  }
+  t19 *= t15;
+  t19 %= P;
+  for (let i = 0; i < 50; i++) {
+    t19 *= t19;
+    t19 %= P;
+  }
+  t19 *= t13;
+  t19 %= P;
+
+  // t19 = t ** (2 ** 250 - 1)
+  let t20 = (t19 * t19) % P;
+  let t21 = (t20 * t20 * t) % P;
+  return t21;
+}
+
+function sqrtRatio(t: bigint, v: bigint) {
+  // Using the same trick as in ed25519 decoding, we merge the
+  // inversion, the square root, and the square test as follows.
+  //
+  // To compute sqrt(α), we can compute β = α^((p+3)/8).
+  // Then β^2 = ±α, so multiplying β by sqrt(-1) if necessary
+  // gives sqrt(α).
+  //
+  // To compute 1/sqrt(α), we observe that
+  //    1/β = α^(p-1 - (p+3)/8) = α^((7p-11)/8)
+  //                            = α^3 * (α^7)^((p-5)/8).
+  //
+  // We can therefore compute sqrt(u/v) = sqrt(u)/sqrt(v)
+  // by first computing
+  //    r = u^((p+3)/8) v^(p-1-(p+3)/8)
+  //      = u u^((p-5)/8) v^3 (v^7)^((p-5)/8)
+  //      = (uv^3) (uv^7)^((p-5)/8).
+  //
+  // If v is nonzero and u/v is square, then r^2 = ±u/v,
+  //                                     so vr^2 = ±u.
+  // If vr^2 =  u, then sqrt(u/v) = r.
+  // If vr^2 = -u, then sqrt(u/v) = r*sqrt(-1).
+  //
+  // If v is zero, r is also zero.
+  const v3 = mod(v * v * v);
+  const v7 = mod(v3 * v3 * v);
+  let r = mod(pow_2_252_3_fast(t * v7) * t * v3);
+  const check = mod(r * r * v);
+  const i = SQRT_M1;
+  const correctSignSqrt = check === t;
+  const flippedSignSqrt = check === mod(-t);
+  const flippedSignSqrtI = check === mod(mod(-t) * i);
+  const rPrime = mod(SQRT_M1 * r);
+  r = flippedSignSqrt || flippedSignSqrtI ? rPrime : r;
+  if (edIsNegative(r)) r = mod(-r);
+  const isNotZeroSquare = correctSignSqrt || flippedSignSqrt;
+  return { isNotZeroSquare, value: mod(r) };
+}
+
+// Math end
+
 async function sha512ToNumberLE(...args: Uint8Array[]): Promise<bigint> {
   const messageArray = concatTypedArrays(...args);
   const hash = await sha512(messageArray);
@@ -558,9 +881,22 @@ function ensureArray(hash: Hex): Uint8Array {
   return hash instanceof Uint8Array ? hash : hexToArray(hash);
 }
 
+function arraysAreEqual(b1: Uint8Array, b2: Uint8Array) {
+  if (b1.length !== b2.length) {
+    return false;
+  }
+  for (let i = 0; i < b1.length; i++) {
+    if (b1[i] !== b2[i]) {
+      return false;
+    }
+  }
+  return true;
+}
+
 function ensurePrivInputArray(privateKey: PrivKey): Uint8Array {
   if (privateKey instanceof Uint8Array) return privateKey;
-  if (typeof privateKey === 'string') return hexToArray(privateKey.padStart(64, '0'));
+  if (typeof privateKey === 'string')
+    return hexToArray(privateKey.padStart(ENCODING_LENGTH * 2, '0'));
   return hexToArray(pad64(BigInt(privateKey)));
 }
 
@@ -605,10 +941,12 @@ Point.BASE._setWindowSize(8);
 export const utils = {
   generateRandomPrivateKey,
 
+  sha512,
+
   precompute(windowSize = 8, point = Point.BASE): Point {
     const cached = point.equals(Point.BASE) ? point : new Point(point.x, point.y);
     cached._setWindowSize(windowSize);
     cached.multiply(1n);
     return cached;
-  }
+  },
 };
