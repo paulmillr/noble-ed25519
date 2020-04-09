@@ -21,8 +21,8 @@ const CURVE = {
   Gy: 46316835694926478169428394003475163141307993866256225615783033603165251855960n,
 };
 
-// Edwards `2*d` value, equal to `2*(-121665/121666) mod p`.
-const D2 = 16295367250680780974490674513165176452449235426866156013048779062215315747161n;
+const P_DIV8_MINUS_3 = (P + 3n) / 8n;
+const I = powMod(2n, (CURVE.P + 1n) / 4n, P);
 
 // sqrt(-1 % P)
 const SQRT_M1 = 19681161376707505956807079304988542015446066515923890162744021073123829784752n;
@@ -58,8 +58,6 @@ type Signature = Uint8Array | string | SignResult;
 const ENCODING_LENGTH = 32;
 const P = CURVE.P;
 const PRIME_ORDER = CURVE.n;
-const P_DIV8_3 = (P + 3n) / 8n;
-const I = powMod(2n, (CURVE.P + 1n) / 4n, P);
 
 // Default Point works in default aka affine coordinates: (x, y)
 // Extended Point works in extended coordinates: (x, y, z, t) ∋ (x=x/z, y=y/z, t=xy)
@@ -324,7 +322,7 @@ class Point {
     const sqrY = y * y;
     const sqrX = mod((sqrY - 1n) * invert(d * sqrY + 1n), P);
     // let x = pow_2_252_3(sqrX);
-    let x = powMod(sqrX, P_DIV8_3, P);
+    let x = powMod(sqrX, P_DIV8_MINUS_3, P);
     if (mod(x * x - sqrX) !== 0n) {
       x = mod(x * I);
     }
