@@ -4,7 +4,7 @@
 
 [Very fast](#speed), algorithmically resistant to timing attacks.
 
-Supports [ristretto255](https://ristretto.group).
+Includes [ristretto255](https://ristretto.group) support. Ristretto is a technique for constructing prime order elliptic curve groups with non-malleable encodings.
 
 ### This library belongs to *noble* crypto
 
@@ -81,6 +81,18 @@ function verify(
 - `hash: Uint8Array | string` - message hash that needs to be verified
 - `publicKey: Uint8Array | string | Point` - e.g. that was generated from `privateKey` by `getPublicKey`
 - Returns `Promise<boolean>`: `Promise<true>` if `signature == hash`; otherwise `Promise<false>`
+
+##### Ristretto
+
+```
+ExtendedPoint.fromRistrettoHash(hash: Uint8Array)
+ExtendedPoint.fromRistrettoBytes(bytes: Uint8Array)
+ExtendedPoint.toRistrettoRawBytes(): Uint8Array
+```
+
+It extends Mike Hamburg's Decaf approach to cofactor elimination to support cofactor-8 curves such as Curve25519.
+
+In particular, this allows an existing Curve25519 library to implement a prime-order group with only a thin abstraction layer, and makes it possible for systems using Ed25519 signatures to be safely extended with zero-knowledge protocols, with no additional cryptographic assumptions and minimal code changes.
 
 ##### Helpers & Point
 

@@ -1,19 +1,8 @@
 /*! noble-ed25519 - MIT License (c) Paul Miller (paulmillr.com) */
 
-// Thanks DJB. https://ed25519.cr.yp.to
+// Thanks DJB https://ed25519.cr.yp.to
 // https://tools.ietf.org/html/rfc8032, https://en.wikipedia.org/wiki/EdDSA
-
-// Includes Ristretto.
-// Ristretto is a technique for constructing prime order elliptic curve
-// groups with non-malleable encodings. It extends Mike Hamburg's Decaf
-// approach to cofactor elimination to support cofactor-8 curves such as Curve25519.
-//
-// In particular, this allows an existing Curve25519 library to implement
-// a prime-order group with only a thin abstraction layer, and makes it
-// possible for systems using Ed25519 signatures to be safely extended
-// with zero-knowledge protocols, with no additional cryptographic assumptions
-// and minimal code changes.
-// https://ristretto.group
+// Includes Ristretto. https://ristretto.group
 
 const CURVE = {
   // Params: a, b
