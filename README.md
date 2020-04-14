@@ -37,8 +37,8 @@ Benchmarks done with 2.9Ghz Coffee Lake.
 ```js
 import * as ed from 'noble-ed25519';
 
-const key = ed.utils.randomPrivateKey(); // 32-byte Uint8Array or string.
-const HASH_MESSSAGE = 'deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef';
+const PRIVATE_KEY = ed.utils.randomPrivateKey(); // 32-byte Uint8Array or string.
+const HASH_MESSAGE = 'deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef';
 
 (async () => {
   const publicKey = await ed.getPublicKey(PRIVATE_KEY);
