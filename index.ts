@@ -68,15 +68,22 @@ class ExtendedPoint {
   static BASE = new ExtendedPoint(CURVE.Gx, CURVE.Gy, 1n, mod(CURVE.Gx * CURVE.Gy));
   static ZERO = new ExtendedPoint(0n, 1n, 1n, 0n);
   static fromAffine(p: Point): ExtendedPoint {
+    if (!(p instanceof Point)) {
+      throw new TypeError('ExtendedPoint#fromAffine: expected Point');
+    }
     if (p.equals(Point.ZERO)) return ExtendedPoint.ZERO;
     return new ExtendedPoint(p.x, p.y, 1n, mod(p.x * p.y));
   }
   // Takes a bunch of Jacobian Points but executes only one
   // invert on all of them. invert is very slow operation,
   // so this improves performance massively.
-  static fromAffineBatch(points: ExtendedPoint[]): Point[] {
+  static toAffineBatch(points: ExtendedPoint[]): Point[] {
     const toInv = invertBatch(points.map((p) => p.z));
     return points.map((p, i) => p.toAffine(toInv[i]));
+  }
+
+  static normalizeZ(points: ExtendedPoint[]): ExtendedPoint[] {
+    return this.toAffineBatch(points).map(this.fromAffine);
   }
 
   // Ristretto-related methods.
@@ -273,6 +280,89 @@ class ExtendedPoint {
     return p;
   }
 
+  private precomputeWindow(W: number): ExtendedPoint[] {
+    const windows = 256 / W + 1;
+    let points: ExtendedPoint[] = [];
+    let p: ExtendedPoint = this;
+    let base = p;
+    for (let window = 0; window < windows; window++) {
+      base = p;
+      points.push(base);
+      for (let i = 1; i < 2 ** (W - 1); i++) {
+        base = base.add(p);
+        points.push(base);
+      }
+      p = base.double();
+    }
+    return points;
+  }
+
+  private wNAF(n: bigint, affinePoint?: Point): [ExtendedPoint, ExtendedPoint] {
+    if (!affinePoint && this.equals(ExtendedPoint.BASE)) affinePoint = Point.BASE;
+    const W = (affinePoint && affinePoint._WINDOW_SIZE) || 1;
+    if (256 % W) {
+      throw new Error('Point#wNAF: Invalid precomputation window, must be power of 2');
+    }
+
+    let precomputes = affinePoint && pointPrecomputes.get(affinePoint);
+    if (!precomputes) {
+      precomputes = this.precomputeWindow(W);
+      if (affinePoint && W !== 1) {
+        precomputes = ExtendedPoint.normalizeZ(precomputes);
+        pointPrecomputes.set(affinePoint, precomputes);
+      }
+    }
+
+    let p = ExtendedPoint.ZERO;
+    let f = ExtendedPoint.ZERO;
+
+    const windows = 256 / W + 1;
+    const windowSize = 2 ** (W - 1);
+    const mask = BigInt(2 ** W - 1); // Create mask with W ones: 0b1111 for W=4 etc.
+    const maxNumber = 2 ** W;
+    const shiftBy = BigInt(W);
+
+    for (let window = 0; window < windows; window++) {
+      const offset = window * windowSize;
+      // Extract W bits.
+      let wbits = Number(n & mask);
+
+      // Shift number by W bits.
+      n >>= shiftBy;
+
+      // If the bits are bigger than max size, we'll split those.
+      // +224 => 256 - 32
+      if (wbits > windowSize) {
+        wbits -= maxNumber;
+        n += 1n;
+      }
+
+      // Check if we're onto Zero point.
+      // Add random point inside current window to f.
+      if (wbits === 0) {
+        f = f.add(window % 2 ? precomputes[offset].negate() : precomputes[offset]);
+      } else {
+        const cached = precomputes[offset + Math.abs(wbits) - 1];
+        p = p.add(wbits < 0 ? cached.negate() : cached);
+      }
+    }
+    return [p, f];
+  }
+
+  // Constant time multiplication.
+  // Uses wNAF method. Windowed method may be 10% faster,
+  // but takes 2x longer to generate and consumes 2x memory.
+  multiply(scalar: number | bigint, affinePoint?: Point): ExtendedPoint {
+    if (typeof scalar !== 'number' && typeof scalar !== 'bigint') {
+      throw new TypeError('Point#multiply: expected number or bigint');
+    }
+    const n = mod(BigInt(scalar), CURVE.n);
+    if (n <= 0) {
+      throw new Error('Point#multiply: invalid scalar, expected positive integer');
+    }
+    return ExtendedPoint.normalizeZ(this.wNAF(n, affinePoint))[0];
+  }
+
   // Converts Extended point to default (x, y) coordinates.
   // Can accept precomputed Z^-1 - for example, from invertBatch.
   toAffine(invZ: bigint = invert(this.z)): Point {
@@ -283,7 +373,7 @@ class ExtendedPoint {
 }
 
 // Stores precomputed values for points.
-const pointPrecomputes = new WeakMap();
+const pointPrecomputes = new WeakMap<Point, ExtendedPoint[]>();
 
 // Default Point works in default aka affine coordinates: (x, y)
 class Point {
@@ -296,13 +386,13 @@ class Point {
   // We calculate precomputes for elliptic curve point multiplication
   // using windowed method. This specifies window size and
   // stores precomputed values. Usually only base point would be precomputed.
-  private WINDOW_SIZE?: number;
+  _WINDOW_SIZE?: number;
 
   constructor(public x: bigint, public y: bigint) {}
 
   // "Private method", don't use it directly.
   _setWindowSize(windowSize: number) {
-    this.WINDOW_SIZE = windowSize;
+    this._WINDOW_SIZE = windowSize;
     pointPrecomputes.delete(this);
   }
   // Converts hash string or Uint8Array to Point.
@@ -370,109 +460,21 @@ class Point {
     return this.x === other.x && this.y === other.y;
   }
 
-  negate(): Point {
+  negate() {
     return new Point(this.x, mod(-this.y));
   }
 
-  // Adds point to itself. http://hyperelliptic.org/EFD/g1p/auto-twisted.html
-  add(other: Point): Point {
-    if (!(other instanceof Point)) {
-      throw new TypeError('Point#add: expected Point');
-    }
-    const { d } = CURVE;
-    const X1 = this.x;
-    const Y1 = this.y;
-    const X2 = other.x;
-    const Y2 = other.y;
-    const X3 = (X1 * Y2 + Y1 * X2) * invert(1n + d * X1 * X2 * Y1 * Y2);
-    const Y3 = (Y1 * Y2 + X1 * X2) * invert(1n - d * X1 * X2 * Y1 * Y2);
-    return new Point(mod(X3), mod(Y3));
+  add(other: Point) {
+    return ExtendedPoint.fromAffine(this).add(ExtendedPoint.fromAffine(other)).toAffine();
   }
 
   subtract(other: Point) {
     return this.add(other.negate());
   }
 
-  private precomputeWindow(W: number): ExtendedPoint[] {
-    const cached = pointPrecomputes.get(this);
-    if (cached) return cached;
-    const windows = 256 / W + 1;
-    let points: ExtendedPoint[] = [];
-    let p = ExtendedPoint.fromAffine(this);
-    let base = p;
-    for (let window = 0; window < windows; window++) {
-      base = p;
-      points.push(base);
-      for (let i = 1; i < 2 ** (W - 1); i++) {
-        base = base.add(p);
-        points.push(base);
-      }
-      p = base.double();
-    }
-    if (W !== 1) {
-      points = ExtendedPoint.fromAffineBatch(points).map(ExtendedPoint.fromAffine);
-      pointPrecomputes.set(this, points);
-    }
-    return points;
-  }
-
-  private wNAF(n: bigint) {
-    const W = this.WINDOW_SIZE || 1;
-    if (256 % W) {
-      throw new Error('Point#multiply: Invalid precomputation window, must be power of 2');
-    }
-    const precomputes = this.precomputeWindow(W);
-    let p = ExtendedPoint.ZERO;
-    let f = ExtendedPoint.ZERO;
-
-    const windows = 256 / W + 1;
-    const windowSize = 2 ** (W - 1);
-    const mask = BigInt(2 ** W - 1); // Create mask with W ones: 0b1111 for W=4 etc.
-    const maxNumber = 2 ** W;
-    const shiftBy = BigInt(W);
-
-    for (let window = 0; window < windows; window++) {
-      const offset = window * windowSize;
-      // Extract W bits.
-      let wbits = Number(n & mask);
-
-      // Shift number by W bits.
-      n >>= shiftBy;
-
-      // If the bits are bigger than max size, we'll split those.
-      // +224 => 256 - 32
-      if (wbits > windowSize) {
-        wbits -= maxNumber;
-        n += 1n;
-      }
-
-      // Check if we're onto Zero point.
-      // Add random point inside current window to f.
-      if (wbits === 0) {
-        f = f.add(precomputes[offset]);
-      } else {
-        const cached = precomputes[offset + Math.abs(wbits) - 1];
-        p = p.add(wbits < 0 ? cached.negate() : cached);
-      }
-    }
-    return [p, f];
-  }
-
   // Constant time multiplication.
-  // Uses wNAF method. Windowed method may be 10% faster,
-  // but takes 2x longer to generate and consumes 2x memory.
-  multiply(scalar: bigint, isAffine: false): ExtendedPoint;
-  multiply(scalar: bigint, isAffine?: true): Point;
-  multiply(scalar: bigint, isAffine = true): Point | ExtendedPoint {
-    if (typeof scalar !== 'number' && typeof scalar !== 'bigint') {
-      throw new TypeError('Point#multiply: expected number or bigint');
-    }
-    const n = mod(BigInt(scalar), CURVE.n);
-    if (n <= 0) {
-      throw new Error('Point#multiply: invalid scalar, expected positive integer');
-    }
-    const [point, fake] = this.wNAF(n);
-    return isAffine ? ExtendedPoint.fromAffineBatch([point, fake])[0] : point;
+  multiply(scalar: bigint): Point {
+    return ExtendedPoint.fromAffine(this).multiply(scalar, this).toAffine();
   }
 }
 
@@ -847,7 +849,7 @@ export async function verify(signature: Signature, hash: Hex, publicKey: PubKey)
   if (!(signature instanceof SignResult)) signature = SignResult.fromHex(signature);
   const h = await sha512ToNumberLE(signature.r.toRawBytes(), publicKey.toRawBytes(), hash);
   const Ph = ExtendedPoint.fromAffine(publicKey).multiplyUnsafe(h);
-  const Gs = Point.BASE.multiply(signature.s, false);
+  const Gs = ExtendedPoint.BASE.multiply(signature.s);
   const RPh = ExtendedPoint.fromAffine(signature.r).add(Ph);
   return Gs.equals(RPh);
 }

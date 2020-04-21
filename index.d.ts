@@ -21,7 +21,8 @@ declare class ExtendedPoint {
     static BASE: ExtendedPoint;
     static ZERO: ExtendedPoint;
     static fromAffine(p: Point): ExtendedPoint;
-    static fromAffineBatch(points: ExtendedPoint[]): Point[];
+    static toAffineBatch(points: ExtendedPoint[]): Point[];
+    static normalizeZ(points: ExtendedPoint[]): ExtendedPoint[];
     static fromRistrettoHash(hash: Uint8Array): ExtendedPoint;
     private static elligatorRistrettoFlavor;
     static fromRistrettoBytes(bytes: Uint8Array): ExtendedPoint;
@@ -32,6 +33,9 @@ declare class ExtendedPoint {
     add(other: ExtendedPoint): ExtendedPoint;
     subtract(other: ExtendedPoint): ExtendedPoint;
     multiplyUnsafe(scalar: bigint): ExtendedPoint;
+    private precomputeWindow;
+    private wNAF;
+    multiply(scalar: number | bigint, affinePoint?: Point): ExtendedPoint;
     toAffine(invZ?: bigint): Point;
 }
 declare class Point {
@@ -39,7 +43,7 @@ declare class Point {
     y: bigint;
     static BASE: Point;
     static ZERO: Point;
-    private WINDOW_SIZE?;
+    _WINDOW_SIZE?: number;
     constructor(x: bigint, y: bigint);
     _setWindowSize(windowSize: number): void;
     static fromHex(hash: Hex): Point;
@@ -50,10 +54,7 @@ declare class Point {
     negate(): Point;
     add(other: Point): Point;
     subtract(other: Point): Point;
-    private precomputeWindow;
-    private wNAF;
-    multiply(scalar: bigint, isAffine: false): ExtendedPoint;
-    multiply(scalar: bigint, isAffine?: true): Point;
+    multiply(scalar: bigint): Point;
 }
 declare class SignResult {
     r: Point;
