@@ -1,6 +1,6 @@
 {
   "name": "noble-ed25519",
-  "version": "0.7.0",
+  "version": "0.7.1",
   "description": "Noble ed25519 & ristretto255. Fast, high-security, easily auditable, 0-dep, 1-file pubkey, scalarmult & EDDSA.",
   "main": "index.js",
   "files": [
@@ -28,12 +28,12 @@
   },
   "license": "MIT",
   "devDependencies": {
-    "@types/jest": "^25",
-    "@types/node": "^12.12.31",
-    "fast-check": "^1.23.0",
-    "jest": "^25.1.0",
+    "@types/jest": "^25.2.1",
+    "@types/node": "^12.12.36",
+    "fast-check": "^1.24.1",
+    "jest": "^25.4.0",
     "micro-bmark": "^0.1.2",
-    "ts-jest": "^25.2.0",
+    "ts-jest": "^25.4.0",
     "typescript": "^3.8.3"
   },
   "keywords": [
