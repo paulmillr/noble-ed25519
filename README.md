@@ -92,7 +92,7 @@ function verify(
 
 ##### Ristretto
 
-```
+```typescript
 // The hash-to-group operation applies Elligator twice and adds the results.
 ExtendedPoint.fromRistrettoHash(hash: Uint8Array): ExtendedPoint;
 
