@@ -1,6 +1,6 @@
 # noble-ed25519
 
-[ed25519](https://en.wikipedia.org/wiki/EdDSA), an elliptic curve that could be used for assymetric encryption and EDDSA signature scheme.
+[ed25519](https://en.wikipedia.org/wiki/EdDSA), an elliptic curve that could be used for asymmetric encryption and EDDSA signature scheme.
 
 Very fast, algorithmically resistant to timing attacks, conforms to [RFC8032](https://tools.ietf.org/html/rfc8032).
 
@@ -12,14 +12,13 @@ Includes [ristretto255](https://ristretto.group) support. Ristretto is a techniq
 
 - No dependencies, one small file
 - Easily auditable TypeScript/JS code
-- Uses es2019 bigint. Supported in Chrome, Firefox, node 10+
+- Uses es2020 bigint. Supported in Chrome, Firefox, node 10+
 - All releases are signed and trusted
 - Check out all libraries:
   [secp256k1](https://github.com/paulmillr/noble-secp256k1),
   [ed25519](https://github.com/paulmillr/noble-ed25519),
   [bls12-381](https://github.com/paulmillr/noble-bls12-381),
-  [ripemd160](https://github.com/paulmillr/noble-ripemd160),
-  [secretbox-aes-gcm](https://github.com/paulmillr/noble-secretbox-aes-gcm)
+  [ripemd160](https://github.com/paulmillr/noble-ripemd160)
 
 ## Speed
 
