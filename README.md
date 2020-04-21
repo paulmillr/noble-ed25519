@@ -113,7 +113,9 @@ In particular, this allows an existing Curve25519 library to implement a prime-o
 
 Returns cryptographically random `Uint8Array` that could be used as Private Key.
 
-`utils.precompute(W = 4, point = BASE_POINT)`
+`utils.precompute(W = 8, point = Point.BASE)`
+
+Returns cached point which you can use to `#multiply` by it.
 
 This is done by default, no need to run it unless you want to
 disable precomputation or change window size.
@@ -123,9 +125,6 @@ precomputed BASE_POINT values.
 
 This slows down first getPublicKey() by milliseconds (see Speed section),
 but allows to speed-up subsequent getPublicKey() calls up to 20x.
-
-The precomputation window is variable. For example, we increase W to 8
-for tests, to speed-up tests 2x.
 
 You may want to precompute values for your own point.
 
@@ -161,11 +160,6 @@ ed25519.SignResult {
   constructor(r: bigint, s: bigint);
   toHex(): string;
 }
-
-// Base point
-ed25519.BASE_POINT // new ed25519.Point(x, y) where
-// x = 15112221349535400772501151409588531511454012693041857206046113283949847762202n;
-// y = 46316835694926478169428394003475163141307993866256225615783033603165251855960n;
 
 // Precomputation helper
 utils.precompute(W, point);
