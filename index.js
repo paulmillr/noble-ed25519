@@ -11,6 +11,7 @@ const CURVE = {
     Gy: 46316835694926478169428394003475163141307993866256225615783033603165251855960n,
 };
 exports.CURVE = CURVE;
+const ENCODING_LENGTH = 32;
 const DIV_8_MINUS_3 = (CURVE.P + 3n) / 8n;
 const I = powMod(2n, (CURVE.P + 1n) / 4n, CURVE.P);
 const SQRT_M1 = 19681161376707505956807079304988542015446066515923890162744021073123829784752n;
@@ -26,7 +27,6 @@ const TORSION_SUBGROUP = [
     '0000000000000000000000000000000000000000000000000000000000000000',
     'c7176a703d4dd84fba3c0b760d10670f2a2053fa2c39ccc64ec7fd7792ac03fa',
 ];
-const ENCODING_LENGTH = 32;
 class ExtendedPoint {
     constructor(x, y, z, t) {
         this.x = x;
@@ -135,8 +135,9 @@ class ExtendedPoint {
         return new ExtendedPoint(mod(-this.x), this.y, this.z, mod(-this.t));
     }
     double() {
-        const _a = this;
-        const X1 = _a.x, Y1 = _a.y, Z1 = _a.z;
+        const X1 = this.x;
+        const Y1 = this.y;
+        const Z1 = this.z;
         const { a } = CURVE;
         const A = mod(X1 ** 2n);
         const B = mod(Y1 ** 2n);
@@ -379,8 +380,7 @@ if (typeof window == 'object' && 'crypto' in window) {
     };
 }
 else if (typeof process === 'object' && 'node' in process.versions) {
-    const req = require;
-    const { createHash, randomBytes } = req('crypto');
+    const { createHash, randomBytes } = require('crypto');
     sha512 = async (message) => {
         const hash = createHash('sha512');
         hash.update(message);

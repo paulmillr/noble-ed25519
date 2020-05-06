@@ -1,4 +1,4 @@
-# noble-ed25519
+# noble-ed25519 ![Node CI](https://github.com/paulmillr/noble-ed25519/workflows/Node%20CI/badge.svg) [![code style: prettier](https://img.shields.io/badge/code_style-prettier-ff69b4.svg?style=flat-square)](https://github.com/prettier/prettier)
 
 [ed25519](https://en.wikipedia.org/wiki/EdDSA), an elliptic curve that could be used for asymmetric encryption and EDDSA signature scheme.
 
@@ -90,7 +90,9 @@ function verify(
 - `publicKey: Uint8Array | string | Point` - e.g. that was generated from `privateKey` by `getPublicKey`
 - Returns `Promise<boolean>`: `Promise<true>` if `signature == hash`; otherwise `Promise<false>`
 
-##### Ristretto
+##### Ristretto255
+
+To use Ristretto, simply use `fromRistrettoHash()` and `toRistrettoBytes()` methods.
 
 ```typescript
 // The hash-to-group operation applies Elligator twice and adds the results.
@@ -164,8 +166,6 @@ ed25519.SignResult {
 // Precomputation helper
 utils.precompute(W, point);
 ```
-
-There are additional `ristretto255` helpers in `ristretto255.js` file.
 
 ## Security
 

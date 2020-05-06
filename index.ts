@@ -518,8 +518,7 @@ if (typeof window == 'object' && 'crypto' in window) {
     return window.crypto.getRandomValues(new Uint8Array(bytesLength));
   };
 } else if (typeof process === 'object' && 'node' in process.versions) {
-  const req = require;
-  const { createHash, randomBytes } = req('crypto');
+  const { createHash, randomBytes } = require('crypto');
   sha512 = async (message: Uint8Array) => {
     const hash = createHash('sha512');
     hash.update(message);
@@ -578,11 +577,6 @@ function numberToArrayPadded(num: bigint, length: number = ENCODING_LENGTH) {
   const hex = numberToHex(num).padStart(length * 2, '0');
   return hexToArray(hex).reverse();
 }
-
-// function edIsNegativez(t: bigint) {
-//   const bytes = numberToArrayPadded(mod(t));
-//   return Boolean(bytes[0] & 1);
-// }
 
 function edIsNegative(num: bigint) {
   const hex = numberToHex(mod(num));
