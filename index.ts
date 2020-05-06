@@ -21,6 +21,15 @@ const CURVE = {
   Gy: 46316835694926478169428394003475163141307993866256225615783033603165251855960n,
 };
 
+// Cleaner output this way.
+export { CURVE };
+
+type PrivKey = Uint8Array | string | bigint | number;
+type PubKey = Uint8Array | string | Point;
+type Hex = Uint8Array | string;
+type Signature = Uint8Array | string | SignResult;
+const ENCODING_LENGTH = 32;
+
 // (P + 3) / 8
 const DIV_8_MINUS_3 = (CURVE.P + 3n) / 8n;
 
@@ -36,9 +45,6 @@ const INVSQRT_A_MINUS_D = 544693070089093169209958138687451416053935972929274569
 // sqrt(a*d - 1)
 const SQRT_AD_MINUS_ONE = 25063068953384623474111414158702152701244531502492656460079210482610430750235n;
 
-// Cleaner output this way.
-export { CURVE };
-
 // The 8-torsion subgroup ℰ8.
 // Those are "buggy" points, if you multiply them by 8, you'll receive Point.ZERO.
 // Ported from curve25519-dalek.
@@ -52,12 +58,6 @@ const TORSION_SUBGROUP = [
   '0000000000000000000000000000000000000000000000000000000000000000',
   'c7176a703d4dd84fba3c0b760d10670f2a2053fa2c39ccc64ec7fd7792ac03fa',
 ];
-
-type PrivKey = Uint8Array | string | bigint | number;
-type PubKey = Uint8Array | string | Point;
-type Hex = Uint8Array | string;
-type Signature = Uint8Array | string | SignResult;
-const ENCODING_LENGTH = 32;
 
 // Default Point works in default aka affine coordinates: (x, y)
 // Extended Point works in extended coordinates: (x, y, z, t) ∋ (x=x/z, y=y/z, t=xy)
@@ -204,10 +204,9 @@ class ExtendedPoint {
   // http://hyperelliptic.org/EFD/g1p/auto-twisted-extended-1.html#doubling-dbl-2008-hwcd
   // Cost: 3M + 4S + 1*a + 7add + 1*2.
   double(): ExtendedPoint {
-    const _a = this;
-    const X1 = _a.x,
-      Y1 = _a.y,
-      Z1 = _a.z;
+    const X1 = this.x;
+    const Y1 = this.y;
+    const Z1 = this.z;
     const { a } = CURVE;
     const A = mod(X1 ** 2n);
     const B = mod(Y1 ** 2n);
