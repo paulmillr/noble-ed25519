@@ -29,12 +29,12 @@ Node:
 ```js
 import * as ed from 'noble-ed25519';
 
-const PRIVATE_KEY = ed.utils.randomPrivateKey(); // 32-byte Uint8Array or string.
-const HASH_MESSAGE = 'deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef';
+const privKey = ed.utils.randomPrivateKey(); // 32-byte Uint8Array or string.
+const msgHash = 'deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef';
 (async () => {
-  const publicKey = await ed.getPublicKey(PRIVATE_KEY);
-  const signature = await ed.sign(HASH_MESSAGE, PRIVATE_KEY);
-  const isMessageSigned = await ed.verify(signature, HASH_MESSAGE, publicKey);
+  const publicKey = await ed.getPublicKey(privKey);
+  const signature = await ed.sign(msgHash, privKey);
+  const isSigned = await ed.verify(signature, msgHash, publicKey);
 })();
 ```
 
@@ -42,11 +42,7 @@ Deno:
 
 ```typescript
 import * as ed from 'https://deno.land/x/ed25519/mod.ts';
-const PRIVATE_KEY = ed.utils.randomPrivateKey(); // 32-byte Uint8Array or string.
-const HASH_MESSAGE = 'deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef';
-const publicKey = await ed.getPublicKey(PRIVATE_KEY);
-const signature = await ed.sign(HASH_MESSAGE, PRIVATE_KEY);
-const isMessageSigned = await ed.verify(signature, HASH_MESSAGE, publicKey);
+const privKey = await ed.utils.randomPrivateKey();
 ```
 
 ## API
