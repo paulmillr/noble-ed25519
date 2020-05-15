@@ -20,16 +20,9 @@ Includes [ristretto255](https://ristretto.group) support. Ristretto is a techniq
   [bls12-381](https://github.com/paulmillr/noble-bls12-381),
   [ripemd160](https://github.com/paulmillr/noble-ripemd160)
 
-## Speed
-
-Benchmarks done with 2.9Ghz Coffee Lake.
-
-    getPublicKey(utils.randomPrivateKey()) x 4309 ops/sec @ 232μs/op
-    sign x 2042 ops/sec @ 489μs/op
-    verify x 417 ops/sec @ 2ms/op
-    ristretto255#fromHash x 3377 ops/sec @ 296μs/op
-
 ## Usage
+
+Node:
 
 > npm install noble-ed25519
 
@@ -38,12 +31,22 @@ import * as ed from 'noble-ed25519';
 
 const PRIVATE_KEY = ed.utils.randomPrivateKey(); // 32-byte Uint8Array or string.
 const HASH_MESSAGE = 'deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef';
-
 (async () => {
   const publicKey = await ed.getPublicKey(PRIVATE_KEY);
   const signature = await ed.sign(HASH_MESSAGE, PRIVATE_KEY);
   const isMessageSigned = await ed.verify(signature, HASH_MESSAGE, publicKey);
 })();
+```
+
+Deno:
+
+```typescript
+import * as ed from 'https://deno.land/x/ed25519/mod.ts';
+const PRIVATE_KEY = ed.utils.randomPrivateKey(); // 32-byte Uint8Array or string.
+const HASH_MESSAGE = 'deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef';
+const publicKey = await ed.getPublicKey(PRIVATE_KEY);
+const signature = await ed.sign(HASH_MESSAGE, PRIVATE_KEY);
+const isMessageSigned = await ed.verify(signature, HASH_MESSAGE, publicKey);
 ```
 
 ## API
@@ -177,6 +180,15 @@ We're using built-in JS `BigInt`, which is "unsuitable for use in cryptography" 
 2. Which means *any other JS library doesn't use constant-time bigints*. Including bn.js or anything else. Even statically typed Rust, a language without GC, [makes it harder to achieve constant-time](https://www.chosenplaintext.ca/open-source/rust-timing-shield/security) for some cases.
 3. If your goal is absolute security, don't use any JS lib — including bindings to native ones. Use low-level libraries & languages.
 4. We however consider infrastructure attacks like rogue NPM modules very important; that's why it's crucial to minimize the amount of 3rd-party dependencies & native bindings. If your app uses 500 dependencies, any dep could get hacked and you'll be downloading rootkits with every `npm install`. Our goal is to minimize this attack vector.
+
+## Speed
+
+Benchmarks done with 2.9Ghz Coffee Lake.
+
+    getPublicKey(utils.randomPrivateKey()) x 4309 ops/sec @ 232μs/op
+    sign x 2042 ops/sec @ 489μs/op
+    verify x 417 ops/sec @ 2ms/op
+    ristretto255#fromHash x 3377 ops/sec @ 296μs/op
 
 ## Contributing
 
