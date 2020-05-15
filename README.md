@@ -42,7 +42,8 @@ Deno:
 
 ```typescript
 import * as ed from 'https://deno.land/x/ed25519/mod.ts';
-const privKey = await ed.utils.randomPrivateKey();
+const privKey = ed.utils.randomPrivateKey();
+const publicKey = await ed.getPublicKey(privKey);
 ```
 
 ## API
