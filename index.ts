@@ -45,20 +45,6 @@ const INVSQRT_A_MINUS_D = 544693070089093169209958138687451416053935972929274569
 // sqrt(a*d - 1)
 const SQRT_AD_MINUS_ONE = 25063068953384623474111414158702152701244531502492656460079210482610430750235n;
 
-// The 8-torsion subgroup ℰ8.
-// Those are "buggy" points, if you multiply them by 8, you'll receive Point.ZERO.
-// Ported from curve25519-dalek.
-const TORSION_SUBGROUP = [
-  '0100000000000000000000000000000000000000000000000000000000000000',
-  'c7176a703d4dd84fba3c0b760d10670f2a2053fa2c39ccc64ec7fd7792ac037a',
-  '0000000000000000000000000000000000000000000000000000000000000080',
-  '26e8958fc2b227b045c3f489f2ef98f0d5dfac05d3c63339b13802886d53fc05',
-  'ecffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7f',
-  '26e8958fc2b227b045c3f489f2ef98f0d5dfac05d3c63339b13802886d53fc85',
-  '0000000000000000000000000000000000000000000000000000000000000000',
-  'c7176a703d4dd84fba3c0b760d10670f2a2053fa2c39ccc64ec7fd7792ac03fa',
-];
-
 // Default Point works in default aka affine coordinates: (x, y)
 // Extended Point works in extended coordinates: (x, y, z, t) ∋ (x=x/z, y=y/z, t=xy)
 // https://en.wikipedia.org/wiki/Twisted_Edwards_curve#Extended_coordinates
@@ -505,32 +491,6 @@ class SignResult {
 
 export { ExtendedPoint, Point, SignResult };
 
-// SHA512 implementation.
-let sha512: (message: Uint8Array) => Promise<Uint8Array>;
-let randomPrivateKey = (bytesLength: number = 32) => new Uint8Array(bytesLength);
-
-if (typeof window == 'object' && 'crypto' in window) {
-  sha512 = async (message: Uint8Array) => {
-    const buffer = await window.crypto.subtle.digest('SHA-512', message.buffer);
-    return new Uint8Array(buffer);
-  };
-  randomPrivateKey = (bytesLength: number = 32): Uint8Array => {
-    return window.crypto.getRandomValues(new Uint8Array(bytesLength));
-  };
-} else if (typeof process === 'object' && 'node' in process.versions) {
-  const { createHash, randomBytes } = require('crypto');
-  sha512 = async (message: Uint8Array) => {
-    const hash = createHash('sha512');
-    hash.update(message);
-    return Uint8Array.from(hash.digest());
-  };
-  randomPrivateKey = (bytesLength: number = 32): Uint8Array => {
-    return new Uint8Array(randomBytes(bytesLength).buffer);
-  };
-} else {
-  throw new Error("The environment doesn't have sha512 function");
-}
-
 function concatTypedArrays(...arrays: Uint8Array[]): Uint8Array {
   if (arrays.length === 1) return arrays[0];
   const length = arrays.reduce((a, arr) => a + arr.length, 0);
@@ -651,7 +611,7 @@ function egcd(a: bigint, b: bigint) {
   return [gcd, x, y];
 }
 
-export function invert(number: bigint, modulo: bigint = CURVE.P) {
+function invert(number: bigint, modulo: bigint = CURVE.P) {
   if (number === 0n || modulo <= 0n) {
     throw new Error('invert: expected positive integers');
   }
@@ -770,7 +730,7 @@ function sqrtRatio(t: bigint, v: bigint) {
 
 async function sha512ToNumberLE(...args: Uint8Array[]): Promise<bigint> {
   const messageArray = concatTypedArrays(...args);
-  const hash = await sha512(messageArray);
+  const hash = await utils.sha512(messageArray);
   const value = arrayToNumberLE(hash);
   return mod(value, CURVE.n);
 }
@@ -816,7 +776,7 @@ export function getPublicKey(privateKey: Uint8Array): Promise<Uint8Array>;
 export function getPublicKey(privateKey: string): Promise<string>;
 export function getPublicKey(privateKey: bigint | number): Promise<Uint8Array>;
 export async function getPublicKey(privateKey: PrivKey) {
-  const privBytes = await sha512(ensurePrivInputArray(privateKey));
+  const privBytes = await utils.sha512(ensurePrivInputArray(privateKey));
   const publicKey = Point.BASE.multiply(encodePrivate(privBytes));
   return typeof privateKey === 'string' ? publicKey.toHex() : publicKey.toRawBytes();
 }
@@ -824,7 +784,7 @@ export async function getPublicKey(privateKey: PrivKey) {
 export function sign(hash: Uint8Array, privateKey: Hex): Promise<Uint8Array>;
 export function sign(hash: string, privateKey: Hex): Promise<string>;
 export async function sign(hash: Hex, privateKey: Hex) {
-  const privBytes = await sha512(ensurePrivInputArray(privateKey));
+  const privBytes = await utils.sha512(ensurePrivInputArray(privateKey));
   const p = encodePrivate(privBytes);
   const P = Point.BASE.multiply(p);
   const msg = ensureArray(hash);
@@ -851,9 +811,51 @@ export async function verify(signature: Signature, hash: Hex, publicKey: PubKey)
 Point.BASE._setWindowSize(8);
 
 export const utils = {
-  randomPrivateKey,
-  sha512,
-  TORSION_SUBGROUP,
+  // The 8-torsion subgroup ℰ8.
+  // Those are "buggy" points, if you multiply them by 8, you'll receive Point.ZERO.
+  // Ported from curve25519-dalek.
+  TORSION_SUBGROUP: [
+    '0100000000000000000000000000000000000000000000000000000000000000',
+    'c7176a703d4dd84fba3c0b760d10670f2a2053fa2c39ccc64ec7fd7792ac037a',
+    '0000000000000000000000000000000000000000000000000000000000000080',
+    '26e8958fc2b227b045c3f489f2ef98f0d5dfac05d3c63339b13802886d53fc05',
+    'ecffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7f',
+    '26e8958fc2b227b045c3f489f2ef98f0d5dfac05d3c63339b13802886d53fc85',
+    '0000000000000000000000000000000000000000000000000000000000000000',
+    'c7176a703d4dd84fba3c0b760d10670f2a2053fa2c39ccc64ec7fd7792ac03fa',
+  ],
+  randomPrivateKey: (bytesLength: number = 32): Uint8Array => {
+    // @ts-ignore
+    if (typeof window == 'object' && 'crypto' in window) {
+      // @ts-ignore
+      return window.crypto.getRandomValues(new Uint8Array(bytesLength));
+      // @ts-ignore
+    } else if (typeof process === 'object' && 'node' in process.versions) {
+      // @ts-ignore
+      const { randomBytes } = require('crypto');
+      return new Uint8Array(randomBytes(bytesLength).buffer);
+    } else {
+      throw new Error("The environment doesn't have randomBytes function");
+    }
+  },
+  sha512: async (message: Uint8Array): Promise<Uint8Array> => {
+    // @ts-ignore
+    if (typeof window == 'object' && 'crypto' in window) {
+      // @ts-ignore
+      const buffer = await window.crypto.subtle.digest('SHA-512', message.buffer);
+      // @ts-ignore
+      return new Uint8Array(buffer);
+      // @ts-ignore
+    } else if (typeof process === 'object' && 'node' in process.versions) {
+      // @ts-ignore
+      const { createHash } = require('crypto');
+      const hash = createHash('sha512');
+      hash.update(message);
+      return Uint8Array.from(hash.digest());
+    } else {
+      throw new Error("The environment doesn't have sha512 function");
+    }
+  },
   precompute(windowSize = 8, point = Point.BASE): Point {
     const cached = point.equals(Point.BASE) ? point : new Point(point.x, point.y);
     cached._setWindowSize(windowSize);

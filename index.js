@@ -17,16 +17,6 @@ const I = powMod(2n, (CURVE.P + 1n) / 4n, CURVE.P);
 const SQRT_M1 = 19681161376707505956807079304988542015446066515923890162744021073123829784752n;
 const INVSQRT_A_MINUS_D = 54469307008909316920995813868745141605393597292927456921205312896311721017578n;
 const SQRT_AD_MINUS_ONE = 25063068953384623474111414158702152701244531502492656460079210482610430750235n;
-const TORSION_SUBGROUP = [
-    '0100000000000000000000000000000000000000000000000000000000000000',
-    'c7176a703d4dd84fba3c0b760d10670f2a2053fa2c39ccc64ec7fd7792ac037a',
-    '0000000000000000000000000000000000000000000000000000000000000080',
-    '26e8958fc2b227b045c3f489f2ef98f0d5dfac05d3c63339b13802886d53fc05',
-    'ecffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7f',
-    '26e8958fc2b227b045c3f489f2ef98f0d5dfac05d3c63339b13802886d53fc85',
-    '0000000000000000000000000000000000000000000000000000000000000000',
-    'c7176a703d4dd84fba3c0b760d10670f2a2053fa2c39ccc64ec7fd7792ac03fa',
-];
 class ExtendedPoint {
     constructor(x, y, z, t) {
         this.x = x;
@@ -368,31 +358,6 @@ class SignResult {
     }
 }
 exports.SignResult = SignResult;
-let sha512;
-let randomPrivateKey = (bytesLength = 32) => new Uint8Array(bytesLength);
-if (typeof window == 'object' && 'crypto' in window) {
-    sha512 = async (message) => {
-        const buffer = await window.crypto.subtle.digest('SHA-512', message.buffer);
-        return new Uint8Array(buffer);
-    };
-    randomPrivateKey = (bytesLength = 32) => {
-        return window.crypto.getRandomValues(new Uint8Array(bytesLength));
-    };
-}
-else if (typeof process === 'object' && 'node' in process.versions) {
-    const { createHash, randomBytes } = require('crypto');
-    sha512 = async (message) => {
-        const hash = createHash('sha512');
-        hash.update(message);
-        return Uint8Array.from(hash.digest());
-    };
-    randomPrivateKey = (bytesLength = 32) => {
-        return new Uint8Array(randomBytes(bytesLength).buffer);
-    };
-}
-else {
-    throw new Error("The environment doesn't have sha512 function");
-}
 function concatTypedArrays(...arrays) {
     if (arrays.length === 1)
         return arrays[0];
@@ -502,7 +467,6 @@ function invert(number, modulo = CURVE.P) {
     }
     return mod(x, modulo);
 }
-exports.invert = invert;
 function invertBatch(nums, n = CURVE.P) {
     const len = nums.length;
     const scratch = new Array(len);
@@ -580,7 +544,7 @@ function sqrtRatio(t, v) {
 }
 async function sha512ToNumberLE(...args) {
     const messageArray = concatTypedArrays(...args);
-    const hash = await sha512(messageArray);
+    const hash = await exports.utils.sha512(messageArray);
     const value = arrayToNumberLE(hash);
     return mod(value, CURVE.n);
 }
@@ -617,13 +581,13 @@ function ensurePrivInputArray(privateKey) {
     return hexToArray(pad64(BigInt(privateKey)));
 }
 async function getPublicKey(privateKey) {
-    const privBytes = await sha512(ensurePrivInputArray(privateKey));
+    const privBytes = await exports.utils.sha512(ensurePrivInputArray(privateKey));
     const publicKey = Point.BASE.multiply(encodePrivate(privBytes));
     return typeof privateKey === 'string' ? publicKey.toHex() : publicKey.toRawBytes();
 }
 exports.getPublicKey = getPublicKey;
 async function sign(hash, privateKey) {
-    const privBytes = await sha512(ensurePrivInputArray(privateKey));
+    const privBytes = await exports.utils.sha512(ensurePrivInputArray(privateKey));
     const p = encodePrivate(privBytes);
     const P = Point.BASE.multiply(p);
     const msg = ensureArray(hash);
@@ -650,9 +614,43 @@ async function verify(signature, hash, publicKey) {
 exports.verify = verify;
 Point.BASE._setWindowSize(8);
 exports.utils = {
-    randomPrivateKey,
-    sha512,
-    TORSION_SUBGROUP,
+    TORSION_SUBGROUP: [
+        '0100000000000000000000000000000000000000000000000000000000000000',
+        'c7176a703d4dd84fba3c0b760d10670f2a2053fa2c39ccc64ec7fd7792ac037a',
+        '0000000000000000000000000000000000000000000000000000000000000080',
+        '26e8958fc2b227b045c3f489f2ef98f0d5dfac05d3c63339b13802886d53fc05',
+        'ecffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7f',
+        '26e8958fc2b227b045c3f489f2ef98f0d5dfac05d3c63339b13802886d53fc85',
+        '0000000000000000000000000000000000000000000000000000000000000000',
+        'c7176a703d4dd84fba3c0b760d10670f2a2053fa2c39ccc64ec7fd7792ac03fa',
+    ],
+    randomPrivateKey: (bytesLength = 32) => {
+        if (typeof window == 'object' && 'crypto' in window) {
+            return window.crypto.getRandomValues(new Uint8Array(bytesLength));
+        }
+        else if (typeof process === 'object' && 'node' in process.versions) {
+            const { randomBytes } = require('crypto');
+            return new Uint8Array(randomBytes(bytesLength).buffer);
+        }
+        else {
+            throw new Error("The environment doesn't have randomBytes function");
+        }
+    },
+    sha512: async (message) => {
+        if (typeof window == 'object' && 'crypto' in window) {
+            const buffer = await window.crypto.subtle.digest('SHA-512', message.buffer);
+            return new Uint8Array(buffer);
+        }
+        else if (typeof process === 'object' && 'node' in process.versions) {
+            const { createHash } = require('crypto');
+            const hash = createHash('sha512');
+            hash.update(message);
+            return Uint8Array.from(hash.digest());
+        }
+        else {
+            throw new Error("The environment doesn't have sha512 function");
+        }
+    },
     precompute(windowSize = 8, point = Point.BASE) {
         const cached = point.equals(Point.BASE) ? point : new Point(point.x, point.y);
         cached._setWindowSize(windowSize);

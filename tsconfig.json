@@ -7,6 +7,6 @@
     "removeComments": true,
     "preserveConstEnums": true
   },
-  "include": ["./*.ts"],
+  "include": ["./index.ts"],
   "exclude": ["node_modules", "index.test.ts"]
 }

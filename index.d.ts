@@ -65,7 +65,6 @@ declare class SignResult {
     toHex(): string;
 }
 export { ExtendedPoint, Point, SignResult };
-export declare function invert(number: bigint, modulo?: bigint): bigint;
 export declare function getPublicKey(privateKey: Uint8Array): Promise<Uint8Array>;
 export declare function getPublicKey(privateKey: string): Promise<string>;
 export declare function getPublicKey(privateKey: bigint | number): Promise<Uint8Array>;
@@ -73,8 +72,8 @@ export declare function sign(hash: Uint8Array, privateKey: Hex): Promise<Uint8Ar
 export declare function sign(hash: string, privateKey: Hex): Promise<string>;
 export declare function verify(signature: Signature, hash: Hex, publicKey: PubKey): Promise<boolean>;
 export declare const utils: {
+    TORSION_SUBGROUP: string[];
     randomPrivateKey: (bytesLength?: number) => Uint8Array;
     sha512: (message: Uint8Array) => Promise<Uint8Array>;
-    TORSION_SUBGROUP: string[];
     precompute(windowSize?: number, point?: Point): Point;
 };
