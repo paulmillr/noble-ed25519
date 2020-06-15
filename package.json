@@ -1,6 +1,6 @@
 {
   "name": "noble-ed25519",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Noble ed25519 & ristretto255. Fast, high-security, easily auditable, 0-dep, 1-file pubkey, scalarmult & EDDSA.",
   "main": "index.js",
   "files": [
