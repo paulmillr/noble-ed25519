@@ -40,9 +40,9 @@ class ExtendedPoint {
         return this.toAffineBatch(points).map(this.fromAffine);
     }
     static fromRistrettoHash(hash) {
-        const r1 = arrayToNumberRst(hash.slice(0, ENCODING_LENGTH));
+        const r1 = bytesToNumberRst(hash.slice(0, ENCODING_LENGTH));
         const R1 = this.elligatorRistrettoFlavor(r1);
-        const r2 = arrayToNumberRst(hash.slice(ENCODING_LENGTH, ENCODING_LENGTH * 2));
+        const r2 = bytesToNumberRst(hash.slice(ENCODING_LENGTH, ENCODING_LENGTH * 2));
         const R2 = this.elligatorRistrettoFlavor(r2);
         return R1.add(R2);
     }
@@ -68,8 +68,8 @@ class ExtendedPoint {
         return new ExtendedPoint(mod(W0 * W3), mod(W2 * W1), mod(W1 * W3), mod(W0 * W2));
     }
     static fromRistrettoBytes(bytes) {
-        const s = arrayToNumberRst(bytes);
-        const sEncodingIsCanonical = arraysAreEqual(numberToArrayPadded(s, ENCODING_LENGTH), bytes);
+        const s = bytesToNumberRst(bytes);
+        const sEncodingIsCanonical = equalBytes(numberToBytesPadded(s, ENCODING_LENGTH), bytes);
         const sIsNegative = edIsNegative(s);
         if (!sEncodingIsCanonical || sIsNegative) {
             throw new Error('Cannot convert bytes to Ristretto Point');
@@ -113,7 +113,7 @@ class ExtendedPoint {
         let s = mod((z - y) * invDeno);
         if (edIsNegative(s))
             s = mod(-s);
-        return numberToArrayPadded(s, ENCODING_LENGTH);
+        return numberToBytesPadded(s, ENCODING_LENGTH);
     }
     equals(other) {
         const a = this;
@@ -277,12 +277,12 @@ class Point {
     }
     static fromHex(hash) {
         const { d, P } = CURVE;
-        const bytes = hash instanceof Uint8Array ? hash : hexToArray(hash);
+        const bytes = hash instanceof Uint8Array ? hash : hexToBytes(hash);
         const len = bytes.length - 1;
         const normedLast = bytes[len] & ~0x80;
         const isLastByteOdd = (bytes[len] & 0x80) !== 0;
         const normed = Uint8Array.from(Array.from(bytes.slice(0, len)).concat(normedLast));
-        const y = arrayToNumberLE(normed);
+        const y = bytesToNumberLE(normed);
         if (y >= P) {
             throw new Error('Point#fromHex expects hex <= Fp');
         }
@@ -309,7 +309,7 @@ class Point {
         return u8;
     }
     toHex() {
-        return arrayToHex(this.toRawBytes());
+        return bytesToHex(this.toRawBytes());
     }
     toX25519() {
         return mod((1n + this.y) * invert(1n - this.y));
@@ -339,13 +339,13 @@ class SignResult {
         this.s = s;
     }
     static fromHex(hex) {
-        hex = ensureArray(hex);
+        hex = ensureBytes(hex);
         const r = Point.fromHex(hex.slice(0, 32));
-        const s = arrayToNumberLE(hex.slice(32));
+        const s = bytesToNumberLE(hex.slice(32));
         return new SignResult(r, s);
     }
     toRawBytes() {
-        const numberBytes = hexToArray(numberToHex(this.s)).reverse();
+        const numberBytes = hexToBytes(numberToHex(this.s)).reverse();
         const sBytes = new Uint8Array(ENCODING_LENGTH);
         sBytes.set(numberBytes);
         const res = new Uint8Array(ENCODING_LENGTH * 2);
@@ -354,11 +354,11 @@ class SignResult {
         return res;
     }
     toHex() {
-        return arrayToHex(this.toRawBytes());
+        return bytesToHex(this.toRawBytes());
     }
 }
 exports.SignResult = SignResult;
-function concatTypedArrays(...arrays) {
+function concatBytes(...arrays) {
     if (arrays.length === 1)
         return arrays[0];
     const length = arrays.reduce((a, arr) => a + arr.length, 0);
@@ -370,7 +370,7 @@ function concatTypedArrays(...arrays) {
     }
     return result;
 }
-function arrayToHex(uint8a) {
+function bytesToHex(uint8a) {
     let hex = '';
     for (let i = 0; i < uint8a.length; i++) {
         hex += uint8a[i].toString(16).padStart(2, '0');
@@ -380,7 +380,7 @@ function arrayToHex(uint8a) {
 function pad64(num) {
     return num.toString(16).padStart(ENCODING_LENGTH * 2, '0');
 }
-function hexToArray(hex) {
+function hexToBytes(hex) {
     hex = hex.length & 1 ? `0${hex}` : hex;
     const array = new Uint8Array(hex.length / 2);
     for (let i = 0; i < array.length; i++) {
@@ -393,16 +393,16 @@ function numberToHex(num) {
     const hex = num.toString(16);
     return hex.length & 1 ? `0${hex}` : hex;
 }
-function numberToArrayPadded(num, length = ENCODING_LENGTH) {
+function numberToBytesPadded(num, length = ENCODING_LENGTH) {
     const hex = numberToHex(num).padStart(length * 2, '0');
-    return hexToArray(hex).reverse();
+    return hexToBytes(hex).reverse();
 }
 function edIsNegative(num) {
     const hex = numberToHex(mod(num));
     const byte = Number.parseInt(hex.slice(hex.length - 2, hex.length), 16);
     return Boolean(byte & 1);
 }
-function arrayToNumberLE(uint8a) {
+function bytesToNumberLE(uint8a) {
     let value = 0n;
     for (let i = 0; i < uint8a.length; i++) {
         value += BigInt(uint8a[i]) << (8n * BigInt(i));
@@ -420,7 +420,7 @@ function load8(input, padding = 0) {
         (BigInt(input[7 + padding]) << 56n));
 }
 const low51bitMask = (1n << 51n) - 1n;
-function arrayToNumberRst(bytes) {
+function bytesToNumberRst(bytes) {
     const octet1 = load8(bytes, 0) & low51bitMask;
     const octet2 = (load8(bytes, 6) >> 3n) & low51bitMask;
     const octet3 = (load8(bytes, 12) >> 6n) & low51bitMask;
@@ -543,9 +543,9 @@ function sqrtRatio(t, v) {
     return { isNotZeroSquare, value: mod(r) };
 }
 async function sha512ToNumberLE(...args) {
-    const messageArray = concatTypedArrays(...args);
+    const messageArray = concatBytes(...args);
     const hash = await exports.utils.sha512(messageArray);
-    const value = arrayToNumberLE(hash);
+    const value = bytesToNumberLE(hash);
     return mod(value, CURVE.n);
 }
 function keyPrefix(privateBytes) {
@@ -557,12 +557,12 @@ function encodePrivate(privateBytes) {
     head[0] &= 248;
     head[last] &= 127;
     head[last] |= 64;
-    return arrayToNumberLE(head);
+    return bytesToNumberLE(head);
 }
-function ensureArray(hash) {
-    return hash instanceof Uint8Array ? hash : hexToArray(hash);
+function ensureBytes(hash) {
+    return hash instanceof Uint8Array ? hash : hexToBytes(hash);
 }
-function arraysAreEqual(b1, b2) {
+function equalBytes(b1, b2) {
     if (b1.length !== b2.length) {
         return false;
     }
@@ -573,24 +573,24 @@ function arraysAreEqual(b1, b2) {
     }
     return true;
 }
-function ensurePrivInputArray(privateKey) {
+function ensurePrivInputBytes(privateKey) {
     if (privateKey instanceof Uint8Array)
         return privateKey;
     if (typeof privateKey === 'string')
-        return hexToArray(privateKey.padStart(ENCODING_LENGTH * 2, '0'));
-    return hexToArray(pad64(BigInt(privateKey)));
+        return hexToBytes(privateKey.padStart(ENCODING_LENGTH * 2, '0'));
+    return hexToBytes(pad64(BigInt(privateKey)));
 }
 async function getPublicKey(privateKey) {
-    const privBytes = await exports.utils.sha512(ensurePrivInputArray(privateKey));
+    const privBytes = await exports.utils.sha512(ensurePrivInputBytes(privateKey));
     const publicKey = Point.BASE.multiply(encodePrivate(privBytes));
     return typeof privateKey === 'string' ? publicKey.toHex() : publicKey.toRawBytes();
 }
 exports.getPublicKey = getPublicKey;
 async function sign(hash, privateKey) {
-    const privBytes = await exports.utils.sha512(ensurePrivInputArray(privateKey));
+    const privBytes = await exports.utils.sha512(ensurePrivInputBytes(privateKey));
     const p = encodePrivate(privBytes);
     const P = Point.BASE.multiply(p);
-    const msg = ensureArray(hash);
+    const msg = ensureBytes(hash);
     const r = await sha512ToNumberLE(keyPrefix(privBytes), msg);
     const R = Point.BASE.multiply(r);
     const h = await sha512ToNumberLE(R.toRawBytes(), P.toRawBytes(), msg);
@@ -600,7 +600,7 @@ async function sign(hash, privateKey) {
 }
 exports.sign = sign;
 async function verify(signature, hash, publicKey) {
-    hash = ensureArray(hash);
+    hash = ensureBytes(hash);
     if (!(publicKey instanceof Point))
         publicKey = Point.fromHex(publicKey);
     if (!(signature instanceof SignResult))

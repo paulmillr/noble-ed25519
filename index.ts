@@ -76,9 +76,9 @@ class ExtendedPoint {
 
   // The hash-to-group operation applies Elligator twice and adds the results.
   static fromRistrettoHash(hash: Uint8Array): ExtendedPoint {
-    const r1 = arrayToNumberRst(hash.slice(0, ENCODING_LENGTH));
+    const r1 = bytesToNumberRst(hash.slice(0, ENCODING_LENGTH));
     const R1 = this.elligatorRistrettoFlavor(r1);
-    const r2 = arrayToNumberRst(hash.slice(ENCODING_LENGTH, ENCODING_LENGTH * 2));
+    const r2 = bytesToNumberRst(hash.slice(ENCODING_LENGTH, ENCODING_LENGTH * 2));
     const R2 = this.elligatorRistrettoFlavor(r2);
     return R1.add(R2);
   }
@@ -119,8 +119,8 @@ class ExtendedPoint {
     // as s+p in 2^255-19..2^255-1.  We can check this by
     // converting back to bytes, and checking that we get the
     // original input, since our encoding routine is canonical.
-    const s = arrayToNumberRst(bytes);
-    const sEncodingIsCanonical = arraysAreEqual(numberToArrayPadded(s, ENCODING_LENGTH), bytes);
+    const s = bytesToNumberRst(bytes);
+    const sEncodingIsCanonical = equalBytes(numberToBytesPadded(s, ENCODING_LENGTH), bytes);
     const sIsNegative = edIsNegative(s);
     if (!sEncodingIsCanonical || sIsNegative) {
       throw new Error('Cannot convert bytes to Ristretto Point');
@@ -169,7 +169,7 @@ class ExtendedPoint {
     if (edIsNegative(x * invz)) y = mod(-y);
     let s = mod((z - y) * invDeno);
     if (edIsNegative(s)) s = mod(-s);
-    return numberToArrayPadded(s, ENCODING_LENGTH);
+    return numberToBytesPadded(s, ENCODING_LENGTH);
   }
   // Ristretto methods end.
 
@@ -384,12 +384,12 @@ class Point {
   // Uses algo from RFC8032 5.1.3.
   static fromHex(hash: Hex) {
     const { d, P } = CURVE;
-    const bytes = hash instanceof Uint8Array ? hash : hexToArray(hash);
+    const bytes = hash instanceof Uint8Array ? hash : hexToBytes(hash);
     const len = bytes.length - 1;
     const normedLast = bytes[len] & ~0x80;
     const isLastByteOdd = (bytes[len] & 0x80) !== 0;
     const normed = Uint8Array.from(Array.from(bytes.slice(0, len)).concat(normedLast));
-    const y = arrayToNumberLE(normed);
+    const y = bytesToNumberLE(normed);
     if (y >= P) {
       throw new Error('Point#fromHex expects hex <= Fp');
     }
@@ -427,7 +427,7 @@ class Point {
 
   // Same as toRawBytes, but returns string.
   toHex(): string {
-    return arrayToHex(this.toRawBytes());
+    return bytesToHex(this.toRawBytes());
   }
 
   // Converts to Montgomery; aka x coordinate of curve25519.
@@ -467,14 +467,14 @@ class SignResult {
   constructor(public r: Point, public s: bigint) {}
 
   static fromHex(hex: Hex) {
-    hex = ensureArray(hex);
+    hex = ensureBytes(hex);
     const r = Point.fromHex(hex.slice(0, 32));
-    const s = arrayToNumberLE(hex.slice(32));
+    const s = bytesToNumberLE(hex.slice(32));
     return new SignResult(r, s);
   }
 
   toRawBytes() {
-    const numberBytes = hexToArray(numberToHex(this.s)).reverse();
+    const numberBytes = hexToBytes(numberToHex(this.s)).reverse();
     const sBytes = new Uint8Array(ENCODING_LENGTH);
     sBytes.set(numberBytes);
     const res = new Uint8Array(ENCODING_LENGTH * 2);
@@ -485,13 +485,13 @@ class SignResult {
   }
 
   toHex() {
-    return arrayToHex(this.toRawBytes());
+    return bytesToHex(this.toRawBytes());
   }
 }
 
 export { ExtendedPoint, Point, SignResult };
 
-function concatTypedArrays(...arrays: Uint8Array[]): Uint8Array {
+function concatBytes(...arrays: Uint8Array[]): Uint8Array {
   if (arrays.length === 1) return arrays[0];
   const length = arrays.reduce((a, arr) => a + arr.length, 0);
   const result = new Uint8Array(length);
@@ -505,7 +505,7 @@ function concatTypedArrays(...arrays: Uint8Array[]): Uint8Array {
 
 // Convert between types
 // ---------------------
-function arrayToHex(uint8a: Uint8Array): string {
+function bytesToHex(uint8a: Uint8Array): string {
   // pre-caching chars could speed this up 6x.
   let hex = '';
   for (let i = 0; i < uint8a.length; i++) {
@@ -518,7 +518,7 @@ function pad64(num: number | bigint): string {
   return num.toString(16).padStart(ENCODING_LENGTH * 2, '0');
 }
 
-function hexToArray(hex: string): Uint8Array {
+function hexToBytes(hex: string): Uint8Array {
   hex = hex.length & 1 ? `0${hex}` : hex;
   const array = new Uint8Array(hex.length / 2);
   for (let i = 0; i < array.length; i++) {
@@ -533,9 +533,9 @@ function numberToHex(num: number | bigint): string {
   return hex.length & 1 ? `0${hex}` : hex;
 }
 
-function numberToArrayPadded(num: bigint, length: number = ENCODING_LENGTH) {
+function numberToBytesPadded(num: bigint, length: number = ENCODING_LENGTH) {
   const hex = numberToHex(num).padStart(length * 2, '0');
-  return hexToArray(hex).reverse();
+  return hexToBytes(hex).reverse();
 }
 
 function edIsNegative(num: bigint) {
@@ -545,7 +545,7 @@ function edIsNegative(num: bigint) {
 }
 
 // Little Endian
-function arrayToNumberLE(uint8a: Uint8Array): bigint {
+function bytesToNumberLE(uint8a: Uint8Array): bigint {
   let value = 0n;
   for (let i = 0; i < uint8a.length; i++) {
     value += BigInt(uint8a[i]) << (8n * BigInt(i));
@@ -567,7 +567,7 @@ function load8(input: Uint8Array, padding = 0) {
 }
 const low51bitMask = (1n << 51n) - 1n;
 // CUSTOM array to number.
-function arrayToNumberRst(bytes: Uint8Array) {
+function bytesToNumberRst(bytes: Uint8Array) {
   const octet1 = load8(bytes, 0) & low51bitMask;
   const octet2 = (load8(bytes, 6) >> 3n) & low51bitMask;
   const octet3 = (load8(bytes, 12) >> 6n) & low51bitMask;
@@ -729,9 +729,9 @@ function sqrtRatio(t: bigint, v: bigint) {
 // Math end
 
 async function sha512ToNumberLE(...args: Uint8Array[]): Promise<bigint> {
-  const messageArray = concatTypedArrays(...args);
+  const messageArray = concatBytes(...args);
   const hash = await utils.sha512(messageArray);
-  const value = arrayToNumberLE(hash);
+  const value = bytesToNumberLE(hash);
   return mod(value, CURVE.n);
 }
 
@@ -746,14 +746,14 @@ function encodePrivate(privateBytes: Uint8Array): bigint {
   head[last] &= 127;
   head[last] |= 64;
 
-  return arrayToNumberLE(head);
+  return bytesToNumberLE(head);
 }
 
-function ensureArray(hash: Hex): Uint8Array {
-  return hash instanceof Uint8Array ? hash : hexToArray(hash);
+function ensureBytes(hash: Hex): Uint8Array {
+  return hash instanceof Uint8Array ? hash : hexToBytes(hash);
 }
 
-function arraysAreEqual(b1: Uint8Array, b2: Uint8Array) {
+function equalBytes(b1: Uint8Array, b2: Uint8Array) {
   if (b1.length !== b2.length) {
     return false;
   }
@@ -765,18 +765,18 @@ function arraysAreEqual(b1: Uint8Array, b2: Uint8Array) {
   return true;
 }
 
-function ensurePrivInputArray(privateKey: PrivKey): Uint8Array {
+function ensurePrivInputBytes(privateKey: PrivKey): Uint8Array {
   if (privateKey instanceof Uint8Array) return privateKey;
   if (typeof privateKey === 'string')
-    return hexToArray(privateKey.padStart(ENCODING_LENGTH * 2, '0'));
-  return hexToArray(pad64(BigInt(privateKey)));
+    return hexToBytes(privateKey.padStart(ENCODING_LENGTH * 2, '0'));
+  return hexToBytes(pad64(BigInt(privateKey)));
 }
 
 export function getPublicKey(privateKey: Uint8Array): Promise<Uint8Array>;
 export function getPublicKey(privateKey: string): Promise<string>;
 export function getPublicKey(privateKey: bigint | number): Promise<Uint8Array>;
 export async function getPublicKey(privateKey: PrivKey) {
-  const privBytes = await utils.sha512(ensurePrivInputArray(privateKey));
+  const privBytes = await utils.sha512(ensurePrivInputBytes(privateKey));
   const publicKey = Point.BASE.multiply(encodePrivate(privBytes));
   return typeof privateKey === 'string' ? publicKey.toHex() : publicKey.toRawBytes();
 }
@@ -784,10 +784,10 @@ export async function getPublicKey(privateKey: PrivKey) {
 export function sign(hash: Uint8Array, privateKey: Hex): Promise<Uint8Array>;
 export function sign(hash: string, privateKey: Hex): Promise<string>;
 export async function sign(hash: Hex, privateKey: Hex) {
-  const privBytes = await utils.sha512(ensurePrivInputArray(privateKey));
+  const privBytes = await utils.sha512(ensurePrivInputBytes(privateKey));
   const p = encodePrivate(privBytes);
   const P = Point.BASE.multiply(p);
-  const msg = ensureArray(hash);
+  const msg = ensureBytes(hash);
   const r = await sha512ToNumberLE(keyPrefix(privBytes), msg);
   const R = Point.BASE.multiply(r);
   const h = await sha512ToNumberLE(R.toRawBytes(), P.toRawBytes(), msg);
@@ -797,7 +797,7 @@ export async function sign(hash: Hex, privateKey: Hex) {
 }
 
 export async function verify(signature: Signature, hash: Hex, publicKey: PubKey) {
-  hash = ensureArray(hash);
+  hash = ensureBytes(hash);
   if (!(publicKey instanceof Point)) publicKey = Point.fromHex(publicKey);
   if (!(signature instanceof SignResult)) signature = SignResult.fromHex(signature);
   const h = await sha512ToNumberLE(signature.r.toRawBytes(), publicKey.toRawBytes(), hash);
