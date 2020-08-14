@@ -318,7 +318,7 @@ class Point {
         return this.x === other.x && this.y === other.y;
     }
     negate() {
-        return new Point(this.x, mod(-this.y));
+        return new Point(mod(-this.x), this.y);
     }
     add(other) {
         return ExtendedPoint.fromAffine(this).add(ExtendedPoint.fromAffine(other)).toAffine();

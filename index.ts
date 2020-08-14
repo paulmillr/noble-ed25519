@@ -446,7 +446,7 @@ class Point {
   }
 
   negate() {
-    return new Point(this.x, mod(-this.y));
+    return new Point(mod(-this.x), this.y);
   }
 
   add(other: Point) {
