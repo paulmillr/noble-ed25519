@@ -12,7 +12,7 @@ Includes [ristretto255](https://ristretto.group) support. Ristretto is a techniq
 
 - No dependencies, one small file
 - Easily auditable TypeScript/JS code
-- Uses es2020 bigint. Supported in Chrome, Firefox, node 10+
+- Uses es2020 bigint. Supported in Chrome, Firefox, Safari, node 10+
 - All releases are signed and trusted
 - Check out all libraries:
   [secp256k1](https://github.com/paulmillr/noble-secp256k1),
