@@ -566,12 +566,11 @@ function equalBytes(b1, b2) {
     if (b1.length !== b2.length) {
         return false;
     }
+    let diff: number = 0;
     for (let i = 0; i < b1.length; i++) {
-        if (b1[i] !== b2[i]) {
-            return false;
-        }
+        diff |= b1[i] ^ b2[i];
     }
-    return true;
+    return diff === 0;
 }
 function ensurePrivInputBytes(privateKey) {
     if (privateKey instanceof Uint8Array)
