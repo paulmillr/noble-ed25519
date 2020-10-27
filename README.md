@@ -182,10 +182,19 @@ We're using built-in JS `BigInt`, which is "unsuitable for use in cryptography" 
 
 Benchmarks done with 2.9Ghz Coffee Lake.
 
-    getPublicKey(utils.randomPrivateKey()) x 4309 ops/sec @ 232μs/op
-    sign x 2042 ops/sec @ 489μs/op
-    verify x 417 ops/sec @ 2ms/op
-    ristretto255#fromHash x 3377 ops/sec @ 296μs/op
+```
+getPublicKey(utils.randomPrivateKey()) x 4309 ops/sec @ 232μs/op
+sign x 2042 ops/sec @ 489μs/op
+verify x 417 ops/sec @ 2ms/op
+ristretto255#fromHash x 3377 ops/sec @ 296μs/op
+
+# Compare to alternative implementations
+# tweetnacl@1.0.3 (fast)
+getPublicKey x 902 ops/sec @ 1.11ms/op
+sign x 500 ops/sec @ 2ms/op
+# ristretto255@0.1.1
+getPublicKey x 288 ops/sec @ 3.47ms/op
+```
 
 ## Contributing
 
