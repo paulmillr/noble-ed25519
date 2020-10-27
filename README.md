@@ -2,7 +2,7 @@
 
 [ed25519](https://en.wikipedia.org/wiki/EdDSA), an elliptic curve that could be used for asymmetric encryption and EDDSA signature scheme.
 
-Very fast, algorithmically resistant to timing attacks, conforms to [RFC8032](https://tools.ietf.org/html/rfc8032).
+One of the fastest JS implementations, algorithmically resistant to timing attacks, conforms to [RFC8032](https://tools.ietf.org/html/rfc8032).
 
 Includes [ristretto255](https://ristretto.group) support. Ristretto is a technique for constructing prime order elliptic curve groups with non-malleable encodings.
 
