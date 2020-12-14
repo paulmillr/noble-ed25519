@@ -130,6 +130,12 @@ but allows to speed-up subsequent getPublicKey() calls up to 20x.
 
 You may want to precompute values for your own point.
 
+`utils.TORSION_SUBGROUP`
+
+The 8-torsion subgroup ℰ8. Those are "buggy" points, if you multiply them by 8, you'll receive Point.ZERO.
+
+Useful to check implementations for signature malleability. See [the link](https://moderncrypto.org/mail-archive/curves/2017/000866.html)
+
 `Point#toX25519`
 
 You can use the method to use ed25519 keys for curve25519 encryption.
