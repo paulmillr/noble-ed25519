@@ -1,8 +1,6 @@
 # noble-ed25519 ![Node CI](https://github.com/paulmillr/noble-ed25519/workflows/Node%20CI/badge.svg) [![code style: prettier](https://img.shields.io/badge/code_style-prettier-ff69b4.svg?style=flat-square)](https://github.com/prettier/prettier)
 
-Fastest JS implementation of [ed25519](https://en.wikipedia.org/wiki/EdDSA), an elliptic curve that could be used for asymmetric encryption and EDDSA signature scheme.
-
-Algorithmically resistant to timing attacks, conforms to [RFC8032](https://tools.ietf.org/html/rfc8032).
+Fastest JS implementation of [ed25519](https://en.wikipedia.org/wiki/EdDSA), an elliptic curve that could be used for asymmetric encryption and EDDSA signature scheme. Algorithmically resistant to timing attacks, conforms to [RFC8032](https://tools.ietf.org/html/rfc8032).
 
 Includes [ristretto255](https://ristretto.group) support. Ristretto is a technique for constructing prime order elliptic curve groups with non-malleable encodings.
 
