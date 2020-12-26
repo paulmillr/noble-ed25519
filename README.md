@@ -1,6 +1,6 @@
 # noble-ed25519 ![Node CI](https://github.com/paulmillr/noble-ed25519/workflows/Node%20CI/badge.svg) [![code style: prettier](https://img.shields.io/badge/code_style-prettier-ff69b4.svg?style=flat-square)](https://github.com/prettier/prettier)
 
-Fastest js implementation of [ed25519](https://en.wikipedia.org/wiki/EdDSA), an elliptic curve that could be used for asymmetric encryption and EDDSA signature scheme.
+Fastest JS implementation of [ed25519](https://en.wikipedia.org/wiki/EdDSA), an elliptic curve that could be used for asymmetric encryption and EDDSA signature scheme.
 
 Algorithmically resistant to timing attacks, conforms to [RFC8032](https://tools.ietf.org/html/rfc8032).
 
@@ -29,11 +29,11 @@ Node:
 ```js
 import * as ed from 'noble-ed25519';
 
-const privKey = ed.utils.randomPrivateKey(); // 32-byte Uint8Array or string.
+const privateKey = ed.utils.randomPrivateKey(); // 32-byte Uint8Array or string.
 const msgHash = 'deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef';
 (async () => {
-  const publicKey = await ed.getPublicKey(privKey);
-  const signature = await ed.sign(msgHash, privKey);
+  const publicKey = await ed.getPublicKey(privateKey);
+  const signature = await ed.sign(msgHash, privateKey);
   const isSigned = await ed.verify(signature, msgHash, publicKey);
 })();
 ```
@@ -42,8 +42,8 @@ Deno:
 
 ```typescript
 import * as ed from 'https://deno.land/x/ed25519/mod.ts';
-const privKey = ed.utils.randomPrivateKey();
-const publicKey = await ed.getPublicKey(privKey);
+const privateKey = ed.utils.randomPrivateKey();
+const publicKey = await ed.getPublicKey(privateKey);
 ```
 
 ## API
