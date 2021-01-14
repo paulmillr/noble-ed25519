@@ -1,6 +1,7 @@
 "use strict";
 /*! noble-ed25519 - MIT License (c) Paul Miller (paulmillr.com) */
 Object.defineProperty(exports, "__esModule", { value: true });
+exports.utils = exports.verify = exports.sign = exports.getPublicKey = exports.SignResult = exports.Point = exports.ExtendedPoint = exports.CURVE = void 0;
 const CURVE = {
     a: -1n,
     d: 37095705934669439343138083508754565189542113879843219016388785533085940283555n,
@@ -566,11 +567,12 @@ function equalBytes(b1, b2) {
     if (b1.length !== b2.length) {
         return false;
     }
-    let diff: number = 0;
     for (let i = 0; i < b1.length; i++) {
-        diff |= b1[i] ^ b2[i];
+        if (b1[i] !== b2[i]) {
+            return false;
+        }
     }
-    return diff === 0;
+    return true;
 }
 function ensurePrivInputBytes(privateKey) {
     if (privateKey instanceof Uint8Array)

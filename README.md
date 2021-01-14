@@ -184,15 +184,20 @@ We're using built-in JS `BigInt`, which is "unsuitable for use in cryptography" 
 
 ## Speed
 
-Benchmarks done with 2.9Ghz i9-8950HK.
+Benchmarks done with Apple M1.
 
 ```
-getPublicKey(utils.randomPrivateKey()) x 4,309 ops/sec @ 232μs/op
-sign x 2,042 ops/sec @ 489μs/op
-verify x 417 ops/sec @ 2ms/op
-ristretto255#fromHash x 3,377 ops/sec @ 296μs/op
+getPublicKey(utils.randomPrivateKey()) x 6,562 ops/sec @ 152μs/op
+sign x 3,017 ops/sec @ 331μs/op
+verify x 599 ops/sec @ 1ms/op
+verifyBatch x 825 ops/sec @ 1ms/op
+ristretto255#fromHash x 4,966 ops/sec @ 201μs/op
+ristretto255 round x 2,251 ops/sec @ 444μs/op
+```
 
-# Compare to alternative implementations
+Compare to alternative implementations:
+
+```
 # tweetnacl@1.0.3 (fast)
 getPublicKey x 902 ops/sec @ 1.11ms/op # aka scalarMultBase
 sign x 500 ops/sec @ 2ms/op

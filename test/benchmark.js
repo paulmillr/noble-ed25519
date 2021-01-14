@@ -1,5 +1,5 @@
 const {run, mark, logMem} = require('micro-bmark');
-let ed = require('.');
+let ed = require('..');
 
 run(async () => {
   // warm-up

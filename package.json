@@ -11,7 +11,7 @@
     "build": "tsc -d",
     "lint": "prettier --print-width 100 --single-quote --check index.ts",
     "test": "jest",
-    "bench": "node benchmark.js"
+    "bench": "node test/benchmark.js"
   },
   "jest": {
     "testRegex": "/test/.*.ts",
