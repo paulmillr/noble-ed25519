@@ -199,10 +199,10 @@ Compare to alternative implementations:
 
 ```
 # tweetnacl@1.0.3 (fast)
-getPublicKey x 902 ops/sec @ 1.11ms/op # aka scalarMultBase
-sign x 500 ops/sec @ 2ms/op
+getPublicKey x 920 ops/sec @ 1ms/op # aka scalarMultBase
+sign x 519 ops/sec @ 2ms/op
 # ristretto255@0.1.1
-getPublicKey x 288 ops/sec @ 3.47ms/op # aka scalarMultBase
+getPublicKey x 877 ops/sec @ 1ms/op # aka scalarMultBase
 ```
 
 ## Contributing
