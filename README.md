@@ -4,6 +4,8 @@ Fastest JS implementation of [ed25519](https://en.wikipedia.org/wiki/EdDSA), an 
 
 Includes [ristretto255](https://ristretto.group) support. Ristretto is a technique for constructing prime order elliptic curve groups with non-malleable encodings.
 
+Check out [the online demo](https://paulmillr.com/ecc).
+
 ### This library belongs to *noble* crypto
 
 > **noble-crypto** — high-security, easily auditable set of contained cryptographic libraries and tools.
