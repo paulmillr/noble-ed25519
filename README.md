@@ -74,18 +74,18 @@ function sign(hash: string, privateKey: string): Promise<string>;
 ```
 - `hash: Uint8Array | string` - message hash which would be signed
 - `privateKey: Uint8Array | string` - private key which will sign the hash
-- Returns EdDSA signature. You can consume it with `SignResult.fromHex()` method:
-    - `SignResult.fromHex(ed25519.sign(hash, privateKey))`
+- Returns EdDSA signature. You can consume it with `Signature.fromHex()` method:
+    - `Signature.fromHex(ed25519.sign(hash, privateKey))`
 
 ##### `verify(signature, hash, publicKey)`
 ```typescript
 function verify(
-  signature: Uint8Array | string | SignResult,
+  signature: Uint8Array | string | Signature,
   hash: Uint8Array | string,
   publicKey: Uint8Array | string | Point
 ): Promise<boolean>
 ```
-- `signature: Uint8Array | string | SignResult` - returned by the `sign` function
+- `signature: Uint8Array | string | Signature` - returned by the `sign` function
 - `hash: Uint8Array | string` - message hash that needs to be verified
 - `publicKey: Uint8Array | string | Point` - e.g. that was generated from `privateKey` by `getPublicKey`
 - Returns `Promise<boolean>`: `Promise<true>` if `signature == hash`; otherwise `Promise<false>`
@@ -164,7 +164,16 @@ ed25519.Point {
   subtract(other: Point): Point;
   multiply(scalar: bigint): Point;
 }
-ed25519.SignResult {
+// Elliptic curve point in Extended (x, y, z, t) coordinates.
+ed25519.ExtendedPoint {
+  constructor(x: bigint, y: bigint, z: bigint, t: bigint);
+  static fromAffine(point: Point): ExtendedPoint;
+  static fromRistrettoHash(hash: Uint8Array): ExtendedPoint;
+  static fromRistrettoBytes(bytes: Uint8Array): ExtendedPoint;
+  toRistrettoBytes(): Uint8Array;
+  toAffine(): Point;
+}
+ed25519.Signature {
   constructor(r: bigint, s: bigint);
   toHex(): string;
 }

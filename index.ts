@@ -24,10 +24,10 @@ const CURVE = {
 // Cleaner output this way.
 export { CURVE };
 
-type PrivKey = Uint8Array | string | bigint | number;
-type PubKey = Uint8Array | string | Point;
 type Hex = Uint8Array | string;
-type Signature = Uint8Array | string | SignResult;
+type PrivKey = Hex | bigint | number;
+type PubKey = Hex | Point;
+type SigType = Hex | Signature;
 const ENCODING_LENGTH = 32;
 
 // (P + 3) / 8
@@ -49,7 +49,7 @@ const SQRT_AD_MINUS_ONE = 250630689533846234741114141587021527012445315024926564
 // Extended Point works in extended coordinates: (x, y, z, t) ∋ (x=x/z, y=y/z, t=xy)
 // https://en.wikipedia.org/wiki/Twisted_Edwards_curve#Extended_coordinates
 class ExtendedPoint {
-  constructor(public x: bigint, public y: bigint, public z: bigint, public t: bigint) {}
+  constructor(public x: bigint, public y: bigint, public z: bigint, public t: bigint) { }
 
   static BASE = new ExtendedPoint(CURVE.Gx, CURVE.Gy, 1n, mod(CURVE.Gx * CURVE.Gy));
   static ZERO = new ExtendedPoint(0n, 1n, 1n, 0n);
@@ -373,7 +373,7 @@ class Point {
   // stores precomputed values. Usually only base point would be precomputed.
   _WINDOW_SIZE?: number;
 
-  constructor(public x: bigint, public y: bigint) {}
+  constructor(public x: bigint, public y: bigint) { }
 
   // "Private method", don't use it directly.
   _setWindowSize(windowSize: number) {
@@ -463,14 +463,14 @@ class Point {
   }
 }
 
-class SignResult {
-  constructor(public r: Point, public s: bigint) {}
+class Signature {
+  constructor(public r: Point, public s: bigint) { }
 
   static fromHex(hex: Hex) {
     hex = ensureBytes(hex);
     const r = Point.fromHex(hex.slice(0, 32));
     const s = bytesToNumberLE(hex.slice(32));
-    return new SignResult(r, s);
+    return new Signature(r, s);
   }
 
   toRawBytes() {
@@ -489,7 +489,7 @@ class SignResult {
   }
 }
 
-export { ExtendedPoint, Point, SignResult };
+export { ExtendedPoint, Point, Signature, Signature as SignResult };
 
 function concatBytes(...arrays: Uint8Array[]): Uint8Array {
   if (arrays.length === 1) return arrays[0];
@@ -656,7 +656,7 @@ function powMod2(t: bigint, power: bigint) {
   return res;
 }
 
-// Pow to P_DIV4_1.
+// Unwrapped pow to P_DIV4_1.
 function pow_2_252_3(t: bigint) {
   t = mod(t);
   const { P } = CURVE;
@@ -772,9 +772,8 @@ function ensurePrivInputBytes(privateKey: PrivKey): Uint8Array {
   return hexToBytes(pad64(BigInt(privateKey)));
 }
 
-export function getPublicKey(privateKey: Uint8Array): Promise<Uint8Array>;
+export function getPublicKey(privateKey: Uint8Array | bigint | number): Promise<Uint8Array>;
 export function getPublicKey(privateKey: string): Promise<string>;
-export function getPublicKey(privateKey: bigint | number): Promise<Uint8Array>;
 export async function getPublicKey(privateKey: PrivKey) {
   const privBytes = await utils.sha512(ensurePrivInputBytes(privateKey));
   const publicKey = Point.BASE.multiply(encodePrivate(privBytes));
@@ -792,14 +791,14 @@ export async function sign(hash: Hex, privateKey: Hex) {
   const R = Point.BASE.multiply(r);
   const h = await sha512ToNumberLE(R.toRawBytes(), P.toRawBytes(), msg);
   const S = mod(r + h * p, CURVE.n);
-  const sig = new SignResult(R, S);
+  const sig = new Signature(R, S);
   return typeof hash === 'string' ? sig.toHex() : sig.toRawBytes();
 }
 
-export async function verify(signature: Signature, hash: Hex, publicKey: PubKey) {
+export async function verify(signature: SigType, hash: Hex, publicKey: PubKey): Promise<boolean> {
   hash = ensureBytes(hash);
   if (!(publicKey instanceof Point)) publicKey = Point.fromHex(publicKey);
-  if (!(signature instanceof SignResult)) signature = SignResult.fromHex(signature);
+  if (!(signature instanceof Signature)) signature = Signature.fromHex(signature);
   const h = await sha512ToNumberLE(signature.r.toRawBytes(), publicKey.toRawBytes(), hash);
   const Ph = ExtendedPoint.fromAffine(publicKey).multiplyUnsafe(h);
   const Gs = ExtendedPoint.BASE.multiply(signature.s);

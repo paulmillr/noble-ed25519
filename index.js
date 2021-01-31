@@ -1,7 +1,7 @@
 "use strict";
 /*! noble-ed25519 - MIT License (c) Paul Miller (paulmillr.com) */
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.utils = exports.verify = exports.sign = exports.getPublicKey = exports.SignResult = exports.Point = exports.ExtendedPoint = exports.CURVE = void 0;
+exports.utils = exports.verify = exports.sign = exports.getPublicKey = exports.SignResult = exports.Signature = exports.Point = exports.ExtendedPoint = exports.CURVE = void 0;
 const CURVE = {
     a: -1n,
     d: 37095705934669439343138083508754565189542113879843219016388785533085940283555n,
@@ -334,7 +334,7 @@ class Point {
 exports.Point = Point;
 Point.BASE = new Point(CURVE.Gx, CURVE.Gy);
 Point.ZERO = new Point(0n, 1n);
-class SignResult {
+class Signature {
     constructor(r, s) {
         this.r = r;
         this.s = s;
@@ -343,7 +343,7 @@ class SignResult {
         hex = ensureBytes(hex);
         const r = Point.fromHex(hex.slice(0, 32));
         const s = bytesToNumberLE(hex.slice(32));
-        return new SignResult(r, s);
+        return new Signature(r, s);
     }
     toRawBytes() {
         const numberBytes = hexToBytes(numberToHex(this.s)).reverse();
@@ -358,7 +358,8 @@ class SignResult {
         return bytesToHex(this.toRawBytes());
     }
 }
-exports.SignResult = SignResult;
+exports.Signature = Signature;
+exports.SignResult = Signature;
 function concatBytes(...arrays) {
     if (arrays.length === 1)
         return arrays[0];
@@ -596,7 +597,7 @@ async function sign(hash, privateKey) {
     const R = Point.BASE.multiply(r);
     const h = await sha512ToNumberLE(R.toRawBytes(), P.toRawBytes(), msg);
     const S = mod(r + h * p, CURVE.n);
-    const sig = new SignResult(R, S);
+    const sig = new Signature(R, S);
     return typeof hash === 'string' ? sig.toHex() : sig.toRawBytes();
 }
 exports.sign = sign;
@@ -604,8 +605,8 @@ async function verify(signature, hash, publicKey) {
     hash = ensureBytes(hash);
     if (!(publicKey instanceof Point))
         publicKey = Point.fromHex(publicKey);
-    if (!(signature instanceof SignResult))
-        signature = SignResult.fromHex(signature);
+    if (!(signature instanceof Signature))
+        signature = Signature.fromHex(signature);
     const h = await sha512ToNumberLE(signature.r.toRawBytes(), publicKey.toRawBytes(), hash);
     const Ph = ExtendedPoint.fromAffine(publicKey).multiplyUnsafe(h);
     const Gs = ExtendedPoint.BASE.multiply(signature.s);

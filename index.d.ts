@@ -9,9 +9,9 @@ declare const CURVE: {
     Gy: bigint;
 };
 export { CURVE };
-declare type PubKey = Uint8Array | string | Point;
 declare type Hex = Uint8Array | string;
-declare type Signature = Uint8Array | string | SignResult;
+declare type PubKey = Hex | Point;
+declare type SigType = Hex | Signature;
 declare class ExtendedPoint {
     x: bigint;
     y: bigint;
@@ -56,21 +56,20 @@ declare class Point {
     subtract(other: Point): Point;
     multiply(scalar: bigint): Point;
 }
-declare class SignResult {
+declare class Signature {
     r: Point;
     s: bigint;
     constructor(r: Point, s: bigint);
-    static fromHex(hex: Hex): SignResult;
+    static fromHex(hex: Hex): Signature;
     toRawBytes(): Uint8Array;
     toHex(): string;
 }
-export { ExtendedPoint, Point, SignResult };
-export declare function getPublicKey(privateKey: Uint8Array): Promise<Uint8Array>;
+export { ExtendedPoint, Point, Signature, Signature as SignResult };
+export declare function getPublicKey(privateKey: Uint8Array | bigint | number): Promise<Uint8Array>;
 export declare function getPublicKey(privateKey: string): Promise<string>;
-export declare function getPublicKey(privateKey: bigint | number): Promise<Uint8Array>;
 export declare function sign(hash: Uint8Array, privateKey: Hex): Promise<Uint8Array>;
 export declare function sign(hash: string, privateKey: Hex): Promise<string>;
-export declare function verify(signature: Signature, hash: Hex, publicKey: PubKey): Promise<boolean>;
+export declare function verify(signature: SigType, hash: Hex, publicKey: PubKey): Promise<boolean>;
 export declare const utils: {
     TORSION_SUBGROUP: string[];
     randomPrivateKey: (bytesLength?: number) => Uint8Array;
