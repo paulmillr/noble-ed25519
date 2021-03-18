@@ -470,6 +470,9 @@ class Signature {
     hex = ensureBytes(hex);
     const r = Point.fromHex(hex.slice(0, 32));
     const s = bytesToNumberLE(hex.slice(32));
+    if (s >= CURVE.n) {
+      throw new Error('Signature#fromHex expects s <= CURVE.n');
+    }
     return new Signature(r, s);
   }
 
