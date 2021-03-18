@@ -804,7 +804,7 @@ export async function verify(signature: SigType, hash: Hex, publicKey: PubKey): 
   if (!(signature instanceof Signature)) signature = Signature.fromHex(signature);
   const h = await sha512ToNumberLE(signature.r.toRawBytes(), publicKey.toRawBytes(), hash);
   const Ph = ExtendedPoint.fromAffine(publicKey).multiplyUnsafe(h);
-  const Gs = ExtendedPoint.BASE.multiply(signature.s);
+  const Gs = signature.s ? ExtendedPoint.BASE.multiply(signature.s) : ExtendedPoint.BASE;
   const RPh = ExtendedPoint.fromAffine(signature.r).add(Ph);
   return Gs.equals(RPh);
 }
