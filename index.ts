@@ -252,9 +252,10 @@ class ExtendedPoint {
       throw new TypeError('Point#multiply: expected number or bigint');
     }
     let n = mod(BigInt(scalar), CURVE.n);
-    if (n <= 0) {
+    if (n <= 0n) {
       throw new Error('Point#multiply: invalid scalar, expected positive integer');
     }
+    if (n === 1n) return this;
     let p = ExtendedPoint.ZERO;
     let d: ExtendedPoint = this;
     while (n > 0n) {
@@ -804,9 +805,9 @@ export async function verify(signature: SigType, hash: Hex, publicKey: PubKey): 
   if (!(signature instanceof Signature)) signature = Signature.fromHex(signature);
   const h = await sha512ToNumberLE(signature.r.toRawBytes(), publicKey.toRawBytes(), hash);
   const Ph = ExtendedPoint.fromAffine(publicKey).multiplyUnsafe(h);
-  const Gs = signature.s ? ExtendedPoint.BASE.multiply(signature.s) : ExtendedPoint.BASE;
-  const RPh = ExtendedPoint.fromAffine(signature.r).add(Ph);
-  return Gs.equals(RPh);
+  const Gs = ExtendedPoint.BASE.multiply(signature.s || 1n);
+  const RPh = ExtendedPoint.fromAffine(signature.r).multiplyUnsafe(8n).add(Ph.multiplyUnsafe(8n));
+  return Gs.multiplyUnsafe(8n).equals(RPh);
 }
 
 // Enable precomputes. Slows down first publicKey computation by 20ms.
