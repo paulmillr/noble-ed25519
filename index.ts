@@ -343,7 +343,8 @@ class ExtendedPoint {
       throw new TypeError('Point#multiply: expected number or bigint');
     }
     const n = mod(BigInt(scalar), CURVE.n);
-    if (n <= 0) {
+    if (n === 0n) return ExtendedPoint.ZERO;
+    if (n < 0n) {
       throw new Error('Point#multiply: invalid scalar, expected positive integer');
     }
     return ExtendedPoint.normalizeZ(this.wNAF(n, affinePoint))[0];
@@ -803,11 +804,11 @@ export async function verify(signature: SigType, hash: Hex, publicKey: PubKey): 
   hash = ensureBytes(hash);
   if (!(publicKey instanceof Point)) publicKey = Point.fromHex(publicKey);
   if (!(signature instanceof Signature)) signature = Signature.fromHex(signature);
-  const h = await sha512ToNumberLE(signature.r.toRawBytes(), publicKey.toRawBytes(), hash);
-  const Ph = ExtendedPoint.fromAffine(publicKey).multiplyUnsafe(h);
-  const Gs = ExtendedPoint.BASE.multiply(signature.s || 1n);
-  const RPh = ExtendedPoint.fromAffine(signature.r).multiplyUnsafe(8n).add(Ph.multiplyUnsafe(8n));
-  return Gs.multiplyUnsafe(8n).equals(RPh);
+  const hs = await sha512ToNumberLE(signature.r.toRawBytes(), publicKey.toRawBytes(), hash);
+  const Ph = ExtendedPoint.fromAffine(publicKey).multiplyUnsafe(hs);
+  const Gs = ExtendedPoint.BASE.multiply(signature.s);
+  const RPh = ExtendedPoint.fromAffine(signature.r).add(Ph);
+  return RPh.subtract(Gs).multiplyUnsafe(8n).equals(ExtendedPoint.ZERO);
 }
 
 // Enable precomputes. Slows down first publicKey computation by 20ms.
