@@ -3,6 +3,7 @@
     "strict": true,
     "target": "es2020",
     "module": "commonjs",
+    "moduleResolution": "node",
     "noImplicitAny": true,
     "removeComments": true,
     "preserveConstEnums": true
