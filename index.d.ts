@@ -10,6 +10,7 @@ declare const CURVE: {
 };
 export { CURVE };
 declare type Hex = Uint8Array | string;
+declare type PrivKey = Hex | bigint | number;
 declare type PubKey = Hex | Point;
 declare type SigType = Hex | Signature;
 declare class ExtendedPoint {
@@ -47,6 +48,7 @@ declare class Point {
     constructor(x: bigint, y: bigint);
     _setWindowSize(windowSize: number): void;
     static fromHex(hash: Hex): Point;
+    static fromPrivateKey(privateKey: PrivKey): Promise<Point>;
     toRawBytes(): Uint8Array;
     toHex(): string;
     toX25519(): bigint;

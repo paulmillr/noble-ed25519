@@ -303,6 +303,10 @@ class Point {
         }
         return new Point(x, y);
     }
+    static async fromPrivateKey(privateKey) {
+        const privBytes = await exports.utils.sha512(ensurePrivInputBytes(privateKey));
+        return Point.BASE.multiply(encodePrivate(privBytes));
+    }
     toRawBytes() {
         const hex = numberToHex(this.y);
         const u8 = new Uint8Array(ENCODING_LENGTH);
@@ -590,8 +594,7 @@ function ensurePrivInputBytes(privateKey) {
     return hexToBytes(pad64(BigInt(privateKey)));
 }
 async function getPublicKey(privateKey) {
-    const privBytes = await exports.utils.sha512(ensurePrivInputBytes(privateKey));
-    const publicKey = Point.BASE.multiply(encodePrivate(privBytes));
+    const publicKey = await Point.fromPrivateKey(privateKey);
     return typeof privateKey === 'string' ? publicKey.toHex() : publicKey.toRawBytes();
 }
 exports.getPublicKey = getPublicKey;

@@ -67,7 +67,9 @@ function getPublicKey(privateKey: bigint): Promise<Uint8Array>;
     * `Promise<string>` if hex `string` was passed
     * Uses **promises**, because ed25519 uses SHA internally; and we're using built-in browser `window.crypto`, which returns `Promise`.
 
-To create `Point` from an existing public key (hex or Uint8Array), use `Point.fromHex(hex)`. Doing so will execute decompression algorithm 5.1.3 of RFC 8032.
+- Use `Point.fromPrivateKey(privateKey)` if you want `Point` instance instead
+- Use `Point.fromHex(publicKey)` if you want to convert hex / bytes into Point.
+  It will use decompression algorithm 5.1.3 of RFC 8032.
 
 ##### `sign(hash, privateKey)`
 ```typescript

@@ -409,6 +409,11 @@ class Point {
     return new Point(x, y);
   }
 
+  static async fromPrivateKey(privateKey: PrivKey) {
+    const privBytes = await utils.sha512(ensurePrivInputBytes(privateKey));
+    return Point.BASE.multiply(encodePrivate(privBytes));
+  }
+
   /**
    * Converts point to compressed representation of its Y.
    * ECDSA uses `04${x}${y}` to represent long form and
@@ -780,8 +785,7 @@ function ensurePrivInputBytes(privateKey: PrivKey): Uint8Array {
 export function getPublicKey(privateKey: Uint8Array | bigint | number): Promise<Uint8Array>;
 export function getPublicKey(privateKey: string): Promise<string>;
 export async function getPublicKey(privateKey: PrivKey) {
-  const privBytes = await utils.sha512(ensurePrivInputBytes(privateKey));
-  const publicKey = Point.BASE.multiply(encodePrivate(privBytes));
+  const publicKey = await Point.fromPrivateKey(privateKey);
   return typeof privateKey === 'string' ? publicKey.toHex() : publicKey.toRawBytes();
 }
 
