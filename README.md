@@ -103,7 +103,7 @@ To use Ristretto, simply use `fromRistrettoHash()` and `toRistrettoBytes()` meth
 ExtendedPoint.fromRistrettoHash(hash: Uint8Array): ExtendedPoint;
 
 // Decode a byte-string s_bytes representing a compressed Ristretto point into extended coordinates.
-ExtendedPoint.fromRistrettoBytes(bytes: Uint8Array)
+ExtendedPoint.fromRistrettoBytes(bytes: Uint8Array): ExtendedPoint;
 
 // Encode a Ristretto point represented by the point (X:Y:Z:T) in extended coordinates to Uint8Array.
 ExtendedPoint.toRistrettoBytes(): Uint8Array
@@ -159,6 +159,7 @@ ed25519.Point {
   constructor(x: bigint, y: bigint);
   static fromY(y: bigint);
   static fromHex(hash: string);
+  static fromPrivateKey(privateKey: string | Uint8Array);
   toX25519(): bigint; // Converts to Curve25519
   toRawBytes(): Uint8Array;
   toHex(): string; // Compact representation of a Point
