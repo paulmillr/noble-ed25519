@@ -30,7 +30,7 @@ type PubKey = Hex | Point;
 type SigType = Hex | Signature;
 const B32 = 32;
 
-// 2 ** (P + 1) / 4 aka sqrt(-1 % P)
+// 2^((p-1)/4)
 const SQRT_M1 = 19681161376707505956807079304988542015446066515923890162744021073123829784752n;
 
 // 1 / sqrt(a-d)
@@ -391,7 +391,6 @@ class Point {
     }
     const sqrY = y * y;
     const sqrX = mod((sqrY - 1n) * invert(d * sqrY + 1n));
-    // let x = pow_2_252_3(sqrX);
     let x = sqrtMod(sqrX);
     if (mod(x * x - sqrX) !== 0n) {
       x = mod(x * SQRT_M1);
@@ -644,44 +643,12 @@ function powMod2(t: bigint, power: bigint) {
   return res;
 }
 
-// Unwrapped pow to P_DIV4_1.
-function pow_2_252_3(z: bigint) {
-  z = mod(z);
-  const { P } = CURVE;
-  const z2 = (z * z) % P;
-  const z8 = z2 ** 4n % P;
-  const z9 = (z * z8) % P;
-  const z11 = (z2 * z9) % P;
-  const z22 = z11 ** 2n % P;
-  const z_5_0 = (z9 * z22) % P;
-  const z_10_5 = powMod2(z_5_0, 5n);
-  const z_10_0 = (z_10_5 * z_5_0) % P;
-  const z_20_10 = powMod2(z_10_0, 10n);
-  const z_20_0 = (z_20_10 * z_10_0) % P;
-  const z_40_20 = powMod2(z_20_0, 20n);
-  const z_40_0 = (z_40_20 * z_20_0) % P;
-  const z_50_10 = powMod2(z_40_0, 10n);
-  const z_50_0 = (z_50_10 * z_10_0) % P;
-  const z_100_50 = powMod2(z_50_0, 50n);
-  const z_100_0 = (z_100_50 * z_50_0) % P;
-  const z_200_100 = powMod2(z_100_0, 100n);
-  const z_200_0 = (z_200_100 * z_100_0) % P;
-  const z_250_50 = powMod2(z_200_0, 50n);
-  const z_250_0 = (z_250_50 * z_50_0) % P;
-
-  // t19 = t ** (2 ** 250 - 1)
-  const z020 = (z_250_0 * z_250_0) % P;
-  const z_252_3 = (z020 * z020 * z) % P;
-  return z_252_3;
-}
-
-// Unwrapped pow to (P + 3) / 8: α^(2^252-2^1)
-function sqrtMod(x: bigint): bigint {
+function chunks250(x: bigint): bigint {
   const { P } = CURVE;
   const xx = (x * x) % P;
-  const xxx = (xx * x) % P; // 11
-  const x6 = powMod2(xxx, 2n) * xxx; // 1111
-  const chunk5 = (powMod2(x6, 1n) * x) % P;
+  const chunk2 = (xx * x) % P; // 11
+  const chunk4 = powMod2(chunk2, 2n) * chunk2; // 1111
+  const chunk5 = (powMod2(chunk4, 1n) * x) % P;
   const chunk10 = (powMod2(chunk5, 5n) * chunk5) % P;
   const chunk20 = (powMod2(chunk10, 10n) * chunk10) % P;
   const chunk40 = (powMod2(chunk20, 20n) * chunk20) % P;
@@ -689,8 +656,16 @@ function sqrtMod(x: bigint): bigint {
   const chunk160 = (powMod2(chunk80, 80n) * chunk80) % P;
   const chunk240 = (powMod2(chunk160, 80n) * chunk80) % P;
   const chunk250 = (powMod2(chunk240, 10n) * chunk10) % P;
-  const res = (powMod2(chunk250, 2n) * xx) % P;
-  return res;
+  return chunk250;
+}
+
+// Power to x^(2^252-3) aka p/8
+function pow_2_252_3(x: bigint) {
+  return (powMod2(chunks250(x), 2n) * x) % CURVE.P;
+}
+// Power to x^(2^252-2) aka (p+3)/8
+function sqrtMod(x: bigint): bigint {
+  return (pow_2_252_3(x) * x) % CURVE.P;
 }
 
 function sqrtRatio(t: bigint, v: bigint) {

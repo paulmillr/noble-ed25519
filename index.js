@@ -497,39 +497,12 @@ function powMod2(t, power) {
     }
     return res;
 }
-function pow_2_252_3(z) {
-    z = mod(z);
-    const { P } = CURVE;
-    const z2 = (z * z) % P;
-    const z8 = z2 ** 4n % P;
-    const z9 = (z * z8) % P;
-    const z11 = (z2 * z9) % P;
-    const z22 = z11 ** 2n % P;
-    const z_5_0 = (z9 * z22) % P;
-    const z_10_5 = powMod2(z_5_0, 5n);
-    const z_10_0 = (z_10_5 * z_5_0) % P;
-    const z_20_10 = powMod2(z_10_0, 10n);
-    const z_20_0 = (z_20_10 * z_10_0) % P;
-    const z_40_20 = powMod2(z_20_0, 20n);
-    const z_40_0 = (z_40_20 * z_20_0) % P;
-    const z_50_10 = powMod2(z_40_0, 10n);
-    const z_50_0 = (z_50_10 * z_10_0) % P;
-    const z_100_50 = powMod2(z_50_0, 50n);
-    const z_100_0 = (z_100_50 * z_50_0) % P;
-    const z_200_100 = powMod2(z_100_0, 100n);
-    const z_200_0 = (z_200_100 * z_100_0) % P;
-    const z_250_50 = powMod2(z_200_0, 50n);
-    const z_250_0 = (z_250_50 * z_50_0) % P;
-    const z020 = (z_250_0 * z_250_0) % P;
-    const z_252_3 = (z020 * z020 * z) % P;
-    return z_252_3;
-}
-function sqrtMod(x) {
+function chunks250(x) {
     const { P } = CURVE;
     const xx = (x * x) % P;
-    const xxx = (xx * x) % P;
-    const x6 = powMod2(xxx, 2n) * xxx;
-    const chunk5 = (powMod2(x6, 1n) * x) % P;
+    const chunk2 = (xx * x) % P;
+    const chunk4 = powMod2(chunk2, 2n) * chunk2;
+    const chunk5 = (powMod2(chunk4, 1n) * x) % P;
     const chunk10 = (powMod2(chunk5, 5n) * chunk5) % P;
     const chunk20 = (powMod2(chunk10, 10n) * chunk10) % P;
     const chunk40 = (powMod2(chunk20, 20n) * chunk20) % P;
@@ -537,8 +510,13 @@ function sqrtMod(x) {
     const chunk160 = (powMod2(chunk80, 80n) * chunk80) % P;
     const chunk240 = (powMod2(chunk160, 80n) * chunk80) % P;
     const chunk250 = (powMod2(chunk240, 10n) * chunk10) % P;
-    const res = (powMod2(chunk250, 2n) * xx) % P;
-    return res;
+    return chunk250;
+}
+function pow_2_252_3(x) {
+    return (powMod2(chunks250(x), 2n) * x) % CURVE.P;
+}
+function sqrtMod(x) {
+    return (pow_2_252_3(x) * x) % CURVE.P;
 }
 function sqrtRatio(t, v) {
     const v3 = mod(v * v * v);
