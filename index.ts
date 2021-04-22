@@ -676,20 +676,20 @@ function pow_2_252_3(z: bigint) {
 }
 
 // Unwrapped pow to (P + 3) / 8: α^(2^252-2^1)
-function sqrtMod(a: bigint): bigint {
+function sqrtMod(x: bigint): bigint {
   const { P } = CURVE;
-  const x = a * a * a; // 11
-  const x2 = powMod2(x, 2n) * x; // 1111
-  const chunk = (powMod2(x2, 1n) * a) % P;
-  const chunk2 = (chunk * powMod2(chunk, 5n)) % P;
-  const chunk4 = (chunk2 * powMod2(chunk2, 10n)) % P;
-  const chunk8 = (chunk4 * powMod2(chunk4, 20n)) % P;
-  const chunk16 = (chunk8 * powMod2(chunk8, 40n)) % P;
-  const chunk100 = (powMod2(chunk16, 20n) * chunk4) % P;
-  const chunk200 = (powMod2(chunk100, 100n) * chunk100) % P;
-  const chunk240 = (powMod2(chunk200, 40n) * chunk8) % P;
-  const chunk250 = (powMod2(chunk240, 10n) * chunk2) % P;
-  const res = (powMod2(chunk250, 2n) * (a * a)) % P;
+  const xx = (x * x) % P;
+  const xxx = (xx * x) % P; // 11
+  const x6 = powMod2(xxx, 2n) * xxx; // 1111
+  const chunk5 = (powMod2(x6, 1n) * x) % P;
+  const chunk10 = (powMod2(chunk5, 5n) * chunk5) % P;
+  const chunk20 = (powMod2(chunk10, 10n) * chunk10) % P;
+  const chunk40 = (powMod2(chunk20, 20n) * chunk20) % P;
+  const chunk80 = (powMod2(chunk40, 40n) * chunk40) % P;
+  const chunk160 = (powMod2(chunk80, 80n) * chunk80) % P;
+  const chunk240 = (powMod2(chunk160, 80n) * chunk80) % P;
+  const chunk250 = (powMod2(chunk240, 10n) * chunk10) % P;
+  const res = (powMod2(chunk250, 2n) * xx) % P;
   return res;
 }
 
