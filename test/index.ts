@@ -53,20 +53,14 @@ const WRONG_MESSAGE = new Uint8Array([
 ]);
 
 function toBytes(numOrStr: string | bigint | number): Uint8Array {
-  let hex = typeof numOrStr === 'string' ? numOrStr : numOrStr.toString(16).padStart(64, '0');
-  hex = hex.length & 1 ? `0${hex}` : hex;
+  let hex = typeof numOrStr === 'string' ? numOrStr : numOrStr.toString(16);
+  hex = hex.padStart(64, '0');
   const array = new Uint8Array(hex.length / 2);
   for (let i = 0; i < array.length; i++) {
     let j = i * 2;
     array[i] = Number.parseInt(hex.slice(j, j + 2), 16);
   }
   return array;
-}
-
-function arrayToHex(uint8a: Uint8Array): string {
-  return Array.from(uint8a)
-    .map(c => c.toString(16).padStart(2, '0'))
-    .join('');
 }
 
 describe('ed25519', () => {
@@ -79,11 +73,11 @@ describe('ed25519', () => {
         fc.hexaString(1, 32),
         fc.bigInt(2n, ed25519.CURVE.n),
         async (message: string, privateKey: bigint) => {
-          const publicKey = await ed25519.getPublicKey(privateKey);
+          const publicKey = await ed25519.getPublicKey(toBytes(privateKey));
           const signature = await ed25519.sign(toBytes(message), toBytes(privateKey));
           expect(publicKey.length).toBe(32);
           expect(signature.length).toBe(64);
-          expect(await ed25519.verify(signature, message, publicKey)).toBe(true);
+          expect(await ed25519.verify(signature, toBytes(message), publicKey)).toBe(true);
         }
       ),
       { numRuns: 5 }
@@ -176,7 +170,7 @@ describe('ed25519', () => {
     });
 
     it('should convert TEST 2 to montgomery', async () => {
-      const priv = '0c';
+      const priv = '000000000000000000000000000000000000000000000000000000000000000c';
       const pub = '1262bc6d5408a3c4e025aa0c15e64f69197cdb38911be5ad344a949779df3da6';
       const montgomery = '31c3ec9e22ce8ffd4fa9dfa1a698604b4de4921be0e09ca93f96c635bb8de1db';
 
@@ -187,7 +181,7 @@ describe('ed25519', () => {
     });
 
     it('should convert TEST 3 to montgomery', async () => {
-      const priv = '27';
+      const priv = '0000000000000000000000000000000000000000000000000000000000000027';
       const pub = 'd7e1ba312ceaf90c89566a9a7861316522a60edea4c2157eabf3d273169eac13';
       const montgomery = '48d70b86a448c72a4b3960d399102d9ef401092fcbbcda8e69bc230bc73bb9d2';
 

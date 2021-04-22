@@ -12,7 +12,7 @@ run(async () => {
 
   function toBytes(numOrStr) {
     let hex = typeof numOrStr === 'string' ? numOrStr : numOrStr.toString(16);
-    hex = hex.length & 1 ? `0${hex}` : hex;
+    hex = hex.padStart(64, '0');
     const array = new Uint8Array(hex.length / 2);
     for (let i = 0; i < array.length; i++) {
       let j = i * 2;

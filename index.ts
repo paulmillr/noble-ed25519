@@ -28,28 +28,22 @@ type Hex = Uint8Array | string;
 type PrivKey = Hex | bigint | number;
 type PubKey = Hex | Point;
 type SigType = Hex | Signature;
-const ENCODING_LENGTH = 32;
+const B32 = 32;
 
-// (P + 3) / 8
-const DIV_8_MINUS_3 = (CURVE.P + 3n) / 8n;
-
-// 2 ** (P + 1) / 4
-const I = powMod(2n, (CURVE.P + 1n) / 4n, CURVE.P);
-
-// sqrt(-1 % P)
+// 2 ** (P + 1) / 4 aka sqrt(-1 % P)
 const SQRT_M1 = 19681161376707505956807079304988542015446066515923890162744021073123829784752n;
 
 // 1 / sqrt(a-d)
-const INVSQRT_A_MINUS_D = 54469307008909316920995813868745141605393597292927456921205312896311721017578n;
+const INVSQRT_A_D = 54469307008909316920995813868745141605393597292927456921205312896311721017578n;
 
 // sqrt(a*d - 1)
-const SQRT_AD_MINUS_ONE = 25063068953384623474111414158702152701244531502492656460079210482610430750235n;
+const SQRD_AD_ONE = 25063068953384623474111414158702152701244531502492656460079210482610430750235n;
 
 // Default Point works in default aka affine coordinates: (x, y)
 // Extended Point works in extended coordinates: (x, y, z, t) ∋ (x=x/z, y=y/z, t=xy)
 // https://en.wikipedia.org/wiki/Twisted_Edwards_curve#Extended_coordinates
 class ExtendedPoint {
-  constructor(public x: bigint, public y: bigint, public z: bigint, public t: bigint) { }
+  constructor(public x: bigint, public y: bigint, public z: bigint, public t: bigint) {}
 
   static BASE = new ExtendedPoint(CURVE.Gx, CURVE.Gy, 1n, mod(CURVE.Gx * CURVE.Gy));
   static ZERO = new ExtendedPoint(0n, 1n, 1n, 0n);
@@ -76,9 +70,9 @@ class ExtendedPoint {
 
   // The hash-to-group operation applies Elligator twice and adds the results.
   static fromRistrettoHash(hash: Uint8Array): ExtendedPoint {
-    const r1 = bytesToNumberRst(hash.slice(0, ENCODING_LENGTH));
+    const r1 = bytesToNumberRst(hash.slice(0, B32));
     const R1 = this.elligatorRistrettoFlavor(r1);
-    const r2 = bytesToNumberRst(hash.slice(ENCODING_LENGTH, ENCODING_LENGTH * 2));
+    const r2 = bytesToNumberRst(hash.slice(B32, B32 * 2));
     const R2 = this.elligatorRistrettoFlavor(r2);
     return R1.add(R2);
   }
@@ -102,7 +96,7 @@ class ExtendedPoint {
     const NT = c * (r - 1n) * dMinusOneSq - D;
     const sSquared = S * S;
     const W0 = (S + S) * D;
-    const W1 = NT * SQRT_AD_MINUS_ONE;
+    const W1 = NT * SQRD_AD_ONE;
     const W2 = 1n - sSquared;
     const W3 = 1n + sSquared;
     return new ExtendedPoint(mod(W0 * W3), mod(W2 * W1), mod(W1 * W3), mod(W0 * W2));
@@ -120,7 +114,7 @@ class ExtendedPoint {
     // converting back to bytes, and checking that we get the
     // original input, since our encoding routine is canonical.
     const s = bytesToNumberRst(bytes);
-    const sEncodingIsCanonical = equalBytes(numberToBytesPadded(s, ENCODING_LENGTH), bytes);
+    const sEncodingIsCanonical = equalBytes(numberToBytesPadded(s, B32), bytes);
     const sIsNegative = edIsNegative(s);
     if (!sEncodingIsCanonical || sIsNegative) {
       throw new Error('Cannot convert bytes to Ristretto Point');
@@ -164,12 +158,12 @@ class ExtendedPoint {
       const iY = mod(y * SQRT_M1);
       x = iY;
       y = iX;
-      invDeno = mod(i1 * INVSQRT_A_MINUS_D);
+      invDeno = mod(i1 * INVSQRT_A_D);
     }
     if (edIsNegative(x * invz)) y = mod(-y);
     let s = mod((z - y) * invDeno);
     if (edIsNegative(s)) s = mod(-s);
-    return numberToBytesPadded(s, ENCODING_LENGTH);
+    return numberToBytesPadded(s, B32);
   }
   // Ristretto methods end.
 
@@ -248,7 +242,7 @@ class ExtendedPoint {
   // It's faster, but should only be used when you don't care about
   // an exposed private key e.g. sig verification.
   multiplyUnsafe(scalar: bigint): ExtendedPoint {
-    if (typeof scalar !== 'number' && typeof scalar !== 'bigint') {
+    if (!(typeof scalar === 'bigint' || (Number.isSafeInteger(scalar) && scalar > 0))) {
       throw new TypeError('Point#multiply: expected number or bigint');
     }
     let n = mod(BigInt(scalar), CURVE.n);
@@ -375,7 +369,7 @@ class Point {
   // stores precomputed values. Usually only base point would be precomputed.
   _WINDOW_SIZE?: number;
 
-  constructor(public x: bigint, public y: bigint) { }
+  constructor(public x: bigint, public y: bigint) {}
 
   // "Private method", don't use it directly.
   _setWindowSize(windowSize: number) {
@@ -398,9 +392,9 @@ class Point {
     const sqrY = y * y;
     const sqrX = mod((sqrY - 1n) * invert(d * sqrY + 1n));
     // let x = pow_2_252_3(sqrX);
-    let x = powMod(sqrX, DIV_8_MINUS_3);
+    let x = sqrtMod(sqrX);
     if (mod(x * x - sqrX) !== 0n) {
-      x = mod(x * I);
+      x = mod(x * SQRT_M1);
     }
     const isXOdd = (x & 1n) === 1n;
     if (isLastByteOdd !== isXOdd) {
@@ -410,7 +404,7 @@ class Point {
   }
 
   static async fromPrivateKey(privateKey: PrivKey) {
-    const privBytes = await utils.sha512(ensurePrivInputBytes(privateKey));
+    const privBytes = await utils.sha512(normalizePrivateKey(privateKey));
     return Point.BASE.multiply(encodePrivate(privBytes));
   }
 
@@ -423,12 +417,12 @@ class Point {
    */
   toRawBytes(): Uint8Array {
     const hex = numberToHex(this.y);
-    const u8 = new Uint8Array(ENCODING_LENGTH);
-    for (let i = hex.length - 2, j = 0; j < ENCODING_LENGTH && i >= 0; i -= 2, j++) {
+    const u8 = new Uint8Array(B32);
+    for (let i = hex.length - 2, j = 0; j < B32 && i >= 0; i -= 2, j++) {
       u8[j] = parseInt(hex[i] + hex[i + 1], 16);
     }
     const mask = this.x & 1n ? 0x80 : 0;
-    u8[ENCODING_LENGTH - 1] |= mask;
+    u8[B32 - 1] |= mask;
     return u8;
   }
 
@@ -471,7 +465,7 @@ class Point {
 }
 
 class Signature {
-  constructor(public r: Point, public s: bigint) { }
+  constructor(public r: Point, public s: bigint) {}
 
   static fromHex(hex: Hex) {
     hex = ensureBytes(hex);
@@ -485,9 +479,9 @@ class Signature {
 
   toRawBytes() {
     const numberBytes = hexToBytes(numberToHex(this.s)).reverse();
-    const sBytes = new Uint8Array(ENCODING_LENGTH);
+    const sBytes = new Uint8Array(B32);
     sBytes.set(numberBytes);
-    const res = new Uint8Array(ENCODING_LENGTH * 2);
+    const res = new Uint8Array(B32 * 2);
     res.set(this.r.toRawBytes());
     res.set(sBytes, 32);
     return res;
@@ -524,15 +518,11 @@ function bytesToHex(uint8a: Uint8Array): string {
   return hex;
 }
 
-function pad64(num: number | bigint): string {
-  return num.toString(16).padStart(ENCODING_LENGTH * 2, '0');
-}
-
 function hexToBytes(hex: string): Uint8Array {
-  hex = hex.length & 1 ? `0${hex}` : hex;
+  if (typeof hex !== 'string' || hex.length % 2) throw new Error('Expected valid hex');
   const array = new Uint8Array(hex.length / 2);
   for (let i = 0; i < array.length; i++) {
-    let j = i * 2;
+    const j = i * 2;
     array[i] = Number.parseInt(hex.slice(j, j + 2), 16);
   }
   return array;
@@ -543,7 +533,7 @@ function numberToHex(num: number | bigint): string {
   return hex.length & 1 ? `0${hex}` : hex;
 }
 
-function numberToBytesPadded(num: bigint, length: number = ENCODING_LENGTH) {
+function numberToBytesPadded(num: bigint, length: number = B32) {
   const hex = numberToHex(num).padStart(length * 2, '0');
   return hexToBytes(hex).reverse();
 }
@@ -592,32 +582,20 @@ function mod(a: bigint, b: bigint = CURVE.P) {
   return res >= 0n ? res : b + res;
 }
 
-function powMod(a: bigint, power: bigint, m: bigint = CURVE.P) {
-  let res = 1n;
-  while (power > 0n) {
-    if (power & 1n) {
-      res = mod(res * a, m);
-    }
-    power >>= 1n;
-    a = mod(a * a, m);
-  }
-  return res;
-}
-
 // Eucledian GCD
 // https://brilliant.org/wiki/extended-euclidean-algorithm/
 function egcd(a: bigint, b: bigint) {
   let [x, y, u, v] = [0n, 1n, 1n, 0n];
   while (a !== 0n) {
-    let q = b / a;
-    let r = b % a;
-    let m = x - u * q;
-    let n = y - v * q;
+    const q = b / a;
+    const r = b % a;
+    const m = x - u * q;
+    const n = y - v * q;
     [b, a] = [a, r];
     [x, y] = [u, v];
     [u, v] = [m, n];
   }
-  let gcd = b;
+  const gcd = b;
   return [gcd, x, y];
 }
 
@@ -625,7 +603,7 @@ function invert(number: bigint, modulo: bigint = CURVE.P) {
   if (number === 0n || modulo <= 0n) {
     throw new Error('invert: expected positive integers');
   }
-  let [gcd, x] = egcd(mod(number, modulo), modulo);
+  const [gcd, x] = egcd(mod(number, modulo), modulo);
   if (gcd !== 1n) {
     throw new Error('invert: does not exist');
   }
@@ -667,34 +645,52 @@ function powMod2(t: bigint, power: bigint) {
 }
 
 // Unwrapped pow to P_DIV4_1.
-function pow_2_252_3(t: bigint) {
-  t = mod(t);
+function pow_2_252_3(z: bigint) {
+  z = mod(z);
   const { P } = CURVE;
-  const t0 = (t * t) % P;
-  const t1 = t0 ** 4n % P;
-  const t2 = (t * t1) % P;
-  const t3 = (t0 * t2) % P;
-  const t4 = t3 ** 2n % P;
-  const t5 = (t2 * t4) % P;
-  const t6 = powMod2(t5, 5n);
-  const t7 = (t6 * t5) % P;
-  const t8 = powMod2(t7, 10n);
-  const t9 = (t8 * t7) % P;
-  const t10 = powMod2(t9, 20n);
-  const t11 = (t10 * t9) % P;
-  const t12 = powMod2(t11, 10n);
-  const t13 = (t12 * t7) % P;
-  const t14 = powMod2(t13, 50n);
-  const t15 = (t14 * t13) % P;
-  const t16 = powMod2(t15, 100n);
-  const t17 = (t16 * t15) % P;
-  const t18 = powMod2(t17, 50n);
-  const t19 = (t18 * t13) % P;
+  const z2 = (z * z) % P;
+  const z8 = z2 ** 4n % P;
+  const z9 = (z * z8) % P;
+  const z11 = (z2 * z9) % P;
+  const z22 = z11 ** 2n % P;
+  const z_5_0 = (z9 * z22) % P;
+  const z_10_5 = powMod2(z_5_0, 5n);
+  const z_10_0 = (z_10_5 * z_5_0) % P;
+  const z_20_10 = powMod2(z_10_0, 10n);
+  const z_20_0 = (z_20_10 * z_10_0) % P;
+  const z_40_20 = powMod2(z_20_0, 20n);
+  const z_40_0 = (z_40_20 * z_20_0) % P;
+  const z_50_10 = powMod2(z_40_0, 10n);
+  const z_50_0 = (z_50_10 * z_10_0) % P;
+  const z_100_50 = powMod2(z_50_0, 50n);
+  const z_100_0 = (z_100_50 * z_50_0) % P;
+  const z_200_100 = powMod2(z_100_0, 100n);
+  const z_200_0 = (z_200_100 * z_100_0) % P;
+  const z_250_50 = powMod2(z_200_0, 50n);
+  const z_250_0 = (z_250_50 * z_50_0) % P;
 
   // t19 = t ** (2 ** 250 - 1)
-  const t20 = (t19 * t19) % P;
-  const t21 = (t20 * t20 * t) % P;
-  return t21;
+  const z020 = (z_250_0 * z_250_0) % P;
+  const z_252_3 = (z020 * z020 * z) % P;
+  return z_252_3;
+}
+
+// Unwrapped pow to (P + 3) / 8: α^(2^252-2^1)
+function sqrtMod(a: bigint): bigint {
+  const { P } = CURVE;
+  const x = a * a * a; // 11
+  const x2 = powMod2(x, 2n) * x; // 1111
+  const chunk = (powMod2(x2, 1n) * a) % P;
+  const chunk2 = (chunk * powMod2(chunk, 5n)) % P;
+  const chunk4 = (chunk2 * powMod2(chunk2, 10n)) % P;
+  const chunk8 = (chunk4 * powMod2(chunk4, 20n)) % P;
+  const chunk16 = (chunk8 * powMod2(chunk8, 40n)) % P;
+  const chunk100 = (powMod2(chunk16, 20n) * chunk4) % P;
+  const chunk200 = (powMod2(chunk100, 100n) * chunk100) % P;
+  const chunk240 = (powMod2(chunk200, 40n) * chunk8) % P;
+  const chunk250 = (powMod2(chunk240, 10n) * chunk2) % P;
+  const res = (powMod2(chunk250, 2n) * (a * a)) % P;
+  return res;
 }
 
 function sqrtRatio(t: bigint, v: bigint) {
@@ -746,21 +742,17 @@ async function sha512ToNumberLE(...args: Uint8Array[]): Promise<bigint> {
 }
 
 function keyPrefix(privateBytes: Uint8Array) {
-  return privateBytes.slice(ENCODING_LENGTH);
+  return privateBytes.slice(B32);
 }
 
 function encodePrivate(privateBytes: Uint8Array): bigint {
-  const last = ENCODING_LENGTH - 1;
-  const head = privateBytes.slice(0, ENCODING_LENGTH);
+  const last = B32 - 1;
+  const head = privateBytes.slice(0, B32);
   head[0] &= 248;
   head[last] &= 127;
   head[last] |= 64;
 
   return bytesToNumberLE(head);
-}
-
-function ensureBytes(hash: Hex): Uint8Array {
-  return hash instanceof Uint8Array ? hash : hexToBytes(hash);
 }
 
 function equalBytes(b1: Uint8Array, b2: Uint8Array) {
@@ -775,24 +767,41 @@ function equalBytes(b1: Uint8Array, b2: Uint8Array) {
   return true;
 }
 
-function ensurePrivInputBytes(privateKey: PrivKey): Uint8Array {
-  if (privateKey instanceof Uint8Array) return privateKey;
-  if (typeof privateKey === 'string')
-    return hexToBytes(privateKey.padStart(ENCODING_LENGTH * 2, '0'));
-  return hexToBytes(pad64(BigInt(privateKey)));
+function ensureBytes(hash: Hex): Uint8Array {
+  return hash instanceof Uint8Array ? hash : hexToBytes(hash);
+}
+
+function normalizePrivateKey(privateKey: PrivKey): Uint8Array {
+  const msg = `Invalid private key "${privateKey}"`;
+  if (privateKey instanceof Uint8Array) {
+    if (privateKey.length !== 32) throw new TypeError(msg);
+    return privateKey;
+  }
+  if (typeof privateKey === 'string') {
+    if (privateKey.length !== 64) throw new TypeError(msg);
+    return hexToBytes(privateKey);
+  }
+  if (typeof privateKey === 'bigint' || (Number.isSafeInteger(privateKey) && privateKey > 0)) {
+    return hexToBytes(
+      BigInt(privateKey)
+        .toString(16)
+        .padStart(B32 * 2, '0')
+    );
+  }
+  throw new TypeError(msg);
 }
 
 export function getPublicKey(privateKey: Uint8Array | bigint | number): Promise<Uint8Array>;
 export function getPublicKey(privateKey: string): Promise<string>;
 export async function getPublicKey(privateKey: PrivKey) {
-  const publicKey = await Point.fromPrivateKey(privateKey);
-  return typeof privateKey === 'string' ? publicKey.toHex() : publicKey.toRawBytes();
+  const key = await Point.fromPrivateKey(privateKey);
+  return typeof privateKey === 'string' ? key.toHex() : key.toRawBytes();
 }
 
 export function sign(hash: Uint8Array, privateKey: Hex): Promise<Uint8Array>;
 export function sign(hash: string, privateKey: Hex): Promise<string>;
 export async function sign(hash: Hex, privateKey: Hex) {
-  const privBytes = await utils.sha512(ensurePrivInputBytes(privateKey));
+  const privBytes = await utils.sha512(normalizePrivateKey(privateKey));
   const p = encodePrivate(privBytes);
   const P = Point.BASE.multiply(p);
   const msg = ensureBytes(hash);
