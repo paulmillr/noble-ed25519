@@ -242,13 +242,8 @@ class ExtendedPoint {
   // It's faster, but should only be used when you don't care about
   // an exposed private key e.g. sig verification.
   multiplyUnsafe(scalar: bigint): ExtendedPoint {
-    if (!(typeof scalar === 'bigint' || (Number.isSafeInteger(scalar) && scalar > 0))) {
-      throw new TypeError('Point#multiply: expected number or bigint');
-    }
+    if (!isValidScalar(scalar)) throw new TypeError('Point#multiply: expected number or bigint');
     let n = mod(BigInt(scalar), CURVE.n);
-    if (n <= 0n) {
-      throw new Error('Point#multiply: invalid scalar, expected positive integer');
-    }
     if (n === 1n) return this;
     let p = ExtendedPoint.ZERO;
     let d: ExtendedPoint = this;
@@ -333,14 +328,8 @@ class ExtendedPoint {
   // Uses wNAF method. Windowed method may be 10% faster,
   // but takes 2x longer to generate and consumes 2x memory.
   multiply(scalar: number | bigint, affinePoint?: Point): ExtendedPoint {
-    if (typeof scalar !== 'number' && typeof scalar !== 'bigint') {
-      throw new TypeError('Point#multiply: expected number or bigint');
-    }
+    if (!isValidScalar(scalar)) throw new TypeError('Point#multiply: expected number or bigint');
     const n = mod(BigInt(scalar), CURVE.n);
-    if (n === 0n) return ExtendedPoint.ZERO;
-    if (n < 0n) {
-      throw new Error('Point#multiply: invalid scalar, expected positive integer');
-    }
     return ExtendedPoint.normalizeZ(this.wNAF(n, affinePoint))[0];
   }
 
@@ -458,7 +447,7 @@ class Point {
   }
 
   // Constant time multiplication.
-  multiply(scalar: bigint): Point {
+  multiply(scalar: number | bigint): Point {
     return ExtendedPoint.fromAffine(this).multiply(scalar, this).toAffine();
   }
 }
@@ -541,6 +530,12 @@ function edIsNegative(num: bigint) {
   const hex = numberToHex(mod(num));
   const byte = Number.parseInt(hex.slice(hex.length - 2, hex.length), 16);
   return Boolean(byte & 1);
+}
+
+function isValidScalar(num: number | bigint): boolean {
+  if (typeof num === 'bigint' && num > 0n) return true;
+  if (typeof num === 'number' && num > 0 && Number.isSafeInteger(num)) return true;
+  return false;
 }
 
 // Little Endian
@@ -633,9 +628,10 @@ function invertSqrt(number: bigint) {
   return sqrtRatio(1n, number);
 }
 
-function powMod2(t: bigint, power: bigint) {
+// Does x ^ (2 ^ power). E.g. 30 ^ (2 ^ 4)
+function pow2(x: bigint, power: bigint): bigint {
   const { P } = CURVE;
-  let res = t;
+  let res = x;
   while (power-- > 0n) {
     res *= res;
     res %= P;
@@ -643,25 +639,30 @@ function powMod2(t: bigint, power: bigint) {
   return res;
 }
 
+// Used to calculate y - the square root of y^2.
+// Exponentiates it to very big number.
+// We are unwrapping the loop because it's 2x faster.
+// (2n**252n-3n).toString(2) would produce bits [250x 1, 0, 1]
+// We are multiplying it bit-by-bit
 function chunks250(x: bigint): bigint {
   const { P } = CURVE;
   const xx = (x * x) % P;
-  const chunk2 = (xx * x) % P; // 11
-  const chunk4 = powMod2(chunk2, 2n) * chunk2; // 1111
-  const chunk5 = (powMod2(chunk4, 1n) * x) % P;
-  const chunk10 = (powMod2(chunk5, 5n) * chunk5) % P;
-  const chunk20 = (powMod2(chunk10, 10n) * chunk10) % P;
-  const chunk40 = (powMod2(chunk20, 20n) * chunk20) % P;
-  const chunk80 = (powMod2(chunk40, 40n) * chunk40) % P;
-  const chunk160 = (powMod2(chunk80, 80n) * chunk80) % P;
-  const chunk240 = (powMod2(chunk160, 80n) * chunk80) % P;
-  const chunk250 = (powMod2(chunk240, 10n) * chunk10) % P;
-  return chunk250;
+  const b2 = (xx * x) % P; // x^3, 11
+  const b4 = (pow2(b2, 2n) * b2) % P; // 1111
+  const b5 = (pow2(b4, 1n) * x) % P;
+  const b10 = (pow2(b5, 5n) * b5) % P;
+  const b20 = (pow2(b10, 10n) * b10) % P;
+  const b40 = (pow2(b20, 20n) * b20) % P;
+  const b80 = (pow2(b40, 40n) * b40) % P;
+  const b160 = (pow2(b80, 80n) * b80) % P;
+  const b240 = (pow2(b160, 80n) * b80) % P;
+  const b250 = (pow2(b240, 10n) * b10) % P;
+  return b250;
 }
 
 // Power to x^(2^252-3) aka p/8
-function pow_2_252_3(x: bigint) {
-  return (powMod2(chunks250(x), 2n) * x) % CURVE.P;
+function pow_2_252_3(x: bigint): bigint {
+  return (pow2(chunks250(x), 2n) * x) % CURVE.P;
 }
 // Power to x^(2^252-2) aka (p+3)/8
 function sqrtMod(x: bigint): bigint {
@@ -747,23 +748,22 @@ function ensureBytes(hash: Hex): Uint8Array {
 }
 
 function normalizePrivateKey(privateKey: PrivKey): Uint8Array {
-  const msg = `Invalid private key "${privateKey}"`;
   if (privateKey instanceof Uint8Array) {
-    if (privateKey.length !== 32) throw new TypeError(msg);
+    if (privateKey.length !== 32) throw new TypeError('Expected 32 bytes of private key');
     return privateKey;
   }
   if (typeof privateKey === 'string') {
-    if (privateKey.length !== 64) throw new TypeError(msg);
+    if (privateKey.length !== 64) throw new TypeError('Expected 32 bytes of private key');
     return hexToBytes(privateKey);
   }
-  if (typeof privateKey === 'bigint' || (Number.isSafeInteger(privateKey) && privateKey > 0)) {
+  if (isValidScalar(privateKey)) {
     return hexToBytes(
       BigInt(privateKey)
         .toString(16)
         .padStart(B32 * 2, '0')
     );
   }
-  throw new TypeError(msg);
+  throw new TypeError('Invalid private key');
 }
 
 export function getPublicKey(privateKey: Uint8Array | bigint | number): Promise<Uint8Array>;

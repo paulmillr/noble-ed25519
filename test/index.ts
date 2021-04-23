@@ -1,55 +1,19 @@
 import * as fc from 'fast-check';
-import * as ed25519 from '../';
+import * as ed from '../';
 import { readFileSync } from 'fs';
 import { join } from 'path';
 import { createHash } from 'crypto';
 
 const PRIVATE_KEY = toBytes('a665a45920422f9d417e4867ef');
 // const MESSAGE = ripemd160(new Uint8Array([97, 98, 99, 100, 101, 102, 103]));
+// prettier-ignore
 const MESSAGE = new Uint8Array([
-  135,
-  79,
-  153,
-  96,
-  197,
-  210,
-  183,
-  169,
-  181,
-  250,
-  211,
-  131,
-  225,
-  186,
-  68,
-  113,
-  158,
-  187,
-  116,
-  58
+  135, 79, 153, 96, 197, 210, 183, 169, 181, 250, 211, 131, 225, 186, 68, 113, 158, 187, 116, 58
 ]);
 // const WRONG_MESSAGE = ripemd160(new Uint8Array([98, 99, 100, 101, 102, 103]));
+// prettier-ignore
 const WRONG_MESSAGE = new Uint8Array([
-  88,
-  157,
-  140,
-  127,
-  29,
-  160,
-  162,
-  75,
-  192,
-  123,
-  115,
-  129,
-  173,
-  72,
-  177,
-  207,
-  194,
-  17,
-  175,
-  28
+  88, 157, 140, 127, 29, 160, 162, 75, 192, 123, 115, 129, 173, 72, 177, 207, 194, 17, 175, 28
 ]);
 
 function toBytes(numOrStr: string | bigint | number): Uint8Array {
@@ -65,19 +29,19 @@ function toBytes(numOrStr: string | bigint | number): Uint8Array {
 
 describe('ed25519', () => {
   beforeAll(() => {
-    ed25519.utils.precompute(8);
+    ed.utils.precompute(8);
   });
   it('should verify just signed message', async () => {
     await fc.assert(
       fc.asyncProperty(
         fc.hexaString(1, 32),
-        fc.bigInt(2n, ed25519.CURVE.n),
+        fc.bigInt(2n, ed.CURVE.n),
         async (message: string, privateKey: bigint) => {
-          const publicKey = await ed25519.getPublicKey(toBytes(privateKey));
-          const signature = await ed25519.sign(toBytes(message), toBytes(privateKey));
+          const publicKey = await ed.getPublicKey(toBytes(privateKey));
+          const signature = await ed.sign(toBytes(message), toBytes(privateKey));
           expect(publicKey.length).toBe(32);
           expect(signature.length).toBe(64);
-          expect(await ed25519.verify(signature, toBytes(message), publicKey)).toBe(true);
+          expect(await ed.verify(signature, toBytes(message), publicKey)).toBe(true);
         }
       ),
       { numRuns: 5 }
@@ -88,13 +52,13 @@ describe('ed25519', () => {
       fc.asyncProperty(
         fc.array(fc.integer(0x00, 0xff)),
         fc.array(fc.integer(0x00, 0xff)),
-        fc.bigInt(1n, ed25519.CURVE.n),
+        fc.bigInt(1n, ed.CURVE.n),
         async (bytes, wrongBytes, privateKey) => {
           const message = new Uint8Array(bytes);
           const wrongMessage = new Uint8Array(wrongBytes);
-          const publicKey = await ed25519.getPublicKey(privateKey);
-          const signature = await ed25519.sign(message, toBytes(privateKey));
-          expect(await ed25519.verify(signature, wrongMessage, publicKey)).toBe(
+          const publicKey = await ed.getPublicKey(privateKey);
+          const signature = await ed.sign(message, toBytes(privateKey));
+          expect(await ed.verify(signature, wrongMessage, publicKey)).toBe(
             bytes.toString() === wrongBytes.toString()
           );
         }
@@ -104,25 +68,25 @@ describe('ed25519', () => {
   });
   describe('verify()', () => {
     it('should sign and verify', async () => {
-      const publicKey = await ed25519.getPublicKey(PRIVATE_KEY);
-      const signature = await ed25519.sign(MESSAGE, PRIVATE_KEY);
-      expect(await ed25519.verify(signature, MESSAGE, publicKey)).toBe(true);
+      const publicKey = await ed.getPublicKey(PRIVATE_KEY);
+      const signature = await ed.sign(MESSAGE, PRIVATE_KEY);
+      expect(await ed.verify(signature, MESSAGE, publicKey)).toBe(true);
     });
     it('should not verify signature with wrong public key', async () => {
-      const publicKey = await ed25519.getPublicKey(12);
-      const signature = await ed25519.sign(MESSAGE, PRIVATE_KEY);
-      expect(await ed25519.verify(signature, MESSAGE, publicKey)).toBe(false);
+      const publicKey = await ed.getPublicKey(12);
+      const signature = await ed.sign(MESSAGE, PRIVATE_KEY);
+      expect(await ed.verify(signature, MESSAGE, publicKey)).toBe(false);
     });
     it('should not verify signature with wrong hash', async () => {
-      const publicKey = await ed25519.getPublicKey(PRIVATE_KEY);
-      const signature = await ed25519.sign(MESSAGE, PRIVATE_KEY);
-      expect(await ed25519.verify(signature, WRONG_MESSAGE, publicKey)).toBe(false);
+      const publicKey = await ed.getPublicKey(PRIVATE_KEY);
+      const signature = await ed.sign(MESSAGE, PRIVATE_KEY);
+      expect(await ed.verify(signature, WRONG_MESSAGE, publicKey)).toBe(false);
     });
   });
   describe('BASE_POINT.multiply()', () => {
     // https://xmr.llcoins.net/addresstests.html
     it('should create right publicKey without SHA-512 hashing TEST 1', () => {
-      const publicKey = ed25519.Point.BASE.multiply(
+      const publicKey = ed.Point.BASE.multiply(
         0x90af56259a4b6bfbc4337980d5d75fbe3c074630368ff3804d33028e5dbfa77n
       );
       expect(publicKey.toHex()).toBe(
@@ -130,7 +94,7 @@ describe('ed25519', () => {
       );
     });
     it('should create right publicKey without SHA-512 hashing TEST 2', () => {
-      const publicKey = ed25519.Point.BASE.multiply(
+      const publicKey = ed.Point.BASE.multiply(
         0x364e8711a60780382a5d57b061c126f039940f28a9e91fe039d4d3094d8b88n
       );
       expect(publicKey.toHex()).toBe(
@@ -138,7 +102,7 @@ describe('ed25519', () => {
       );
     });
     it('should create right publicKey without SHA-512 hashing TEST 3', () => {
-      const publicKey = ed25519.Point.BASE.multiply(
+      const publicKey = ed.Point.BASE.multiply(
         0xb9bf90ff3abec042752cac3a07a62f0c16cfb9d32a3fc2305d676ec2d86e941n
       );
       expect(publicKey.toHex()).toBe(
@@ -146,18 +110,23 @@ describe('ed25519', () => {
       );
     });
     it('should create right publicKey without SHA-512 hashing TEST 4', () => {
-      const publicKey = ed25519.Point.BASE.multiply(
+      const publicKey = ed.Point.BASE.multiply(
         0x69d896f02d79524c9878e080308180e2859d07f9f54454e0800e8db0847a46en
       );
       expect(publicKey.toHex()).toBe(
         'f12cb7c43b59971395926f278ce7c2eaded9444fbce62ca717564cb508a0db1d'
       );
     });
+    it('should throw Point#multiply on TEST 5', () => {
+      for (const num of [0n, 0, -1n, -1, 1.1]) {
+        expect(() => ed.Point.BASE.multiply(num)).toThrowError();
+      }
+    });
   });
 
   describe('Point#toX25519()', () => {
     it('should convert base point to montgomery', async () => {
-      expect(ed25519.Point.BASE.toX25519()).toBe(9n);
+      expect(ed.Point.BASE.toX25519()).toBe(9n);
     });
 
     it('should convert TEST 1 to montgomery', async () => {
@@ -165,7 +134,7 @@ describe('ed25519', () => {
       const pub = '3d4017c3e843895a92b70aa74d1b7ebc9c982ccf2ec4968cc0cd55f12af4660c';
       const montgomery = '478dd307cdfb042d80d03e0f55227e4d982bedd1696ba700fc8ab894c504c725';
 
-      const point = ed25519.Point.fromHex(pub);
+      const point = ed.Point.fromHex(pub);
       expect(point.toX25519().toString(16)).toBe(montgomery);
     });
 
@@ -174,9 +143,9 @@ describe('ed25519', () => {
       const pub = '1262bc6d5408a3c4e025aa0c15e64f69197cdb38911be5ad344a949779df3da6';
       const montgomery = '31c3ec9e22ce8ffd4fa9dfa1a698604b4de4921be0e09ca93f96c635bb8de1db';
 
-      const publicKey = await ed25519.getPublicKey(priv);
+      const publicKey = await ed.getPublicKey(priv);
       expect(publicKey).toBe(pub);
-      const point = ed25519.Point.fromHex(publicKey);
+      const point = ed.Point.fromHex(publicKey);
       expect(point.toX25519().toString(16)).toBe(montgomery);
     });
 
@@ -185,9 +154,9 @@ describe('ed25519', () => {
       const pub = 'd7e1ba312ceaf90c89566a9a7861316522a60edea4c2157eabf3d273169eac13';
       const montgomery = '48d70b86a448c72a4b3960d399102d9ef401092fcbbcda8e69bc230bc73bb9d2';
 
-      const publicKey = await ed25519.getPublicKey(priv);
+      const publicKey = await ed.getPublicKey(priv);
       expect(publicKey).toBe(pub);
-      const point = ed25519.Point.fromHex(publicKey);
+      const point = ed.Point.fromHex(publicKey);
       expect(point.toX25519().toString(16)).toBe(montgomery);
     });
   });
@@ -200,7 +169,7 @@ describe('ed25519 official vectors', () => {
   const vectors = data
     .trim()
     .split('\n')
-    .map(line => line.split(':'));
+    .map((line) => line.split(':'));
 
   it('should match 1024 official vectors', async () => {
     for (let i = 0; i < vectors.length; i++) {
@@ -212,8 +181,8 @@ describe('ed25519 official vectors', () => {
       const expectedSignature = vector[3].slice(0, 128);
 
       // Calculate
-      const pub = await ed25519.getPublicKey(priv);
-      const signature = await ed25519.sign(msg, priv);
+      const pub = await ed.getPublicKey(priv);
+      const signature = await ed.sign(msg, priv);
       // console.log('vector', i);
       expect(pub).toBe(expectedPub);
       expect(signature).toBe(expectedSignature);
@@ -225,9 +194,9 @@ describe('ed25519 official vectors', () => {
 describe('rfc8032 vectors', () => {
   it('should create right signature for 0x9d and empty string', async () => {
     const privateKey = '9d61b19deffd5a60ba844af492ec2cc44449c5697b326919703bac031cae7f60';
-    const publicKey = await ed25519.getPublicKey(privateKey);
+    const publicKey = await ed.getPublicKey(privateKey);
     const message = '';
-    const signature = await ed25519.sign(message, privateKey);
+    const signature = await ed.sign(message, privateKey);
     expect(publicKey).toBe('d75a980182b10ab7d54bfed3c964073a0ee172f3daa62325af021a68f707511a');
     expect(signature).toBe(
       'e5564300c360ac729086e2cc806e828a84877f1eb8e5d974d873e065224901555fb8821590a33bacc61e39701cf9b46bd25bf5f0595bbe24655141438e7a100b'
@@ -235,9 +204,9 @@ describe('rfc8032 vectors', () => {
   });
   it('should create right signature for 0x4c and 72', async () => {
     const privateKey = '4ccd089b28ff96da9db6c346ec114e0f5b8a319f35aba624da8cf6ed4fb8a6fb';
-    const publicKey = await ed25519.getPublicKey(privateKey);
+    const publicKey = await ed.getPublicKey(privateKey);
     const message = '72';
-    const signature = await ed25519.sign(message, privateKey);
+    const signature = await ed.sign(message, privateKey);
     expect(publicKey).toBe('3d4017c3e843895a92b70aa74d1b7ebc9c982ccf2ec4968cc0cd55f12af4660c');
     expect(signature).toBe(
       '92a009a9f0d4cab8720e820b5f642540a2b27b5416503f8fb3762223ebdb69da085ac1e43e15996e458f3613d0f11d8c387b2eaeb4302aeeb00d291612bb0c00'
@@ -245,10 +214,10 @@ describe('rfc8032 vectors', () => {
   });
   it('should create right signature for 0x00 and 5a', async () => {
     const privateKey = '002fdd1f7641793ab064bb7aa848f762e7ec6e332ffc26eeacda141ae33b1783';
-    const publicKey = await ed25519.getPublicKey(privateKey);
+    const publicKey = await ed.getPublicKey(privateKey);
     const message =
       '5ac1dfc324f43e6cb79a87ab0470fa857b51fb944982e19074ca44b1e40082c1d07b92efa7ea55ad42b7c027e0b9e33756d95a2c1796a7c2066811dc41858377d4b835c1688d638884cd2ad8970b74c1a54aadd27064163928a77988b24403aa85af82ceab6b728e554761af7175aeb99215b7421e4474c04d213e01ff03e3529b11077cdf28964b8c49c5649e3a46fa0a09dcd59dcad58b9b922a83210acd5e65065531400234f5e40cddcf9804968e3e9ac6f5c44af65001e158067fc3a660502d13fa8874fa93332138d9606bc41b4cee7edc39d753dae12a873941bb357f7e92a4498847d6605456cb8c0b425a47d7d3ca37e54e903a41e6450a35ebe5237c6f0c1bbbc1fd71fb7cd893d189850295c199b7d88af26bc8548975fda1099ffefee42a52f3428ddff35e0173d3339562507ac5d2c45bbd2c19cfe89b';
-    const signature = await ed25519.sign(message, privateKey);
+    const signature = await ed.sign(message, privateKey);
     expect(publicKey).toBe('77d1d8ebacd13f4e2f8a40e28c4a63bc9ce3bfb69716334bcb28a33eb134086c');
     expect(signature).toBe(
       '0df3aa0d0999ad3dc580378f52d152700d5b3b057f56a66f92112e441e1cb9123c66f18712c87efe22d2573777296241216904d7cdd7d5ea433928bd2872fa0c'
@@ -256,10 +225,10 @@ describe('rfc8032 vectors', () => {
   });
   it('should create right signature for 0xf5 and long msg', async () => {
     const privateKey = 'f5e5767cf153319517630f226876b86c8160cc583bc013744c6bf255f5cc0ee5';
-    const publicKey = await ed25519.getPublicKey(privateKey);
+    const publicKey = await ed.getPublicKey(privateKey);
     const message =
       '08b8b2b733424243760fe426a4b54908632110a66c2f6591eabd3345e3e4eb98fa6e264bf09efe12ee50f8f54e9f77b1e355f6c50544e23fb1433ddf73be84d879de7c0046dc4996d9e773f4bc9efe5738829adb26c81b37c93a1b270b20329d658675fc6ea534e0810a4432826bf58c941efb65d57a338bbd2e26640f89ffbc1a858efcb8550ee3a5e1998bd177e93a7363c344fe6b199ee5d02e82d522c4feba15452f80288a821a579116ec6dad2b3b310da903401aa62100ab5d1a36553e06203b33890cc9b832f79ef80560ccb9a39ce767967ed628c6ad573cb116dbefefd75499da96bd68a8a97b928a8bbc103b6621fcde2beca1231d206be6cd9ec7aff6f6c94fcd7204ed3455c68c83f4a41da4af2b74ef5c53f1d8ac70bdcb7ed185ce81bd84359d44254d95629e9855a94a7c1958d1f8ada5d0532ed8a5aa3fb2d17ba70eb6248e594e1a2297acbbb39d502f1a8c6eb6f1ce22b3de1a1f40cc24554119a831a9aad6079cad88425de6bde1a9187ebb6092cf67bf2b13fd65f27088d78b7e883c8759d2c4f5c65adb7553878ad575f9fad878e80a0c9ba63bcbcc2732e69485bbc9c90bfbd62481d9089beccf80cfe2df16a2cf65bd92dd597b0707e0917af48bbb75fed413d238f5555a7a569d80c3414a8d0859dc65a46128bab27af87a71314f318c782b23ebfe808b82b0ce26401d2e22f04d83d1255dc51addd3b75a2b1ae0784504df543af8969be3ea7082ff7fc9888c144da2af58429ec96031dbcad3dad9af0dcbaaaf268cb8fcffead94f3c7ca495e056a9b47acdb751fb73e666c6c655ade8297297d07ad1ba5e43f1bca32301651339e22904cc8c42f58c30c04aafdb038dda0847dd988dcda6f3bfd15c4b4c4525004aa06eeff8ca61783aacec57fb3d1f92b0fe2fd1a85f6724517b65e614ad6808d6f6ee34dff7310fdc82aebfd904b01e1dc54b2927094b2db68d6f903b68401adebf5a7e08d78ff4ef5d63653a65040cf9bfd4aca7984a74d37145986780fc0b16ac451649de6188a7dbdf191f64b5fc5e2ab47b57f7f7276cd419c17a3ca8e1b939ae49e488acba6b965610b5480109c8b17b80e1b7b750dfc7598d5d5011fd2dcc5600a32ef5b52a1ecc820e308aa342721aac0943bf6686b64b2579376504ccc493d97e6aed3fb0f9cd71a43dd497f01f17c0e2cb3797aa2a2f256656168e6c496afc5fb93246f6b1116398a346f1a641f3b041e989f7914f90cc2c7fff357876e506b50d334ba77c225bc307ba537152f3f1610e4eafe595f6d9d90d11faa933a15ef1369546868a7f3a45a96768d40fd9d03412c091c6315cf4fde7cb68606937380db2eaaa707b4c4185c32eddcdd306705e4dc1ffc872eeee475a64dfac86aba41c0618983f8741c5ef68d3a101e8a3b8cac60c905c15fc910840b94c00a0b9d0';
-    const signature = await ed25519.sign(message, privateKey);
+    const signature = await ed.sign(message, privateKey);
     expect(publicKey).toBe('278117fc144c72340f67d0f2316e8386ceffbf2b2428c9c51fef7c597f1d426e');
     expect(signature).toBe(
       '0aab4c900501b3e24d7cdf4663326a3a87df5e4843b2cbdb67cbf6e460fec350aa5371b1508f9f4528ecea23c436d94b5e8fcd4f681e30a6ac00a9704a188a03'
@@ -268,7 +237,7 @@ describe('rfc8032 vectors', () => {
 });
 
 describe('ristretto255', () => {
-  const {ExtendedPoint} = ed25519;
+  const { ExtendedPoint } = ed;
   async function sha512(message: Uint8Array) {
     const hash = createHash('sha512');
     hash.update(message);
@@ -277,7 +246,7 @@ describe('ristretto255', () => {
 
   function arrayToHex(bytes: Uint8Array) {
     return Array.from(bytes)
-      .map(a => a.toString(16).padStart(2, '0'))
+      .map((a) => a.toString(16).padStart(2, '0'))
       .join('');
   }
 
@@ -293,50 +262,14 @@ describe('ristretto255', () => {
 
   const PRIVATE_KEY = 0xa665a45920422f9d417e4867efn;
   // const MESSAGE = ripemd160(new Uint8Array([97, 98, 99, 100, 101, 102, 103]));
+  // prettier-ignore
   const MESSAGE = new Uint8Array([
-    135,
-    79,
-    153,
-    96,
-    197,
-    210,
-    183,
-    169,
-    181,
-    250,
-    211,
-    131,
-    225,
-    186,
-    68,
-    113,
-    158,
-    187,
-    116,
-    58
+    135, 79, 153, 96, 197, 210, 183, 169, 181, 250, 211, 131, 225, 186, 68, 113, 158, 187, 116, 58,
   ]);
   // const WRONG_MESSAGE = ripemd160(new Uint8Array([98, 99, 100, 101, 102, 103]));
+  // prettier-ignore
   const WRONG_MESSAGE = new Uint8Array([
-    88,
-    157,
-    140,
-    127,
-    29,
-    160,
-    162,
-    75,
-    192,
-    123,
-    115,
-    129,
-    173,
-    72,
-    177,
-    207,
-    194,
-    17,
-    175,
-    28
+    88, 157, 140, 127, 29, 160, 162, 75, 192, 123, 115, 129, 173, 72, 177, 207, 194, 17, 175, 28,
   ]);
   // it("should verify just signed message", async () => {
   //   await fc.assert(fc.asyncProperty(
@@ -404,13 +337,15 @@ describe('ristretto255', () => {
       'e4549ee16b9aa03099ca208c67adafcafa4c3f3e4e5303de6026e3ca8ff84460',
       'aa52e000df2e16f55fb1032fc33bc42742dad6bd5a8fc0be0167436c5948501f',
       '46376b80f409b29dc2b5f6f0c52591990896e5716f41477cd30085ab7f10301e',
-      'e0c418f7c8d9c4cdd7395b93ea124f3ad99021bb681dfc3302a9d99a2e53e64e'
+      'e0c418f7c8d9c4cdd7395b93ea124f3ad99021bb681dfc3302a9d99a2e53e64e',
     ];
     let B = ExtendedPoint.BASE;
     let P = ExtendedPoint.ZERO;
     for (const encoded of encodingsOfSmallMultiples) {
       expect(arrayToHex(P.toRistrettoBytes())).toBe(encoded);
-      expect(arrayToHex(ExtendedPoint.fromRistrettoBytes(hexToArray(encoded)).toRistrettoBytes())).toBe(encoded);
+      expect(
+        arrayToHex(ExtendedPoint.fromRistrettoBytes(hexToArray(encoded)).toRistrettoBytes())
+      ).toBe(encoded);
       P = P.add(B);
     }
   });
@@ -449,7 +384,7 @@ describe('ristretto255', () => {
       '5c37cc491da847cfeb9281d407efc41e15144c876e0170b499a96a22ed31e01e',
       '445425117cb8c90edcbc7c1cc0e74f747f2c1efa5630a967c64f287792a48a4b',
       // This is s = -1, which causes y = 0.
-      'ecffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7f'
+      'ecffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7f',
     ];
     for (const badBytes of badEncodings) {
       expect(() => ExtendedPoint.fromRistrettoBytes(hexToArray(badBytes))).toThrow();
@@ -463,7 +398,7 @@ describe('ristretto255', () => {
       'by using a finer grind.',
       'This produces a concentrated shot of coffee per volume.',
       'Just pulling a normal shot short will produce a weaker shot',
-      'and is not a Ristretto as some believe.'
+      'and is not a Ristretto as some believe.',
     ];
     const encodedHashToPoints = [
       '3066f82a1a747d45120d1740f14358531a8f04bbffe6a819f86dfe50f44a0a46',
@@ -472,7 +407,7 @@ describe('ristretto255', () => {
       'f8f0c87cf237953c5890aec3998169005dae3eca1fbb04548c635953c817f92a',
       'ae81e7dedf20a497e10c304a765c1767a42d6e06029758d2d7e8ef7cc4c41179',
       'e2705652ff9f5e44d3e841bf1c251cf7dddb77d140870d1ab2ed64f1a9ce8628',
-      '80bd07262511cdde4863f8a7434cef696750681cb9510eea557088f76d9e5065'
+      '80bd07262511cdde4863f8a7434cef696750681cb9510eea557088f76d9e5065',
     ];
 
     for (let i = 0; i < labels.length; i++) {

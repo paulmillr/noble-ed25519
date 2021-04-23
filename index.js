@@ -172,13 +172,9 @@ class ExtendedPoint {
         return this.add(other.negate());
     }
     multiplyUnsafe(scalar) {
-        if (!(typeof scalar === 'bigint' || (Number.isSafeInteger(scalar) && scalar > 0))) {
+        if (!isValidScalar(scalar))
             throw new TypeError('Point#multiply: expected number or bigint');
-        }
         let n = mod(BigInt(scalar), CURVE.n);
-        if (n <= 0n) {
-            throw new Error('Point#multiply: invalid scalar, expected positive integer');
-        }
         if (n === 1n)
             return this;
         let p = ExtendedPoint.ZERO;
@@ -248,15 +244,9 @@ class ExtendedPoint {
         return [p, f];
     }
     multiply(scalar, affinePoint) {
-        if (typeof scalar !== 'number' && typeof scalar !== 'bigint') {
+        if (!isValidScalar(scalar))
             throw new TypeError('Point#multiply: expected number or bigint');
-        }
         const n = mod(BigInt(scalar), CURVE.n);
-        if (n === 0n)
-            return ExtendedPoint.ZERO;
-        if (n < 0n) {
-            throw new Error('Point#multiply: invalid scalar, expected positive integer');
-        }
         return ExtendedPoint.normalizeZ(this.wNAF(n, affinePoint))[0];
     }
     toAffine(invZ = invert(this.z)) {
@@ -411,6 +401,13 @@ function edIsNegative(num) {
     const byte = Number.parseInt(hex.slice(hex.length - 2, hex.length), 16);
     return Boolean(byte & 1);
 }
+function isValidScalar(num) {
+    if (typeof num === 'bigint' && num > 0n)
+        return true;
+    if (typeof num === 'number' && num > 0 && Number.isSafeInteger(num))
+        return true;
+    return false;
+}
 function bytesToNumberLE(uint8a) {
     let value = 0n;
     for (let i = 0; i < uint8a.length; i++) {
@@ -488,9 +485,9 @@ function invertBatch(nums, n = CURVE.P) {
 function invertSqrt(number) {
     return sqrtRatio(1n, number);
 }
-function powMod2(t, power) {
+function pow2(x, power) {
     const { P } = CURVE;
-    let res = t;
+    let res = x;
     while (power-- > 0n) {
         res *= res;
         res %= P;
@@ -500,20 +497,20 @@ function powMod2(t, power) {
 function chunks250(x) {
     const { P } = CURVE;
     const xx = (x * x) % P;
-    const chunk2 = (xx * x) % P;
-    const chunk4 = powMod2(chunk2, 2n) * chunk2;
-    const chunk5 = (powMod2(chunk4, 1n) * x) % P;
-    const chunk10 = (powMod2(chunk5, 5n) * chunk5) % P;
-    const chunk20 = (powMod2(chunk10, 10n) * chunk10) % P;
-    const chunk40 = (powMod2(chunk20, 20n) * chunk20) % P;
-    const chunk80 = (powMod2(chunk40, 40n) * chunk40) % P;
-    const chunk160 = (powMod2(chunk80, 80n) * chunk80) % P;
-    const chunk240 = (powMod2(chunk160, 80n) * chunk80) % P;
-    const chunk250 = (powMod2(chunk240, 10n) * chunk10) % P;
-    return chunk250;
+    const b2 = (xx * x) % P;
+    const b4 = (pow2(b2, 2n) * b2) % P;
+    const b5 = (pow2(b4, 1n) * x) % P;
+    const b10 = (pow2(b5, 5n) * b5) % P;
+    const b20 = (pow2(b10, 10n) * b10) % P;
+    const b40 = (pow2(b20, 20n) * b20) % P;
+    const b80 = (pow2(b40, 40n) * b40) % P;
+    const b160 = (pow2(b80, 80n) * b80) % P;
+    const b240 = (pow2(b160, 80n) * b80) % P;
+    const b250 = (pow2(b240, 10n) * b10) % P;
+    return b250;
 }
 function pow_2_252_3(x) {
-    return (powMod2(chunks250(x), 2n) * x) % CURVE.P;
+    return (pow2(chunks250(x), 2n) * x) % CURVE.P;
 }
 function sqrtMod(x) {
     return (pow_2_252_3(x) * x) % CURVE.P;
@@ -566,23 +563,22 @@ function ensureBytes(hash) {
     return hash instanceof Uint8Array ? hash : hexToBytes(hash);
 }
 function normalizePrivateKey(privateKey) {
-    const msg = `Invalid private key "${privateKey}"`;
     if (privateKey instanceof Uint8Array) {
         if (privateKey.length !== 32)
-            throw new TypeError(msg);
+            throw new TypeError('Expected 32 bytes of private key');
         return privateKey;
     }
     if (typeof privateKey === 'string') {
         if (privateKey.length !== 64)
-            throw new TypeError(msg);
+            throw new TypeError('Expected 32 bytes of private key');
         return hexToBytes(privateKey);
     }
-    if (typeof privateKey === 'bigint' || (Number.isSafeInteger(privateKey) && privateKey > 0)) {
+    if (isValidScalar(privateKey)) {
         return hexToBytes(BigInt(privateKey)
             .toString(16)
             .padStart(B32 * 2, '0'));
     }
-    throw new TypeError(msg);
+    throw new TypeError('Invalid private key');
 }
 async function getPublicKey(privateKey) {
     const key = await Point.fromPrivateKey(privateKey);

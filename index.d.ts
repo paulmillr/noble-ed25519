@@ -56,7 +56,7 @@ declare class Point {
     negate(): Point;
     add(other: Point): Point;
     subtract(other: Point): Point;
-    multiply(scalar: bigint): Point;
+    multiply(scalar: number | bigint): Point;
 }
 declare class Signature {
     r: Point;
