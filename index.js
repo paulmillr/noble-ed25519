@@ -438,7 +438,12 @@ function mod(a, b = CURVE.P) {
     const res = a % b;
     return res >= 0n ? res : b + res;
 }
-function egcd(a, b) {
+function invert(number, modulo = CURVE.P) {
+    if (number === 0n || modulo <= 0n) {
+        throw new Error('invert: expected positive integers');
+    }
+    let a = mod(number, modulo);
+    let b = modulo;
     let [x, y, u, v] = [0n, 1n, 1n, 0n];
     while (a !== 0n) {
         const q = b / a;
@@ -450,16 +455,8 @@ function egcd(a, b) {
         [u, v] = [m, n];
     }
     const gcd = b;
-    return [gcd, x, y];
-}
-function invert(number, modulo = CURVE.P) {
-    if (number === 0n || modulo <= 0n) {
-        throw new Error('invert: expected positive integers');
-    }
-    const [gcd, x] = egcd(mod(number, modulo), modulo);
-    if (gcd !== 1n) {
+    if (gcd !== 1n)
         throw new Error('invert: does not exist');
-    }
     return mod(x, modulo);
 }
 function invertBatch(nums, n = CURVE.P) {
