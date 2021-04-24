@@ -459,9 +459,7 @@ class Signature {
     hex = ensureBytes(hex);
     const r = Point.fromHex(hex.slice(0, 32));
     const s = bytesToNumberLE(hex.slice(32));
-    if (s >= CURVE.n) {
-      throw new Error('Signature#fromHex expects s <= CURVE.n');
-    }
+    if (!isWithinCurveOrder(s)) throw new Error('Signature#fromHex expects s <= CURVE.n');
     return new Signature(r, s);
   }
 
@@ -742,23 +740,24 @@ function ensureBytes(hash: Hex): Uint8Array {
   return hash instanceof Uint8Array ? hash : hexToBytes(hash);
 }
 
-function normalizePrivateKey(privateKey: PrivKey): Uint8Array {
-  if (privateKey instanceof Uint8Array) {
-    if (privateKey.length !== 32) throw new TypeError('Expected 32 bytes of private key');
-    return privateKey;
+function isWithinCurveOrder(num: bigint): boolean {
+  return 0 < num && num < CURVE.n;
+}
+
+function normalizePrivateKey(key: PrivKey): Uint8Array {
+  let num: bigint;
+  if (typeof key === 'bigint' || (Number.isSafeInteger(key) && key > 0)) {
+    num = BigInt(key);
+    return hexToBytes(num.toString(16).padStart(B32 * 2, '0'));
+  } else if (typeof key === 'string') {
+    if (key.length !== 64) throw new Error('Expected 32 bytes of private key');
+    return hexToBytes(key);
+  } else if (key instanceof Uint8Array) {
+    if (key.length !== 32) throw new Error('Expected 32 bytes of private key');
+    return key;
+  } else {
+    throw new TypeError('Expected valid private key');
   }
-  if (typeof privateKey === 'string') {
-    if (privateKey.length !== 64) throw new TypeError('Expected 32 bytes of private key');
-    return hexToBytes(privateKey);
-  }
-  if (isValidScalar(privateKey)) {
-    return hexToBytes(
-      BigInt(privateKey)
-        .toString(16)
-        .padStart(B32 * 2, '0')
-    );
-  }
-  throw new TypeError('Invalid private key');
 }
 
 export function getPublicKey(privateKey: Uint8Array | bigint | number): Promise<Uint8Array>;
