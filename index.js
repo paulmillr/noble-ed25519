@@ -14,8 +14,10 @@ const CURVE = {
 exports.CURVE = CURVE;
 const B32 = 32;
 const SQRT_M1 = 19681161376707505956807079304988542015446066515923890162744021073123829784752n;
-const INVSQRT_A_D = 54469307008909316920995813868745141605393597292927456921205312896311721017578n;
-const SQRD_AD_ONE = 25063068953384623474111414158702152701244531502492656460079210482610430750235n;
+const SQRT_AD_MINUS_ONE = 25063068953384623474111414158702152701244531502492656460079210482610430750235n;
+const INVSQRT_A_MINUS_D = 54469307008909316920995813868745141605393597292927456921205312896311721017578n;
+const ONE_MINUS_D_SQ = 1159843021668779879193775521855586647937357759715417654439879720876111806838n;
+const D_MINUS_ONE_SQ = 40440834346308536858101042469323190826248399146238708352240133220865137265952n;
 class ExtendedPoint {
     constructor(x, y, z, t) {
         this.x = x;
@@ -40,47 +42,48 @@ class ExtendedPoint {
     }
     static fromRistrettoHash(hash) {
         const r1 = bytesToNumberRst(hash.slice(0, B32));
-        const R1 = this.elligatorRistrettoFlavor(r1);
+        const R1 = this.calcElligatorRistrettoMap(r1);
         const r2 = bytesToNumberRst(hash.slice(B32, B32 * 2));
-        const R2 = this.elligatorRistrettoFlavor(r2);
+        const R2 = this.calcElligatorRistrettoMap(r2);
         return R1.add(R2);
     }
-    static elligatorRistrettoFlavor(r0) {
+    static calcElligatorRistrettoMap(r0) {
         const { d } = CURVE;
-        const oneMinusDSq = mod(1n - d ** 2n);
-        const dMinusOneSq = (d - 1n) ** 2n;
-        const r = SQRT_M1 * (r0 * r0);
-        const NS = mod((r + 1n) * oneMinusDSq);
-        let c = mod(-1n);
+        const r = mod(SQRT_M1 * r0 * r0);
+        const Ns = mod((r + 1n) * ONE_MINUS_D_SQ);
+        let c = -1n;
         const D = mod((c - d * r) * mod(r + d));
-        let { isValid, value: S } = uvRatio(NS, D);
-        let sPrime = mod(S * r0);
-        sPrime = edIsNegative(sPrime) ? sPrime : mod(-sPrime);
-        S = isValid ? S : sPrime;
-        c = isValid ? c : r;
-        const NT = c * (r - 1n) * dMinusOneSq - D;
-        const sSquared = S * S;
-        const W0 = (S + S) * D;
-        const W1 = NT * SQRD_AD_ONE;
-        const W2 = 1n - sSquared;
-        const W3 = 1n + sSquared;
+        let { isValid: Ns_D_is_sq, value: s } = uvRatio(Ns, D);
+        let s_ = mod(s * r0);
+        if (!edIsNegative(s_))
+            s_ = mod(-s_);
+        if (!Ns_D_is_sq)
+            s = s_;
+        if (!Ns_D_is_sq)
+            c = r;
+        const Nt = mod(c * (r - 1n) * D_MINUS_ONE_SQ - D);
+        const s2 = s * s;
+        const W0 = (s + s) * D;
+        const W1 = Nt * SQRT_AD_MINUS_ONE;
+        const W2 = 1n - s2;
+        const W3 = 1n + s2;
         return new ExtendedPoint(mod(W0 * W3), mod(W2 * W1), mod(W1 * W3), mod(W0 * W2));
     }
     static fromRistrettoBytes(bytes) {
+        const { a, d } = CURVE;
         const s = bytesToNumberRst(bytes);
-        const sEncodingIsCanonical = equalBytes(numberToBytesPadded(s, B32), bytes);
-        const sIsNegative = edIsNegative(s);
-        if (!sEncodingIsCanonical || sIsNegative) {
+        if (!equalBytes(numberToBytesPadded(s, B32), bytes) || edIsNegative(s)) {
             throw new Error('Cannot convert bytes to Ristretto Point');
         }
-        const s2 = s * s;
-        const u1 = 1n - s2;
-        const u2 = 1n + s2;
-        const squaredU2 = u2 * u2;
-        const v = u1 * u1 * -CURVE.d - squaredU2;
-        const { isValid, value: I } = invertSqrt(mod(v * squaredU2));
-        const Dx = I * u2;
-        const Dy = I * Dx * v;
+        const s2 = mod(s * s);
+        const u1 = mod(1n + a * s2);
+        const u2 = mod(1n - a * s2);
+        const u1_2 = mod(u1 * u1);
+        const u2_2 = mod(u2 * u2);
+        const v = mod(a * d * u1_2 - u2_2);
+        const { isValid, value: I } = invertSqrt(mod(v * u2_2));
+        const Dx = mod(I * u2);
+        const Dy = mod(I * Dx * v);
         let x = mod((s + s) * Dx);
         if (edIsNegative(x))
             x = mod(-x);
@@ -93,23 +96,23 @@ class ExtendedPoint {
     }
     toRistrettoBytes() {
         let { x, y, z, t } = this;
-        const u1 = (z + y) * (z - y);
-        const u2 = x * y;
-        const { value: invsqrt } = invertSqrt(mod(u2 ** 2n * u1));
-        const i1 = invsqrt * u1;
-        const i2 = invsqrt * u2;
-        const invz = i1 * i2 * t;
-        let invDeno = i2;
-        if (edIsNegative(t * invz)) {
-            const iX = mod(x * SQRT_M1);
-            const iY = mod(y * SQRT_M1);
-            x = iY;
-            y = iX;
-            invDeno = mod(i1 * INVSQRT_A_D);
+        const u1 = mod((z + y) * (z - y));
+        const u2 = mod(x * y);
+        const { value: invsqrt } = invertSqrt(mod(u1 * u2 ** 2n));
+        const D1 = mod(invsqrt * u1);
+        const D2 = mod(invsqrt * u2);
+        const zInv = mod(D1 * D2 * t);
+        let D;
+        if (edIsNegative(t * zInv)) {
+            [x, y] = [mod(y * SQRT_M1), mod(x * SQRT_M1)];
+            D = mod(D1 * INVSQRT_A_MINUS_D);
         }
-        if (edIsNegative(x * invz))
+        else {
+            D = D2;
+        }
+        if (edIsNegative(x * zInv))
             y = mod(-y);
-        let s = mod((z - y) * invDeno);
+        let s = mod((z - y) * D);
         if (edIsNegative(s))
             s = mod(-s);
         return numberToBytesPadded(s, B32);

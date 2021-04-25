@@ -30,14 +30,12 @@ type PubKey = Hex | Point;
 type SigType = Hex | Signature;
 const B32 = 32;
 
-// 2^((p-1)/4)
+// sqrt(-1) aka sqrt(a) aka 2^((p-1)/4)
 const SQRT_M1 = 19681161376707505956807079304988542015446066515923890162744021073123829784752n;
-
-// 1 / sqrt(a-d)
-const INVSQRT_A_D = 54469307008909316920995813868745141605393597292927456921205312896311721017578n;
-
-// sqrt(a*d - 1)
-const SQRD_AD_ONE = 25063068953384623474111414158702152701244531502492656460079210482610430750235n;
+const SQRT_AD_MINUS_ONE = 25063068953384623474111414158702152701244531502492656460079210482610430750235n; // sqrt(ad - 1)
+const INVSQRT_A_MINUS_D = 54469307008909316920995813868745141605393597292927456921205312896311721017578n; // 1 / sqrt(a-d)
+const ONE_MINUS_D_SQ = 1159843021668779879193775521855586647937357759715417654439879720876111806838n; // 1-d^2
+const D_MINUS_ONE_SQ = 40440834346308536858101042469323190826248399146238708352240133220865137265952n; // (d-1)^2
 
 // Default Point works in default aka affine coordinates: (x, y)
 // Extended Point works in extended coordinates: (x, y, z, t) ∋ (x=x/z, y=y/z, t=xy)
@@ -69,101 +67,88 @@ class ExtendedPoint {
   // Ristretto-related methods.
 
   // The hash-to-group operation applies Elligator twice and adds the results.
+  // https://ristretto.group/formulas/elligator.html
   static fromRistrettoHash(hash: Uint8Array): ExtendedPoint {
     const r1 = bytesToNumberRst(hash.slice(0, B32));
-    const R1 = this.elligatorRistrettoFlavor(r1);
+    const R1 = this.calcElligatorRistrettoMap(r1);
     const r2 = bytesToNumberRst(hash.slice(B32, B32 * 2));
-    const R2 = this.elligatorRistrettoFlavor(r2);
+    const R2 = this.calcElligatorRistrettoMap(r2);
     return R1.add(R2);
   }
 
-  // Computes the Ristretto Elligator map.
-  // This method is not public because it's just used for hashing
-  // to a point -- proper elligator support is deferred for now.
-  private static elligatorRistrettoFlavor(r0: bigint) {
+  // Computes Elligator map for Ristretto
+  // https://ristretto.group/formulas/elligator.html
+  private static calcElligatorRistrettoMap(r0: bigint) {
     const { d } = CURVE;
-    const oneMinusDSq = mod(1n - d ** 2n);
-    const dMinusOneSq = (d - 1n) ** 2n;
-    const r = SQRT_M1 * (r0 * r0);
-    const NS = mod((r + 1n) * oneMinusDSq);
-    let c = mod(-1n);
-    const D = mod((c - d * r) * mod(r + d));
-    let { isValid, value: S } = uvRatio(NS, D);
-    let sPrime = mod(S * r0);
-    sPrime = edIsNegative(sPrime) ? sPrime : mod(-sPrime);
-    S = isValid ? S : sPrime;
-    c = isValid ? c : r;
-    const NT = c * (r - 1n) * dMinusOneSq - D;
-    const sSquared = S * S;
-    const W0 = (S + S) * D;
-    const W1 = NT * SQRD_AD_ONE;
-    const W2 = 1n - sSquared;
-    const W3 = 1n + sSquared;
+    const r = mod(SQRT_M1 * r0 * r0); // 1
+    const Ns = mod((r + 1n) * ONE_MINUS_D_SQ); // 2
+    let c = -1n; // 3
+    const D = mod((c - d * r) * mod(r + d)); // 4
+    let { isValid: Ns_D_is_sq, value: s } = uvRatio(Ns, D); // 5
+    let s_ = mod(s * r0); // 6
+    if (!edIsNegative(s_)) s_ = mod(-s_);
+    if (!Ns_D_is_sq) s = s_; // 7
+    if (!Ns_D_is_sq) c = r; // 8
+    const Nt = mod(c * (r - 1n) * D_MINUS_ONE_SQ - D); // 9
+    const s2 = s * s;
+    const W0 = (s + s) * D; // 10
+    const W1 = Nt * SQRT_AD_MINUS_ONE; // 11
+    const W2 = 1n - s2; // 12
+    const W3 = 1n + s2; // 13
     return new ExtendedPoint(mod(W0 * W3), mod(W2 * W1), mod(W1 * W3), mod(W0 * W2));
   }
 
-  static fromRistrettoBytes(bytes: Uint8Array) {
-    // Step 1. Check s for validity:
-    // 1.a) s must be 32 bytes (we get this from the type system)
-    // 1.b) s < p
-    // 1.c) s is nonnegative
-    //
-    // Our decoding routine ignores the high bit, so the only
-    // possible failure for 1.b) is if someone encodes s in 0..18
-    // as s+p in 2^255-19..2^255-1.  We can check this by
-    // converting back to bytes, and checking that we get the
-    // original input, since our encoding routine is canonical.
+  // Ristretto: Decoding to Extended Coordinates
+  // https://ristretto.group/formulas/decoding.html
+  static fromRistrettoBytes(bytes: Uint8Array): ExtendedPoint {
+    const { a, d } = CURVE;
     const s = bytesToNumberRst(bytes);
-    const sEncodingIsCanonical = equalBytes(numberToBytesPadded(s, B32), bytes);
-    const sIsNegative = edIsNegative(s);
-    if (!sEncodingIsCanonical || sIsNegative) {
+    // 1. Check that s_bytes is the canonical encoding of a field element, or else abort.
+    // 3. Check that s is non-negative, or else abort
+    if (!equalBytes(numberToBytesPadded(s, B32), bytes) || edIsNegative(s)) {
       throw new Error('Cannot convert bytes to Ristretto Point');
     }
-    const s2 = s * s;
-    const u1 = 1n - s2; // 1 + as²
-    const u2 = 1n + s2; // 1 - as² where a=-1
-    const squaredU2 = u2 * u2; // (1 - as²)²
-    // v == ad(1+as²)² - (1-as²)² where d=-121665/121666
-    const v = u1 * u1 * -CURVE.d - squaredU2;
-    const { isValid, value: I } = invertSqrt(mod(v * squaredU2)); // 1/sqrt(v*u_2²)
-    const Dx = I * u2;
-    const Dy = I * Dx * v; // 1/u2
-    // x == | 2s/sqrt(v) | == + sqrt(4s²/(ad(1+as²)² - (1-as²)²))
-    let x = mod((s + s) * Dx);
-    if (edIsNegative(x)) x = mod(-x);
-    // y == (1-as²)/(1+as²)
-    const y = mod(u1 * Dy);
-    // t == ((1+as²) sqrt(4s²/(ad(1+as²)² - (1-as²)²)))/(1-as²)
-    const t = mod(x * y);
+    const s2 = mod(s * s);
+    const u1 = mod(1n + a * s2); // 4 (a is -1)
+    const u2 = mod(1n - a * s2); // 5
+    const u1_2 = mod(u1 * u1);
+    const u2_2 = mod(u2 * u2);
+    const v = mod(a * d * u1_2 - u2_2); // 6
+    const { isValid, value: I } = invertSqrt(mod(v * u2_2)); // 7
+    const Dx = mod(I * u2); // 8
+    const Dy = mod(I * Dx * v); // 9
+    let x = mod((s + s) * Dx); // 10
+    if (edIsNegative(x)) x = mod(-x); // 10
+    const y = mod(u1 * Dy); // 11
+    const t = mod(x * y); // 12
     if (!isValid || edIsNegative(t) || y === 0n) {
       throw new Error('Cannot convert bytes to Ristretto Point');
     }
     return new ExtendedPoint(x, y, 1n, t);
   }
 
-  toRistrettoBytes() {
+  // Ristretto: Encoding from Extended Coordinates
+  // https://ristretto.group/formulas/encoding.html
+  toRistrettoBytes(): Uint8Array {
     let { x, y, z, t } = this;
-    // u1 = (z0 + y0) * (z0 - y0)
-    const u1 = (z + y) * (z - y);
-    const u2 = x * y;
-    // Ignore return value since this is always square
-    const { value: invsqrt } = invertSqrt(mod(u2 ** 2n * u1));
-    const i1 = invsqrt * u1;
-    const i2 = invsqrt * u2;
-    const invz = i1 * i2 * t;
-    let invDeno = i2;
-    if (edIsNegative(t * invz)) {
-      // Is rotated
-      const iX = mod(x * SQRT_M1);
-      const iY = mod(y * SQRT_M1);
-      x = iY;
-      y = iX;
-      invDeno = mod(i1 * INVSQRT_A_D);
+    const u1 = mod((z + y) * (z - y)); // 1
+    const u2 = mod(x * y); // 2
+    // Square root always exists
+    const { value: invsqrt } = invertSqrt(mod(u1 * u2 ** 2n)); // 3
+    const D1 = mod(invsqrt * u1); // 4
+    const D2 = mod(invsqrt * u2); // 5
+    const zInv = mod(D1 * D2 * t); // 6
+    let D: bigint; // 7
+    if (edIsNegative(t * zInv)) {
+      [x, y] = [mod(y * SQRT_M1), mod(x * SQRT_M1)];
+      D = mod(D1 * INVSQRT_A_MINUS_D);
+    } else {
+      D = D2; // 8
     }
-    if (edIsNegative(x * invz)) y = mod(-y);
-    let s = mod((z - y) * invDeno);
+    if (edIsNegative(x * zInv)) y = mod(-y); // 9
+    let s = mod((z - y) * D); // 10 (check footer's note, no sqrt(-a))
     if (edIsNegative(s)) s = mod(-s);
-    return numberToBytesPadded(s, B32);
+    return numberToBytesPadded(s, B32); // 11
   }
   // Ristretto methods end.
 

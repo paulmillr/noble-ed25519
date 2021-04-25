@@ -25,7 +25,7 @@ declare class ExtendedPoint {
     static toAffineBatch(points: ExtendedPoint[]): Point[];
     static normalizeZ(points: ExtendedPoint[]): ExtendedPoint[];
     static fromRistrettoHash(hash: Uint8Array): ExtendedPoint;
-    private static elligatorRistrettoFlavor;
+    private static calcElligatorRistrettoMap;
     static fromRistrettoBytes(bytes: Uint8Array): ExtendedPoint;
     toRistrettoBytes(): Uint8Array;
     equals(other: ExtendedPoint): boolean;
