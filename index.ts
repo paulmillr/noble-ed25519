@@ -572,6 +572,7 @@ function mod(a: bigint, b: bigint = CURVE.P) {
   return res >= 0n ? res : b + res;
 }
 
+// Note: this egcd-based invert is faster than powMod-based one.
 // Inverses number over modulo
 function invert(number: bigint, modulo: bigint = CURVE.P): bigint {
   if (number === 0n || modulo <= 0n) {
@@ -633,10 +634,10 @@ function pow2(x: bigint, power: bigint): bigint {
 // We are multiplying it bit-by-bit
 function pow_2_252_3(x: bigint): bigint {
   const { P } = CURVE;
-  const xx = (x * x) % P;
-  const b2 = (xx * x) % P; // x^3, 11
-  const b4 = (pow2(b2, 2n) * b2) % P; // 1111
-  const b5 = (pow2(b4, 1n) * x) % P;
+  const x2 = (x * x) % P;
+  const b2 = (x2 * x) % P; // x^3, 11
+  const b4 = (pow2(b2, 2n) * b2) % P; // x^15, 1111
+  const b5 = (pow2(b4, 1n) * x) % P; // x^31
   const b10 = (pow2(b5, 5n) * b5) % P;
   const b20 = (pow2(b10, 10n) * b10) % P;
   const b40 = (pow2(b20, 20n) * b20) % P;

@@ -494,8 +494,8 @@ function pow2(x, power) {
 }
 function pow_2_252_3(x) {
     const { P } = CURVE;
-    const xx = (x * x) % P;
-    const b2 = (xx * x) % P;
+    const x2 = (x * x) % P;
+    const b2 = (x2 * x) % P;
     const b4 = (pow2(b2, 2n) * b2) % P;
     const b5 = (pow2(b4, 1n) * x) % P;
     const b10 = (pow2(b5, 5n) * b5) % P;
