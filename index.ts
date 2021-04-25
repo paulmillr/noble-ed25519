@@ -88,11 +88,11 @@ class ExtendedPoint {
     const NS = mod((r + 1n) * oneMinusDSq);
     let c = mod(-1n);
     const D = mod((c - d * r) * mod(r + d));
-    let { isNotZeroSquare, value: S } = sqrtRatio(NS, D);
+    let { isValid, value: S } = uvRatio(NS, D);
     let sPrime = mod(S * r0);
     sPrime = edIsNegative(sPrime) ? sPrime : mod(-sPrime);
-    S = isNotZeroSquare ? S : sPrime;
-    c = isNotZeroSquare ? c : r;
+    S = isValid ? S : sPrime;
+    c = isValid ? c : r;
     const NT = c * (r - 1n) * dMinusOneSq - D;
     const sSquared = S * S;
     const W0 = (S + S) * D;
@@ -125,7 +125,7 @@ class ExtendedPoint {
     const squaredU2 = u2 * u2; // (1 - as²)²
     // v == ad(1+as²)² - (1-as²)² where d=-121665/121666
     const v = u1 * u1 * -CURVE.d - squaredU2;
-    const { isNotZeroSquare, value: I } = invertSqrt(mod(v * squaredU2)); // 1/sqrt(v*u_2²)
+    const { isValid, value: I } = invertSqrt(mod(v * squaredU2)); // 1/sqrt(v*u_2²)
     const Dx = I * u2;
     const Dy = I * Dx * v; // 1/u2
     // x == | 2s/sqrt(v) | == + sqrt(4s²/(ad(1+as²)² - (1-as²)²))
@@ -135,7 +135,7 @@ class ExtendedPoint {
     const y = mod(u1 * Dy);
     // t == ((1+as²) sqrt(4s²/(ad(1+as²)² - (1-as²)²)))/(1-as²)
     const t = mod(x * y);
-    if (!isNotZeroSquare || edIsNegative(t) || y === 0n) {
+    if (!isValid || edIsNegative(t) || y === 0n) {
       throw new Error('Cannot convert bytes to Ristretto Point');
     }
     return new ExtendedPoint(x, y, 1n, t);
@@ -370,20 +370,33 @@ class Point {
   static fromHex(hash: Hex) {
     const { d, P } = CURVE;
     const bytes = hash instanceof Uint8Array ? hash : hexToBytes(hash);
-    const len = bytes.length - 1;
-    const normedLast = bytes[len] & ~0x80;
-    const isLastByteOdd = (bytes[len] & 0x80) !== 0;
-    const normed = Uint8Array.from(Array.from(bytes.slice(0, len)).concat(normedLast));
+    if (bytes.length !== 32) throw new Error('Point.fromHex: expected 32 bytes');
+    // 1.  First, interpret the string as an integer in little-endian
+    // representation. Bit 255 of this number is the least significant
+    // bit of the x-coordinate and denote this value x_0.  The
+    // y-coordinate is recovered simply by clearing this bit.  If the
+    // resulting value is >= p, decoding fails.
+    const last = bytes[31];
+    const normedLast = last & ~0x80;
+    const isLastByteOdd = (last & 0x80) !== 0;
+    const normed = Uint8Array.from(Array.from(bytes.slice(0, 31)).concat(normedLast));
     const y = bytesToNumberLE(normed);
     if (y >= P) {
       throw new Error('Point#fromHex expects hex <= Fp');
     }
-    const sqrY = y * y;
-    const sqrX = mod((sqrY - 1n) * invert(d * sqrY + 1n));
-    let x = sqrtMod(sqrX);
-    if (mod(x * x - sqrX) !== 0n) {
-      x = mod(x * SQRT_M1);
-    }
+
+    // 2.  To recover the x-coordinate, the curve equation implies
+    // x^2 = (y^2 - 1) / (d y^2 + 1) (mod p).  The denominator is always
+    // non-zero mod p.  Let u = y^2 - 1 and v = d y^2 + 1.
+    const y2 = mod(y * y);
+    const u = mod(y2 - 1n);
+    const v = mod(d * y2 + 1n);
+    let { isValid, value: x } = uvRatio(u, v);
+    if (!isValid) throw new Error('Point.fromHex: invalid y coordinate');
+
+    // 4.  Finally, use the x_0 bit to select the right square root.  If
+    // x = 0, and x_0 = 1, decoding fails.  Otherwise, if x_0 != x mod
+    // 2, set x <-- p - x.  Return the decoded point (x,y).
     const isXOdd = (x & 1n) === 1n;
     if (isLastByteOdd !== isXOdd) {
       x = mod(-x);
@@ -616,12 +629,7 @@ function invertBatch(nums: bigint[], n: bigint = CURVE.P): bigint[] {
   return nums;
 }
 
-// Attempt to compute `sqrt(1/number)` in constant time.
-function invertSqrt(number: bigint) {
-  return sqrtRatio(1n, number);
-}
-
-// Does x ^ (2 ^ power). E.g. 30 ^ (2 ^ 4)
+// Does x ^ (2 ^ power) mod p. pow2(30, 4) == 30 ^ (2 ^ 4)
 function pow2(x: bigint, power: bigint): bigint {
   const { P } = CURVE;
   let res = x;
@@ -632,12 +640,13 @@ function pow2(x: bigint, power: bigint): bigint {
   return res;
 }
 
+// Power to (p-5)/8 aka x^(2^252-3)
 // Used to calculate y - the square root of y^2.
 // Exponentiates it to very big number.
 // We are unwrapping the loop because it's 2x faster.
 // (2n**252n-3n).toString(2) would produce bits [250x 1, 0, 1]
 // We are multiplying it bit-by-bit
-function chunks250(x: bigint): bigint {
+function pow_2_252_3(x: bigint): bigint {
   const { P } = CURVE;
   const xx = (x * x) % P;
   const b2 = (xx * x) % P; // x^3, 11
@@ -650,57 +659,33 @@ function chunks250(x: bigint): bigint {
   const b160 = (pow2(b80, 80n) * b80) % P;
   const b240 = (pow2(b160, 80n) * b80) % P;
   const b250 = (pow2(b240, 10n) * b10) % P;
-  return b250;
+  const pow_p_5_8 = (pow2(b250, 2n) * x) % P;
+  // ^ To pow to (p+3)/8, multiply it by x.
+  return pow_p_5_8;
 }
 
-// Power to x^(2^252-3) aka p/8
-function pow_2_252_3(x: bigint): bigint {
-  return (pow2(chunks250(x), 2n) * x) % CURVE.P;
-}
-// Power to x^(2^252-2) aka (p+3)/8
-function sqrtMod(x: bigint): bigint {
-  return (pow_2_252_3(x) * x) % CURVE.P;
-}
-
-function sqrtRatio(t: bigint, v: bigint) {
-  // Using the same trick as in ed25519 decoding, we merge the
-  // inversion, the square root, and the square test as follows.
-  //
-  // To compute sqrt(α), we can compute β = α^((p+3)/8).
-  // Then β^2 = ±α, so multiplying β by sqrt(-1) if necessary
-  // gives sqrt(α).
-  //
-  // To compute 1/sqrt(α), we observe that
-  //    1/β = α^(p-1 - (p+3)/8) = α^((7p-11)/8)
-  //                            = α^3 * (α^7)^((p-5)/8).
-  //
-  // We can therefore compute sqrt(u/v) = sqrt(u)/sqrt(v)
-  // by first computing
-  //    r = u^((p+3)/8) v^(p-1-(p+3)/8)
-  //      = u u^((p-5)/8) v^3 (v^7)^((p-5)/8)
-  //      = (uv^3) (uv^7)^((p-5)/8).
-  //
-  // If v is nonzero and u/v is square, then r^2 = ±u/v,
-  //                                     so vr^2 = ±u.
-  // If vr^2 =  u, then sqrt(u/v) = r.
-  // If vr^2 = -u, then sqrt(u/v) = r*sqrt(-1).
-  //
-  // If v is zero, r is also zero.
-  const v3 = mod(v * v * v);
-  const v7 = mod(v3 * v3 * v);
-  let r = mod(pow_2_252_3(t * v7) * t * v3);
-  const check = mod(r * r * v);
-  const i = SQRT_M1;
-  const correctSignSqrt = check === t;
-  const flippedSignSqrt = check === mod(-t);
-  const flippedSignSqrtI = check === mod(mod(-t) * i);
-  const rPrime = mod(SQRT_M1 * r);
-  r = flippedSignSqrt || flippedSignSqrtI ? rPrime : r;
-  if (edIsNegative(r)) r = mod(-r);
-  const isNotZeroSquare = correctSignSqrt || flippedSignSqrt;
-  return { isNotZeroSquare, value: mod(r) };
+// Ratio of u to v. Allows us to combine inversion and square root. Uses algo from RFC8032 5.1.3.
+// prettier-ignore
+function uvRatio(u: bigint, v: bigint): {isValid: boolean, value: bigint} {
+  const v3 = mod(v * v * v);                  // v^3
+  const v7 = mod(v3 * v3 * v);                // v^7
+  let x = mod(u * v3 * pow_2_252_3(u * v7));  // (uv^3) * (uv^7)^(p-5)/8
+  const vx2 = mod(v * x * x);                 // vx^2
+  const root1 = x;                            // First root candidate
+  const root2 = mod(x * SQRT_M1);             // Second root candidate
+  const useRoot1 = vx2 === u;                 // If vx^2 = u (mod p), x is a square root
+  const useRoot2 = vx2 === mod(-u);           // If vx^2 = -u, set x <-- x * 2^((p-1)/4)
+  const noRoot = vx2 === mod(-u * SQRT_M1);   // There is no valid root, vx^2 = -u√(-1)
+  if (useRoot1) x = root1;
+  if (useRoot2 || noRoot) x = root2;          // We return root2 anyway, for const-time
+  if (edIsNegative(x)) x = mod(-x);
+  return { isValid: useRoot1 || useRoot2, value: x };
 }
 
+// Calculates 1/√(number)
+function invertSqrt(number: bigint) {
+  return uvRatio(1n, number);
+}
 // Math end
 
 async function sha512ToNumberLE(...args: Uint8Array[]): Promise<bigint> {

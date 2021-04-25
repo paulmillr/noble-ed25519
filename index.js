@@ -53,11 +53,11 @@ class ExtendedPoint {
         const NS = mod((r + 1n) * oneMinusDSq);
         let c = mod(-1n);
         const D = mod((c - d * r) * mod(r + d));
-        let { isNotZeroSquare, value: S } = sqrtRatio(NS, D);
+        let { isValid, value: S } = uvRatio(NS, D);
         let sPrime = mod(S * r0);
         sPrime = edIsNegative(sPrime) ? sPrime : mod(-sPrime);
-        S = isNotZeroSquare ? S : sPrime;
-        c = isNotZeroSquare ? c : r;
+        S = isValid ? S : sPrime;
+        c = isValid ? c : r;
         const NT = c * (r - 1n) * dMinusOneSq - D;
         const sSquared = S * S;
         const W0 = (S + S) * D;
@@ -78,7 +78,7 @@ class ExtendedPoint {
         const u2 = 1n + s2;
         const squaredU2 = u2 * u2;
         const v = u1 * u1 * -CURVE.d - squaredU2;
-        const { isNotZeroSquare, value: I } = invertSqrt(mod(v * squaredU2));
+        const { isValid, value: I } = invertSqrt(mod(v * squaredU2));
         const Dx = I * u2;
         const Dy = I * Dx * v;
         let x = mod((s + s) * Dx);
@@ -86,7 +86,7 @@ class ExtendedPoint {
             x = mod(-x);
         const y = mod(u1 * Dy);
         const t = mod(x * y);
-        if (!isNotZeroSquare || edIsNegative(t) || y === 0n) {
+        if (!isValid || edIsNegative(t) || y === 0n) {
             throw new Error('Cannot convert bytes to Ristretto Point');
         }
         return new ExtendedPoint(x, y, 1n, t);
@@ -271,20 +271,22 @@ class Point {
     static fromHex(hash) {
         const { d, P } = CURVE;
         const bytes = hash instanceof Uint8Array ? hash : hexToBytes(hash);
-        const len = bytes.length - 1;
-        const normedLast = bytes[len] & ~0x80;
-        const isLastByteOdd = (bytes[len] & 0x80) !== 0;
-        const normed = Uint8Array.from(Array.from(bytes.slice(0, len)).concat(normedLast));
+        if (bytes.length !== 32)
+            throw new Error('Point.fromHex: expected 32 bytes');
+        const last = bytes[31];
+        const normedLast = last & ~0x80;
+        const isLastByteOdd = (last & 0x80) !== 0;
+        const normed = Uint8Array.from(Array.from(bytes.slice(0, 31)).concat(normedLast));
         const y = bytesToNumberLE(normed);
         if (y >= P) {
             throw new Error('Point#fromHex expects hex <= Fp');
         }
-        const sqrY = y * y;
-        const sqrX = mod((sqrY - 1n) * invert(d * sqrY + 1n));
-        let x = sqrtMod(sqrX);
-        if (mod(x * x - sqrX) !== 0n) {
-            x = mod(x * SQRT_M1);
-        }
+        const y2 = mod(y * y);
+        const u = mod(y2 - 1n);
+        const v = mod(d * y2 + 1n);
+        let { isValid, value: x } = uvRatio(u, v);
+        if (!isValid)
+            throw new Error('Point.fromHex: invalid y coordinate');
         const isXOdd = (x & 1n) === 1n;
         if (isLastByteOdd !== isXOdd) {
             x = mod(-x);
@@ -478,9 +480,6 @@ function invertBatch(nums, n = CURVE.P) {
     }
     return nums;
 }
-function invertSqrt(number) {
-    return sqrtRatio(1n, number);
-}
 function pow2(x, power) {
     const { P } = CURVE;
     let res = x;
@@ -490,7 +489,7 @@ function pow2(x, power) {
     }
     return res;
 }
-function chunks250(x) {
+function pow_2_252_3(x) {
     const { P } = CURVE;
     const xx = (x * x) % P;
     const b2 = (xx * x) % P;
@@ -503,29 +502,29 @@ function chunks250(x) {
     const b160 = (pow2(b80, 80n) * b80) % P;
     const b240 = (pow2(b160, 80n) * b80) % P;
     const b250 = (pow2(b240, 10n) * b10) % P;
-    return b250;
+    const pow_p_5_8 = (pow2(b250, 2n) * x) % P;
+    return pow_p_5_8;
 }
-function pow_2_252_3(x) {
-    return (pow2(chunks250(x), 2n) * x) % CURVE.P;
-}
-function sqrtMod(x) {
-    return (pow_2_252_3(x) * x) % CURVE.P;
-}
-function sqrtRatio(t, v) {
+function uvRatio(u, v) {
     const v3 = mod(v * v * v);
     const v7 = mod(v3 * v3 * v);
-    let r = mod(pow_2_252_3(t * v7) * t * v3);
-    const check = mod(r * r * v);
-    const i = SQRT_M1;
-    const correctSignSqrt = check === t;
-    const flippedSignSqrt = check === mod(-t);
-    const flippedSignSqrtI = check === mod(mod(-t) * i);
-    const rPrime = mod(SQRT_M1 * r);
-    r = flippedSignSqrt || flippedSignSqrtI ? rPrime : r;
-    if (edIsNegative(r))
-        r = mod(-r);
-    const isNotZeroSquare = correctSignSqrt || flippedSignSqrt;
-    return { isNotZeroSquare, value: mod(r) };
+    let x = mod(u * v3 * pow_2_252_3(u * v7));
+    const vx2 = mod(v * x * x);
+    const root1 = x;
+    const root2 = mod(x * SQRT_M1);
+    const useRoot1 = vx2 === u;
+    const useRoot2 = vx2 === mod(-u);
+    const noRoot = vx2 === mod(-u * SQRT_M1);
+    if (useRoot1)
+        x = root1;
+    if (useRoot2 || noRoot)
+        x = root2;
+    if (edIsNegative(x))
+        x = mod(-x);
+    return { isValid: useRoot1 || useRoot2, value: x };
+}
+function invertSqrt(number) {
+    return uvRatio(1n, number);
 }
 async function sha512ToNumberLE(...args) {
     const messageArray = concatBytes(...args);

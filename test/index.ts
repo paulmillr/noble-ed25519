@@ -181,10 +181,13 @@ describe('ed25519 official vectors', () => {
       const expectedSignature = vector[3].slice(0, 128);
 
       // Calculate
-      const pub = await ed.getPublicKey(priv);
+      const pub = await ed.getPublicKey(toBytes(priv));
+      expect(pub).toEqual(toBytes(expectedPub));
+      expect(pub).toEqual(ed.Point.fromHex(pub).toRawBytes());
+
       const signature = await ed.sign(msg, priv);
       // console.log('vector', i);
-      expect(pub).toBe(expectedPub);
+      // expect(pub).toBe(expectedPub);
       expect(signature).toBe(expectedSignature);
     }
   });

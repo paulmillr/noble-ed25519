@@ -47,6 +47,9 @@ run(async () => {
   await mark('verifyBatch', 1000, async () => {
     const verified = await ed.verify(sig, msg, pub);
   });
+  await mark('Point.fromHex decompression', 1000, async () => {
+    ed.Point.fromHex(pubHex);
+  });
 
   function arrayToHex(bytes) {
     return Array.from(bytes)
