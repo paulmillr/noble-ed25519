@@ -71,10 +71,10 @@ class ExtendedPoint {
     }
     static fromRistrettoBytes(bytes) {
         const { a, d } = CURVE;
+        const emsg = 'ExtendedPoint.fromRistrettoBytes: Cannot convert bytes to Ristretto Point';
         const s = bytes255ToNumberLE(bytes);
-        if (!equalBytes(numberToBytesPadded(s, B32), bytes) || edIsNegative(s)) {
-            throw new Error('Cannot convert bytes to Ristretto Point');
-        }
+        if (!equalBytes(numberToBytesPadded(s, B32), bytes) || edIsNegative(s))
+            throw new Error(emsg);
         const s2 = mod(s * s);
         const u1 = mod(1n + a * s2);
         const u2 = mod(1n - a * s2);
@@ -89,9 +89,8 @@ class ExtendedPoint {
             x = mod(-x);
         const y = mod(u1 * Dy);
         const t = mod(x * y);
-        if (!isValid || edIsNegative(t) || y === 0n) {
-            throw new Error('Cannot convert bytes to Ristretto Point');
-        }
+        if (!isValid || edIsNegative(t) || y === 0n)
+            throw new Error(emsg);
         return new ExtendedPoint(x, y, 1n, t);
     }
     toRistrettoBytes() {
@@ -281,9 +280,8 @@ class Point {
         const isLastByteOdd = (last & 0x80) !== 0;
         const normed = Uint8Array.from(Array.from(bytes.slice(0, 31)).concat(normedLast));
         const y = bytesToNumberLE(normed);
-        if (y >= P) {
-            throw new Error('Point#fromHex expects hex <= Fp');
-        }
+        if (y >= P)
+            throw new Error('Point.fromHex expects hex <= Fp');
         const y2 = mod(y * y);
         const u = mod(y2 - 1n);
         const v = mod(d * y2 + 1n);
@@ -345,7 +343,7 @@ class Signature {
         const r = Point.fromHex(hex.slice(0, 32));
         const s = bytesToNumberLE(hex.slice(32));
         if (!isWithinCurveOrder(s))
-            throw new Error('Signature#fromHex expects s <= CURVE.n');
+            throw new Error('Signature.fromHex expects s <= CURVE.n');
         return new Signature(r, s);
     }
     toRawBytes() {
@@ -426,7 +424,7 @@ function mod(a, b = CURVE.P) {
 }
 function invert(number, modulo = CURVE.P) {
     if (number === 0n || modulo <= 0n) {
-        throw new Error('invert: expected positive integers');
+        throw new Error(`invert: expected positive integers, got n=${number} mod=${modulo}`);
     }
     let a = mod(number, modulo);
     let b = modulo;

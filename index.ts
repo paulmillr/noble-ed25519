@@ -103,12 +103,11 @@ class ExtendedPoint {
   // https://ristretto.group/formulas/decoding.html
   static fromRistrettoBytes(bytes: Uint8Array): ExtendedPoint {
     const { a, d } = CURVE;
+    const emsg = 'ExtendedPoint.fromRistrettoBytes: Cannot convert bytes to Ristretto Point';
     const s = bytes255ToNumberLE(bytes);
     // 1. Check that s_bytes is the canonical encoding of a field element, or else abort.
     // 3. Check that s is non-negative, or else abort
-    if (!equalBytes(numberToBytesPadded(s, B32), bytes) || edIsNegative(s)) {
-      throw new Error('Cannot convert bytes to Ristretto Point');
-    }
+    if (!equalBytes(numberToBytesPadded(s, B32), bytes) || edIsNegative(s)) throw new Error(emsg);
     const s2 = mod(s * s);
     const u1 = mod(1n + a * s2); // 4 (a is -1)
     const u2 = mod(1n - a * s2); // 5
@@ -122,9 +121,7 @@ class ExtendedPoint {
     if (edIsNegative(x)) x = mod(-x); // 10
     const y = mod(u1 * Dy); // 11
     const t = mod(x * y); // 12
-    if (!isValid || edIsNegative(t) || y === 0n) {
-      throw new Error('Cannot convert bytes to Ristretto Point');
-    }
+    if (!isValid || edIsNegative(t) || y === 0n) throw new Error(emsg);
     return new ExtendedPoint(x, y, 1n, t);
   }
 
@@ -367,9 +364,7 @@ class Point {
     const isLastByteOdd = (last & 0x80) !== 0;
     const normed = Uint8Array.from(Array.from(bytes.slice(0, 31)).concat(normedLast));
     const y = bytesToNumberLE(normed);
-    if (y >= P) {
-      throw new Error('Point#fromHex expects hex <= Fp');
-    }
+    if (y >= P) throw new Error('Point.fromHex expects hex <= Fp');
 
     // 2.  To recover the x-coordinate, the curve equation implies
     // x^2 = (y^2 - 1) / (d y^2 + 1) (mod p).  The denominator is always
@@ -458,7 +453,7 @@ class Signature {
     hex = ensureBytes(hex);
     const r = Point.fromHex(hex.slice(0, 32));
     const s = bytesToNumberLE(hex.slice(32));
-    if (!isWithinCurveOrder(s)) throw new Error('Signature#fromHex expects s <= CURVE.n');
+    if (!isWithinCurveOrder(s)) throw new Error('Signature.fromHex expects s <= CURVE.n');
     return new Signature(r, s);
   }
 
@@ -557,7 +552,7 @@ function mod(a: bigint, b: bigint = CURVE.P) {
 // Inverses number over modulo
 function invert(number: bigint, modulo: bigint = CURVE.P): bigint {
   if (number === 0n || modulo <= 0n) {
-    throw new Error('invert: expected positive integers');
+    throw new Error(`invert: expected positive integers, got n=${number} mod=${modulo}`);
   }
   // Eucledian GCD https://brilliant.org/wiki/extended-euclidean-algorithm/
   let a = mod(number, modulo);
