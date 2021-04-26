@@ -205,17 +205,17 @@ Benchmarks done with Apple M1.
 ```
 getPublicKey(utils.randomPrivateKey()) x 6,562 ops/sec @ 152μs/op
 sign x 3,017 ops/sec @ 331μs/op
-verify x 646 ops/sec @ 1ms/op
+verify x 658 ops/sec @ 1ms/op
 verifyBatch x 825 ops/sec @ 1ms/op
-Point.fromHex decompression x 10,296 ops/sec @ 97μs/op
-ristretto255#fromHash x 4,966 ops/sec @ 201μs/op
+Point.fromHex decompression x 10,504 ops/sec @ 95μs/op
+ristretto255#fromHash x 5,031 ops/sec @ 198μs/op
 ristretto255 round x 2,251 ops/sec @ 444μs/op
 ```
 
 Compare to alternative implementations:
 
 ```
-# tweetnacl@1.0.3 (fast)
+# tweetnacl-fast@1.0.3
 getPublicKey x 920 ops/sec @ 1ms/op # aka scalarMultBase
 sign x 519 ops/sec @ 2ms/op
 # ristretto255@0.1.1

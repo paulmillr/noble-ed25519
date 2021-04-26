@@ -21,6 +21,7 @@ run(async () => {
     return array;
   }
 
+  const arr = new Array(8192).fill(0).map(i => ed.utils.randomPrivateKey());
   const priv1 = toBytes(2n);
   let pubHex;
   await mark('getPublicKey 1 bit', 1000, async () => {
@@ -28,8 +29,9 @@ run(async () => {
   });
 
   const priv2 = toBytes(0x9d61b19deffd5a60ba844af492ec2cc44449c5697b326919703bac031cae7f60n);
+  let pi = 0;
   await mark('getPublicKey(utils.randomPrivateKey())', 1000, async () => {
-    pubHex = await ed.getPublicKey(priv2);
+    pubHex = await ed.getPublicKey(arr[pi++ % arr.length]);
   });
 
   const msg = toBytes('deadbeefdeadbeefdeadbeefdeadbeefdeadbeef');

@@ -41,9 +41,9 @@ class ExtendedPoint {
         return this.toAffineBatch(points).map(this.fromAffine);
     }
     static fromRistrettoHash(hash) {
-        const r1 = bytesToNumberRst(hash.slice(0, B32));
+        const r1 = bytes255ToNumberLE(hash.slice(0, B32));
         const R1 = this.calcElligatorRistrettoMap(r1);
-        const r2 = bytesToNumberRst(hash.slice(B32, B32 * 2));
+        const r2 = bytes255ToNumberLE(hash.slice(B32, B32 * 2));
         const R2 = this.calcElligatorRistrettoMap(r2);
         return R1.add(R2);
     }
@@ -63,15 +63,15 @@ class ExtendedPoint {
             c = r;
         const Nt = mod(c * (r - 1n) * D_MINUS_ONE_SQ - D);
         const s2 = s * s;
-        const W0 = (s + s) * D;
-        const W1 = Nt * SQRT_AD_MINUS_ONE;
-        const W2 = 1n - s2;
-        const W3 = 1n + s2;
+        const W0 = mod((s + s) * D);
+        const W1 = mod(Nt * SQRT_AD_MINUS_ONE);
+        const W2 = mod(1n - s2);
+        const W3 = mod(1n + s2);
         return new ExtendedPoint(mod(W0 * W3), mod(W2 * W1), mod(W1 * W3), mod(W0 * W2));
     }
     static fromRistrettoBytes(bytes) {
         const { a, d } = CURVE;
-        const s = bytesToNumberRst(bytes);
+        const s = bytes255ToNumberLE(bytes);
         if (!equalBytes(numberToBytesPadded(s, B32), bytes) || edIsNegative(s)) {
             throw new Error('Cannot convert bytes to Ristretto Point');
         }
@@ -304,7 +304,7 @@ class Point {
         const hex = numberToHex(this.y);
         const u8 = new Uint8Array(B32);
         for (let i = hex.length - 2, j = 0; j < B32 && i >= 0; i -= 2, j++) {
-            u8[j] = parseInt(hex[i] + hex[i + 1], 16);
+            u8[j] = Number.parseInt(hex[i] + hex[i + 1], 16);
         }
         const mask = this.x & 1n ? 0x80 : 0;
         u8[B32 - 1] |= mask;
@@ -401,9 +401,7 @@ function numberToBytesPadded(num, length = B32) {
     return hexToBytes(hex).reverse();
 }
 function edIsNegative(num) {
-    const hex = numberToHex(mod(num));
-    const byte = Number.parseInt(hex.slice(hex.length - 2, hex.length), 16);
-    return Boolean(byte & 1);
+    return (mod(num) & 1n) === 1n;
 }
 function isValidScalar(num) {
     if (typeof num === 'bigint' && num > 0n)
@@ -419,24 +417,8 @@ function bytesToNumberLE(uint8a) {
     }
     return value;
 }
-function load8(input, padding = 0) {
-    return (BigInt(input[0 + padding]) |
-        (BigInt(input[1 + padding]) << 8n) |
-        (BigInt(input[2 + padding]) << 16n) |
-        (BigInt(input[3 + padding]) << 24n) |
-        (BigInt(input[4 + padding]) << 32n) |
-        (BigInt(input[5 + padding]) << 40n) |
-        (BigInt(input[6 + padding]) << 48n) |
-        (BigInt(input[7 + padding]) << 56n));
-}
-const low51bitMask = (1n << 51n) - 1n;
-function bytesToNumberRst(bytes) {
-    const octet1 = load8(bytes, 0) & low51bitMask;
-    const octet2 = (load8(bytes, 6) >> 3n) & low51bitMask;
-    const octet3 = (load8(bytes, 12) >> 6n) & low51bitMask;
-    const octet4 = (load8(bytes, 19) >> 1n) & low51bitMask;
-    const octet5 = (load8(bytes, 24) >> 12n) & low51bitMask;
-    return mod(octet1 + (octet2 << 51n) + (octet3 << 102n) + (octet4 << 153n) + (octet5 << 204n));
+function bytes255ToNumberLE(bytes) {
+    return mod(bytesToNumberLE(bytes) & (2n ** 255n - 1n));
 }
 function mod(a, b = CURVE.P) {
     const res = a % b;
@@ -544,7 +526,7 @@ function encodePrivate(privateBytes) {
     head[0] &= 248;
     head[last] &= 127;
     head[last] |= 64;
-    return bytesToNumberLE(head);
+    return mod(bytesToNumberLE(head), CURVE.n);
 }
 function equalBytes(b1, b2) {
     if (b1.length !== b2.length) {

@@ -69,9 +69,10 @@ class ExtendedPoint {
   // The hash-to-group operation applies Elligator twice and adds the results.
   // https://ristretto.group/formulas/elligator.html
   static fromRistrettoHash(hash: Uint8Array): ExtendedPoint {
-    const r1 = bytesToNumberRst(hash.slice(0, B32));
+    const r1 = bytes255ToNumberLE(hash.slice(0, B32));
+    // const h = hash.slice(0, B32);
     const R1 = this.calcElligatorRistrettoMap(r1);
-    const r2 = bytesToNumberRst(hash.slice(B32, B32 * 2));
+    const r2 = bytes255ToNumberLE(hash.slice(B32, B32 * 2));
     const R2 = this.calcElligatorRistrettoMap(r2);
     return R1.add(R2);
   }
@@ -91,10 +92,10 @@ class ExtendedPoint {
     if (!Ns_D_is_sq) c = r; // 8
     const Nt = mod(c * (r - 1n) * D_MINUS_ONE_SQ - D); // 9
     const s2 = s * s;
-    const W0 = (s + s) * D; // 10
-    const W1 = Nt * SQRT_AD_MINUS_ONE; // 11
-    const W2 = 1n - s2; // 12
-    const W3 = 1n + s2; // 13
+    const W0 = mod((s + s) * D); // 10
+    const W1 = mod(Nt * SQRT_AD_MINUS_ONE); // 11
+    const W2 = mod(1n - s2); // 12
+    const W3 = mod(1n + s2); // 13
     return new ExtendedPoint(mod(W0 * W3), mod(W2 * W1), mod(W1 * W3), mod(W0 * W2));
   }
 
@@ -102,7 +103,7 @@ class ExtendedPoint {
   // https://ristretto.group/formulas/decoding.html
   static fromRistrettoBytes(bytes: Uint8Array): ExtendedPoint {
     const { a, d } = CURVE;
-    const s = bytesToNumberRst(bytes);
+    const s = bytes255ToNumberLE(bytes);
     // 1. Check that s_bytes is the canonical encoding of a field element, or else abort.
     // 3. Check that s is non-negative, or else abort
     if (!equalBytes(numberToBytesPadded(s, B32), bytes) || edIsNegative(s)) {
@@ -405,7 +406,7 @@ class Point {
     const hex = numberToHex(this.y);
     const u8 = new Uint8Array(B32);
     for (let i = hex.length - 2, j = 0; j < B32 && i >= 0; i -= 2, j++) {
-      u8[j] = parseInt(hex[i] + hex[i + 1], 16);
+      u8[j] = Number.parseInt(hex[i] + hex[i + 1], 16);
     }
     const mask = this.x & 1n ? 0x80 : 0;
     u8[B32 - 1] |= mask;
@@ -522,10 +523,9 @@ function numberToBytesPadded(num: bigint, length: number = B32) {
   return hexToBytes(hex).reverse();
 }
 
+// Little-endian check for first LE bit (last BE bit);
 function edIsNegative(num: bigint) {
-  const hex = numberToHex(mod(num));
-  const byte = Number.parseInt(hex.slice(hex.length - 2, hex.length), 16);
-  return Boolean(byte & 1);
+  return (mod(num) & 1n) === 1n;
 }
 
 function isValidScalar(num: number | bigint): boolean {
@@ -543,27 +543,8 @@ function bytesToNumberLE(uint8a: Uint8Array): bigint {
   return value;
 }
 
-function load8(input: Uint8Array, padding = 0) {
-  return (
-    BigInt(input[0 + padding]) |
-    (BigInt(input[1 + padding]) << 8n) |
-    (BigInt(input[2 + padding]) << 16n) |
-    (BigInt(input[3 + padding]) << 24n) |
-    (BigInt(input[4 + padding]) << 32n) |
-    (BigInt(input[5 + padding]) << 40n) |
-    (BigInt(input[6 + padding]) << 48n) |
-    (BigInt(input[7 + padding]) << 56n)
-  );
-}
-const low51bitMask = (1n << 51n) - 1n;
-// CUSTOM array to number.
-function bytesToNumberRst(bytes: Uint8Array) {
-  const octet1 = load8(bytes, 0) & low51bitMask;
-  const octet2 = (load8(bytes, 6) >> 3n) & low51bitMask;
-  const octet3 = (load8(bytes, 12) >> 6n) & low51bitMask;
-  const octet4 = (load8(bytes, 19) >> 1n) & low51bitMask;
-  const octet5 = (load8(bytes, 24) >> 12n) & low51bitMask;
-  return mod(octet1 + (octet2 << 51n) + (octet3 << 102n) + (octet4 << 153n) + (octet5 << 204n));
+function bytes255ToNumberLE(bytes: Uint8Array): bigint {
+  return mod(bytesToNumberLE(bytes) & (2n ** 255n - 1n));
 }
 // -------------------------
 
@@ -691,8 +672,7 @@ function encodePrivate(privateBytes: Uint8Array): bigint {
   head[0] &= 248;
   head[last] &= 127;
   head[last] |= 64;
-
-  return bytesToNumberLE(head);
+  return mod(bytesToNumberLE(head), CURVE.n);
 }
 
 function equalBytes(b1: Uint8Array, b2: Uint8Array) {
