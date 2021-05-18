@@ -218,8 +218,12 @@ Compare to alternative implementations:
 # tweetnacl-fast@1.0.3
 getPublicKey x 920 ops/sec @ 1ms/op # aka scalarMultBase
 sign x 519 ops/sec @ 2ms/op
+
 # ristretto255@0.1.1
 getPublicKey x 877 ops/sec @ 1ms/op # aka scalarMultBase
+
+# sodium-native@3.2.1, native bindings to libsodium, node.js-only
+sodium-native#sign x 58,661 ops/sec @ 17μs/op
 ```
 
 ## Contributing
