@@ -11,9 +11,9 @@ const CURVE = {
   // Negative number is P - number, and division is invert(number, P)
   d: 37095705934669439343138083508754565189542113879843219016388785533085940283555n,
   // Finite field 𝔽p over which we'll do calculations
-  P: 2n ** 255n - 19n,
+  P: BigInt(2 ** 255) - 19n,
   // Subgroup order aka C
-  n: 2n ** 252n + 27742317777372353535851937790883648493n,
+  n: BigInt(2 ** 252) + 27742317777372353535851937790883648493n,
   // Cofactor
   h: 8n,
   // Base point (x, y) aka generator point
