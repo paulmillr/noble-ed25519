@@ -694,8 +694,9 @@ function normalizePrivateKey(key: PrivKey): Uint8Array {
   let num: bigint;
   if (typeof key === 'bigint' || (Number.isSafeInteger(key) && key > 0)) {
     num = BigInt(key);
-    return hexToBytes(num.toString(16).padStart(B32 * 2, '0'));
-  } else if (typeof key === 'string') {
+    key = num.toString(16).padStart(B32 * 2, '0');
+  }
+  if (typeof key === 'string') {
     if (key.length !== 64) throw new Error('Expected 32 bytes of private key');
     return hexToBytes(key);
   } else if (key instanceof Uint8Array) {

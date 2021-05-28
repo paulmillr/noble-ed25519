@@ -547,9 +547,9 @@ function normalizePrivateKey(key) {
     let num;
     if (typeof key === 'bigint' || (Number.isSafeInteger(key) && key > 0)) {
         num = BigInt(key);
-        return hexToBytes(num.toString(16).padStart(B32 * 2, '0'));
+        key = num.toString(16).padStart(B32 * 2, '0');
     }
-    else if (typeof key === 'string') {
+    if (typeof key === 'string') {
         if (key.length !== 64)
             throw new Error('Expected 32 bytes of private key');
         return hexToBytes(key);
