@@ -545,7 +545,7 @@ function isWithinCurveOrder(num) {
 }
 function normalizePrivateKey(key) {
     let num;
-    if (typeof key === 'bigint' || (Number.isSafeInteger(key) && key > 0)) {
+    if (typeof key === 'bigint' || (typeof key === 'number' && Number.isSafeInteger(key) && key > 0)) {
         num = BigInt(key);
         key = num.toString(16).padStart(B32 * 2, '0');
     }

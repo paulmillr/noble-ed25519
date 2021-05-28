@@ -692,7 +692,7 @@ function isWithinCurveOrder(num: bigint): boolean {
 
 function normalizePrivateKey(key: PrivKey): Uint8Array {
   let num: bigint;
-  if (typeof key === 'bigint' || (Number.isSafeInteger(key) && key > 0)) {
+  if (typeof key === 'bigint' || (typeof key === 'number' && Number.isSafeInteger(key) && key > 0)) {
     num = BigInt(key);
     key = num.toString(16).padStart(B32 * 2, '0');
   }
