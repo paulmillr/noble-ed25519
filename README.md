@@ -191,7 +191,13 @@ utils.precompute(W, point);
 
 ## Security
 
-Noble is production-ready. Our goal is to have it audited by a good security expert.
+Noble is production-ready. A few facts about the library:
+
+1. No public audits have been done yet. Our goal is to crowdfund the audit.
+2. It was developed in a very similar fashion to
+[noble-secp256k1](https://github.com/paulmillr/noble-secp256k1), which **was** audited by a third-party firm.
+3. It was fuzzed by [Guido Vranken's cryptofuzz](https://github.com/guidovranken/cryptofuzz),
+no serious issues have been found. You can run the fuzzer by yourself to check it.
 
 We're using built-in JS `BigInt`, which is "unsuitable for use in cryptography" as [per official spec](https://github.com/tc39/proposal-bigint#cryptography). This means that the lib is potentially vulnerable to [timing attacks](https://en.wikipedia.org/wiki/Timing_attack). But:
 
