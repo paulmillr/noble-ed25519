@@ -3,9 +3,6 @@
   "version": "1.2.3",
   "description": "Fastest JS implementation of ed25519 & ristretto255. Auditable, high-security, 0-dependency pubkey, scalarmult & EDDSA",
   "main": "index.js",
-  "browser": {
-    "crypto": false
-  },
   "files": [
     "index.js",
     "index.d.ts"
@@ -32,6 +29,9 @@
     "url": "https://github.com/paulmillr/noble-ed25519.git"
   },
   "license": "MIT",
+  "browser": {
+    "crypto": false
+  },
   "devDependencies": {
     "@rollup/plugin-commonjs": "^19.0.0",
     "@rollup/plugin-node-resolve": "^13.0.0",
