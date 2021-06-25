@@ -381,8 +381,11 @@ function bytesToHex(uint8a) {
     return hex;
 }
 function hexToBytes(hex) {
-    if (typeof hex !== 'string' || hex.length % 2)
-        throw new Error('Expected valid hex');
+    if (typeof hex !== 'string') {
+        throw new TypeError('hexToBytes: expected string, got ' + typeof hex);
+    }
+    if (hex.length % 2)
+        throw new Error('hexToBytes: received invalid unpadded hex');
     const array = new Uint8Array(hex.length / 2);
     for (let i = 0; i < array.length; i++) {
         const j = i * 2;
@@ -607,8 +610,8 @@ exports.utils = {
         'c7176a703d4dd84fba3c0b760d10670f2a2053fa2c39ccc64ec7fd7792ac03fa',
     ],
     randomPrivateKey: (bytesLength = 32) => {
-        if (typeof window == 'object' && 'crypto' in window) {
-            return window.crypto.getRandomValues(new Uint8Array(bytesLength));
+        if (typeof self == 'object' && 'crypto' in self) {
+            return self.crypto.getRandomValues(new Uint8Array(bytesLength));
         }
         else if (typeof process === 'object' && 'node' in process.versions) {
             const { randomBytes } = require('crypto');
@@ -619,8 +622,8 @@ exports.utils = {
         }
     },
     sha512: async (message) => {
-        if (typeof window == 'object' && 'crypto' in window) {
-            const buffer = await window.crypto.subtle.digest('SHA-512', message.buffer);
+        if (typeof self == 'object' && 'crypto' in self) {
+            const buffer = await self.crypto.subtle.digest('SHA-512', message.buffer);
             return new Uint8Array(buffer);
         }
         else if (typeof process === 'object' && 'node' in process.versions) {

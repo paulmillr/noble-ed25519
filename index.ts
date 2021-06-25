@@ -499,7 +499,10 @@ function bytesToHex(uint8a: Uint8Array): string {
 }
 
 function hexToBytes(hex: string): Uint8Array {
-  if (typeof hex !== 'string' || hex.length % 2) throw new Error('Expected valid hex');
+  if (typeof hex !== 'string') {
+    throw new TypeError('hexToBytes: expected string, got ' + typeof hex);
+  }
+  if (hex.length % 2) throw new Error('hexToBytes: received invalid unpadded hex');
   const array = new Uint8Array(hex.length / 2);
   for (let i = 0; i < array.length; i++) {
     const j = i * 2;
