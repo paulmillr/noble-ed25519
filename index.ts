@@ -2,8 +2,8 @@
 
 // Thanks DJB https://ed25519.cr.yp.to
 // https://tools.ietf.org/html/rfc8032, https://en.wikipedia.org/wiki/EdDSA
-// Includes Ristretto. https://ristretto.group
-
+// Includes Ristretto https://ristretto.group
+// Curve formula is −x² + y² = 1 − (121665/121666) * x² * y²
 const CURVE = {
   // Params: a, b
   a: -1n,
@@ -30,12 +30,16 @@ type PubKey = Hex | Point;
 type SigType = Hex | Signature;
 const B32 = 32;
 
-// sqrt(-1) aka sqrt(a) aka 2^((p-1)/4)
+// √(-1) aka √(a) aka 2^((p-1)/4)
 const SQRT_M1 = 19681161376707505956807079304988542015446066515923890162744021073123829784752n;
-const SQRT_AD_MINUS_ONE = 25063068953384623474111414158702152701244531502492656460079210482610430750235n; // sqrt(ad - 1)
-const INVSQRT_A_MINUS_D = 54469307008909316920995813868745141605393597292927456921205312896311721017578n; // 1 / sqrt(a-d)
-const ONE_MINUS_D_SQ = 1159843021668779879193775521855586647937357759715417654439879720876111806838n; // 1-d^2
-const D_MINUS_ONE_SQ = 40440834346308536858101042469323190826248399146238708352240133220865137265952n; // (d-1)^2
+// √(ad - 1)
+const SQRT_AD_MINUS_ONE = 25063068953384623474111414158702152701244531502492656460079210482610430750235n;
+// 1 / √(a-d)
+const INVSQRT_A_MINUS_D = 54469307008909316920995813868745141605393597292927456921205312896311721017578n;
+// 1-d²
+const ONE_MINUS_D_SQ = 1159843021668779879193775521855586647937357759715417654439879720876111806838n;
+// (d-1)²
+const D_MINUS_ONE_SQ = 40440834346308536858101042469323190826248399146238708352240133220865137265952n;
 
 // Default Point works in default aka affine coordinates: (x, y)
 // Extended Point works in extended coordinates: (x, y, z, t) ∋ (x=x/z, y=y/z, t=xy)
@@ -367,8 +371,8 @@ class Point {
     if (y >= P) throw new Error('Point.fromHex expects hex <= Fp');
 
     // 2.  To recover the x-coordinate, the curve equation implies
-    // x^2 = (y^2 - 1) / (d y^2 + 1) (mod p).  The denominator is always
-    // non-zero mod p.  Let u = y^2 - 1 and v = d y^2 + 1.
+    // x² = (y² - 1) / (d y² + 1) (mod p).  The denominator is always
+    // non-zero mod p.  Let u = y² - 1 and v = d y² + 1.
     const y2 = mod(y * y);
     const u = mod(y2 - 1n);
     const v = mod(d * y2 + 1n);
@@ -606,7 +610,7 @@ function pow2(x: bigint, power: bigint): bigint {
 }
 
 // Power to (p-5)/8 aka x^(2^252-3)
-// Used to calculate y - the square root of y^2.
+// Used to calculate y - the square root of y².
 // Exponentiates it to very big number.
 // We are unwrapping the loop because it's 2x faster.
 // (2n**252n-3n).toString(2) would produce bits [250x 1, 0, 1]
@@ -632,15 +636,15 @@ function pow_2_252_3(x: bigint): bigint {
 // Ratio of u to v. Allows us to combine inversion and square root. Uses algo from RFC8032 5.1.3.
 // prettier-ignore
 function uvRatio(u: bigint, v: bigint): {isValid: boolean, value: bigint} {
-  const v3 = mod(v * v * v);                  // v^3
-  const v7 = mod(v3 * v3 * v);                // v^7
-  let x = mod(u * v3 * pow_2_252_3(u * v7));  // (uv^3) * (uv^7)^(p-5)/8
-  const vx2 = mod(v * x * x);                 // vx^2
+  const v3 = mod(v * v * v);                  // v³
+  const v7 = mod(v3 * v3 * v);                // v⁷
+  let x = mod(u * v3 * pow_2_252_3(u * v7));  // (uv³)(uv⁷)^(p-5)/8
+  const vx2 = mod(v * x * x);                 // vx²
   const root1 = x;                            // First root candidate
   const root2 = mod(x * SQRT_M1);             // Second root candidate
-  const useRoot1 = vx2 === u;                 // If vx^2 = u (mod p), x is a square root
-  const useRoot2 = vx2 === mod(-u);           // If vx^2 = -u, set x <-- x * 2^((p-1)/4)
-  const noRoot = vx2 === mod(-u * SQRT_M1);   // There is no valid root, vx^2 = -u√(-1)
+  const useRoot1 = vx2 === u;                 // If vx² = u (mod p), x is a square root
+  const useRoot2 = vx2 === mod(-u);           // If vx² = -u, set x <-- x * 2^((p-1)/4)
+  const noRoot = vx2 === mod(-u * SQRT_M1);   // There is no valid root, vx² = -u√(-1)
   if (useRoot1) x = root1;
   if (useRoot2 || noRoot) x = root2;          // We return root2 anyway, for const-time
   if (edIsNegative(x)) x = mod(-x);
