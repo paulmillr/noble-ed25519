@@ -548,8 +548,10 @@ function isWithinCurveOrder(num) {
 }
 function normalizePrivateKey(key) {
     let num;
-    if (typeof key === 'bigint' || (typeof key === 'number' && Number.isSafeInteger(key) && key > 0)) {
+    if (typeof key === 'bigint' || (typeof key === 'number' && Number.isSafeInteger(key))) {
         num = BigInt(key);
+        if (num < 0n || num > 2n ** 256n)
+            throw new Error('Expected 32 bytes of private key');
         key = num.toString(16).padStart(B32 * 2, '0');
     }
     if (typeof key === 'string') {

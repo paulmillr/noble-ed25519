@@ -33,13 +33,17 @@ const B32 = 32;
 // √(-1) aka √(a) aka 2^((p-1)/4)
 const SQRT_M1 = 19681161376707505956807079304988542015446066515923890162744021073123829784752n;
 // √(ad - 1)
-const SQRT_AD_MINUS_ONE = 25063068953384623474111414158702152701244531502492656460079210482610430750235n;
+const SQRT_AD_MINUS_ONE =
+  25063068953384623474111414158702152701244531502492656460079210482610430750235n;
 // 1 / √(a-d)
-const INVSQRT_A_MINUS_D = 54469307008909316920995813868745141605393597292927456921205312896311721017578n;
+const INVSQRT_A_MINUS_D =
+  54469307008909316920995813868745141605393597292927456921205312896311721017578n;
 // 1-d²
-const ONE_MINUS_D_SQ = 1159843021668779879193775521855586647937357759715417654439879720876111806838n;
+const ONE_MINUS_D_SQ =
+  1159843021668779879193775521855586647937357759715417654439879720876111806838n;
 // (d-1)²
-const D_MINUS_ONE_SQ = 40440834346308536858101042469323190826248399146238708352240133220865137265952n;
+const D_MINUS_ONE_SQ =
+  40440834346308536858101042469323190826248399146238708352240133220865137265952n;
 
 // Default Point works in default aka affine coordinates: (x, y)
 // Extended Point works in extended coordinates: (x, y, z, t) ∋ (x=x/z, y=y/z, t=xy)
@@ -699,8 +703,9 @@ function isWithinCurveOrder(num: bigint): boolean {
 
 function normalizePrivateKey(key: PrivKey): Uint8Array {
   let num: bigint;
-  if (typeof key === 'bigint' || (typeof key === 'number' && Number.isSafeInteger(key) && key > 0)) {
+  if (typeof key === 'bigint' || (typeof key === 'number' && Number.isSafeInteger(key))) {
     num = BigInt(key);
+    if (num < 0n || num > 2n ** 256n) throw new Error('Expected 32 bytes of private key');
     key = num.toString(16).padStart(B32 * 2, '0');
   }
   if (typeof key === 'string') {
