@@ -769,7 +769,7 @@ export const utils = {
     '0000000000000000000000000000000000000000000000000000000000000000',
     'c7176a703d4dd84fba3c0b760d10670f2a2053fa2c39ccc64ec7fd7792ac03fa',
   ],
-  randomPrivateKey: (bytesLength: number = 32): Uint8Array => {
+  randomBytes: (bytesLength: number = 32): Uint8Array => {
     // @ts-ignore
     if (typeof self == 'object' && 'crypto' in self) {
       // @ts-ignore
@@ -782,6 +782,17 @@ export const utils = {
     } else {
       throw new Error("The environment doesn't have randomBytes function");
     }
+  },
+  // NIST SP 800-56A rev 3, section 5.6.1.2.2
+  // https://research.kudelskisecurity.com/2020/07/28/the-definitive-guide-to-modulo-bias-and-how-to-avoid-it/
+  randomPrivateKey: (): Uint8Array => {
+    let i = 1024;
+    while (i--) {
+      const b32 = utils.randomBytes(32);
+      const num = bytesToNumberLE(b32);
+      if (num > 1n && num < CURVE.n) return b32;
+    }
+    throw new Error('Valid private key was not found in 1024 iterations. PRNG is broken');
   },
   sha512: async (message: Uint8Array): Promise<Uint8Array> => {
     // @ts-ignore

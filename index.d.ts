@@ -74,7 +74,8 @@ export declare function sign(hash: string, privateKey: Hex): Promise<string>;
 export declare function verify(signature: SigType, hash: Hex, publicKey: PubKey): Promise<boolean>;
 export declare const utils: {
     TORSION_SUBGROUP: string[];
-    randomPrivateKey: (bytesLength?: number) => Uint8Array;
+    randomBytes: (bytesLength?: number) => Uint8Array;
+    randomPrivateKey: () => Uint8Array;
     sha512: (message: Uint8Array) => Promise<Uint8Array>;
     precompute(windowSize?: number, point?: Point): Point;
 };

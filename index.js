@@ -611,7 +611,7 @@ exports.utils = {
         '0000000000000000000000000000000000000000000000000000000000000000',
         'c7176a703d4dd84fba3c0b760d10670f2a2053fa2c39ccc64ec7fd7792ac03fa',
     ],
-    randomPrivateKey: (bytesLength = 32) => {
+    randomBytes: (bytesLength = 32) => {
         if (typeof self == 'object' && 'crypto' in self) {
             return self.crypto.getRandomValues(new Uint8Array(bytesLength));
         }
@@ -622,6 +622,16 @@ exports.utils = {
         else {
             throw new Error("The environment doesn't have randomBytes function");
         }
+    },
+    randomPrivateKey: () => {
+        let i = 1024;
+        while (i--) {
+            const b32 = exports.utils.randomBytes(32);
+            const num = bytesToNumberLE(b32);
+            if (num > 1n && num < CURVE.n)
+                return b32;
+        }
+        throw new Error('Valid private key was not found in 1024 iterations. PRNG is broken');
     },
     sha512: async (message) => {
         if (typeof self == 'object' && 'crypto' in self) {
