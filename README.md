@@ -208,13 +208,13 @@ We however consider infrastructure attacks like rogue NPM modules very important
 Benchmarks done with Apple M1.
 
 ```
-getPublicKey(utils.randomPrivateKey()) x 6,562 ops/sec @ 152μs/op
-sign x 3,017 ops/sec @ 331μs/op
-verify x 696 ops/sec @ 1ms/op
-verifyBatch x 825 ops/sec @ 1ms/op
-Point.fromHex decompression x 10,626 ops/sec @ 94μs/op
-ristretto255#fromHash x 5,031 ops/sec @ 198μs/op
-ristretto255 round x 2,251 ops/sec @ 444μs/op
+getPublicKey(utils.randomPrivateKey()) x 6,790 ops/sec @ 147μs/op
+sign x 3,247 ops/sec @ 307μs/op
+verify x 726 ops/sec @ 1ms/op
+verifyBatch x 842 ops/sec @ 1ms/op
+Point.fromHex decompression x 11,332 ops/sec @ 88μs/op
+ristretto255#fromHash x 5,428 ops/sec @ 184μs/op
+ristretto255 round x 2,461 ops/sec @ 406μs/op
 ```
 
 Compare to alternative implementations:
