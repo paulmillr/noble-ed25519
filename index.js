@@ -600,6 +600,16 @@ async function verify(signature, hash, publicKey) {
 }
 exports.verify = verify;
 Point.BASE._setWindowSize(8);
+const crypto = (() => {
+    const webCrypto = typeof self === 'object' && 'crypto' in self ? self.crypto : undefined;
+    const nodeRequire = typeof module !== 'undefined' &&
+        typeof module.require === 'function' &&
+        module.require.bind(module);
+    return {
+        node: nodeRequire && !webCrypto ? nodeRequire('crypto') : undefined,
+        web: webCrypto,
+    };
+})();
 exports.utils = {
     TORSION_SUBGROUP: [
         '0100000000000000000000000000000000000000000000000000000000000000',
@@ -612,11 +622,11 @@ exports.utils = {
         'c7176a703d4dd84fba3c0b760d10670f2a2053fa2c39ccc64ec7fd7792ac03fa',
     ],
     randomBytes: (bytesLength = 32) => {
-        if (typeof self == 'object' && 'crypto' in self) {
-            return self.crypto.getRandomValues(new Uint8Array(bytesLength));
+        if (crypto.web) {
+            return crypto.web.getRandomValues(new Uint8Array(bytesLength));
         }
-        else if (typeof process === 'object' && 'node' in process.versions) {
-            const { randomBytes } = require('crypto');
+        else if (crypto.node) {
+            const { randomBytes } = crypto.node;
             return new Uint8Array(randomBytes(bytesLength).buffer);
         }
         else {
@@ -634,15 +644,12 @@ exports.utils = {
         throw new Error('Valid private key was not found in 1024 iterations. PRNG is broken');
     },
     sha512: async (message) => {
-        if (typeof self == 'object' && 'crypto' in self) {
-            const buffer = await self.crypto.subtle.digest('SHA-512', message.buffer);
+        if (crypto.web) {
+            const buffer = await crypto.web.subtle.digest('SHA-512', message.buffer);
             return new Uint8Array(buffer);
         }
-        else if (typeof process === 'object' && 'node' in process.versions) {
-            const { createHash } = require('crypto');
-            const hash = createHash('sha512');
-            hash.update(message);
-            return Uint8Array.from(hash.digest());
+        else if (crypto.node) {
+            return Uint8Array.from(crypto.node.createHash('sha512').update(message).digest());
         }
         else {
             throw new Error("The environment doesn't have sha512 function");

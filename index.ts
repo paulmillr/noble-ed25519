@@ -755,6 +755,19 @@ export async function verify(signature: SigType, hash: Hex, publicKey: PubKey): 
 // Enable precomputes. Slows down first publicKey computation by 20ms.
 Point.BASE._setWindowSize(8);
 
+const crypto: { node?: any; web?: Crypto } = (() => {
+  const webCrypto = typeof self === 'object' && 'crypto' in self ? self.crypto : undefined;
+  // Silence webpack warnings
+  const nodeRequire =
+    typeof module !== 'undefined' &&
+    typeof module.require === 'function' &&
+    module.require.bind(module);
+  return {
+    node: nodeRequire && !webCrypto ? nodeRequire('crypto') : undefined,
+    web: webCrypto,
+  };
+})();
+
 export const utils = {
   // The 8-torsion subgroup ℰ8.
   // Those are "buggy" points, if you multiply them by 8, you'll receive Point.ZERO.
@@ -770,14 +783,10 @@ export const utils = {
     'c7176a703d4dd84fba3c0b760d10670f2a2053fa2c39ccc64ec7fd7792ac03fa',
   ],
   randomBytes: (bytesLength: number = 32): Uint8Array => {
-    // @ts-ignore
-    if (typeof self == 'object' && 'crypto' in self) {
-      // @ts-ignore
-      return self.crypto.getRandomValues(new Uint8Array(bytesLength));
-      // @ts-ignore
-    } else if (typeof process === 'object' && 'node' in process.versions) {
-      // @ts-ignore
-      const { randomBytes } = require('crypto');
+    if (crypto.web) {
+      return crypto.web.getRandomValues(new Uint8Array(bytesLength));
+    } else if (crypto.node) {
+      const { randomBytes } = crypto.node;
       return new Uint8Array(randomBytes(bytesLength).buffer);
     } else {
       throw new Error("The environment doesn't have randomBytes function");
@@ -795,19 +804,11 @@ export const utils = {
     throw new Error('Valid private key was not found in 1024 iterations. PRNG is broken');
   },
   sha512: async (message: Uint8Array): Promise<Uint8Array> => {
-    // @ts-ignore
-    if (typeof self == 'object' && 'crypto' in self) {
-      // @ts-ignore
-      const buffer = await self.crypto.subtle.digest('SHA-512', message.buffer);
-      // @ts-ignore
+    if (crypto.web) {
+      const buffer = await crypto.web.subtle.digest('SHA-512', message.buffer);
       return new Uint8Array(buffer);
-      // @ts-ignore
-    } else if (typeof process === 'object' && 'node' in process.versions) {
-      // @ts-ignore
-      const { createHash } = require('crypto');
-      const hash = createHash('sha512');
-      hash.update(message);
-      return Uint8Array.from(hash.digest());
+    } else if (crypto.node) {
+      return Uint8Array.from(crypto.node.createHash('sha512').update(message).digest());
     } else {
       throw new Error("The environment doesn't have sha512 function");
     }
