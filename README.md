@@ -17,7 +17,8 @@ Check out [the online demo](https://paulmillr.com/ecc).
 - Check out all libraries:
   [secp256k1](https://github.com/paulmillr/noble-secp256k1),
   [ed25519](https://github.com/paulmillr/noble-ed25519),
-  [bls12-381](https://github.com/paulmillr/noble-bls12-381)
+  [bls12-381](https://github.com/paulmillr/noble-bls12-381),
+  [hashes](https://github.com/paulmillr/noble-hashes)
 
 ## Usage
 
