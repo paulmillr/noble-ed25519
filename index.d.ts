@@ -71,6 +71,8 @@ export declare function getPublicKey(privateKey: Uint8Array | bigint | number): 
 export declare function getPublicKey(privateKey: string): Promise<string>;
 export declare function sign(hash: Uint8Array, privateKey: Hex): Promise<Uint8Array>;
 export declare function sign(hash: string, privateKey: Hex): Promise<string>;
+export declare function sign(hash: Uint8Array, privateKey: Hex, publicKey: Hex): Promise<Uint8Array>;
+export declare function sign(hash: string, privateKey: Hex, publicKey: Hex): Promise<string>;
 export declare function verify(signature: SigType, hash: Hex, publicKey: PubKey): Promise<boolean>;
 export declare const utils: {
     TORSION_SUBGROUP: string[];

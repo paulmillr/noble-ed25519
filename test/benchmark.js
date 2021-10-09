@@ -39,6 +39,9 @@ run(async () => {
   await mark('sign', 1000, async () => {
     sigHex = await ed.sign(msg, priv2);
   });
+  await mark('signWithPublicKey', 1000, async () => {
+    sigHex = await ed.sign(msg, priv2, pubHex);
+  });
 
   await mark('verify', 1000, async () => {
     const verified = await ed.verify(sigHex, msg, pubHex);

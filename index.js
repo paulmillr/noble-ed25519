@@ -573,14 +573,16 @@ async function getPublicKey(privateKey) {
     return typeof privateKey === 'string' ? key.toHex() : key.toRawBytes();
 }
 exports.getPublicKey = getPublicKey;
-async function sign(hash, privateKey) {
+async function sign(hash, privateKey, publicKey = null) {
+    privateKey = privateKey instanceof Uint8Array ? privateKey : hexToBytes(privateKey);
     const privBytes = await exports.utils.sha512(normalizePrivateKey(privateKey));
     const p = encodePrivate(privBytes);
-    const P = Point.BASE.multiply(p);
+    const PBytes = publicKey ? (publicKey instanceof Uint8Array ? privateKey : hexToBytes(publicKey)) :
+        Point.BASE.multiply(p).toRawBytes();
     const msg = ensureBytes(hash);
     const r = await sha512ToNumberLE(keyPrefix(privBytes), msg);
     const R = Point.BASE.multiply(r);
-    const h = await sha512ToNumberLE(R.toRawBytes(), P.toRawBytes(), msg);
+    const h = await sha512ToNumberLE(R.toRawBytes(), PBytes, msg);
     const S = mod(r + h * p, CURVE.n);
     const sig = new Signature(R, S);
     return typeof hash === 'string' ? sig.toHex() : sig.toRawBytes();

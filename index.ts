@@ -728,14 +728,18 @@ export async function getPublicKey(privateKey: PrivKey) {
 
 export function sign(hash: Uint8Array, privateKey: Hex): Promise<Uint8Array>;
 export function sign(hash: string, privateKey: Hex): Promise<string>;
-export async function sign(hash: Hex, privateKey: Hex) {
+export function sign(hash: Uint8Array, privateKey: Hex, publicKey: Hex): Promise<Uint8Array>;
+export function sign(hash: string, privateKey: Hex, publicKey: Hex): Promise<string>;
+export async function sign(hash: Hex, privateKey: Hex, publicKey: Hex | null = null) {
+  privateKey = privateKey instanceof Uint8Array ? privateKey : hexToBytes(privateKey);
   const privBytes = await utils.sha512(normalizePrivateKey(privateKey));
   const p = encodePrivate(privBytes);
-  const P = Point.BASE.multiply(p);
+  const PBytes = publicKey ? (publicKey instanceof Uint8Array ? privateKey : hexToBytes(publicKey)) :
+    Point.BASE.multiply(p).toRawBytes();
   const msg = ensureBytes(hash);
   const r = await sha512ToNumberLE(keyPrefix(privBytes), msg);
   const R = Point.BASE.multiply(r);
-  const h = await sha512ToNumberLE(R.toRawBytes(), P.toRawBytes(), msg);
+  const h = await sha512ToNumberLE(R.toRawBytes(), PBytes, msg);
   const S = mod(r + h * p, CURVE.n);
   const sig = new Signature(R, S);
   return typeof hash === 'string' ? sig.toHex() : sig.toRawBytes();
