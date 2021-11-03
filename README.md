@@ -25,10 +25,10 @@ Check out [the online demo](https://paulmillr.com/ecc).
 Use NPM in node.js / browser, or include single file from
 [GitHub's releases page](https://github.com/paulmillr/noble-ed25519/releases):
 
-> npm install noble-ed25519
+> npm install @noble/ed25519
 
 ```js
-import * as ed from 'noble-ed25519';
+import * as ed from '@noble/ed25519';
 // if you're using single file, use global variable nobleEd25519
 
 const privateKey = ed.utils.randomPrivateKey(); // 32-byte Uint8Array or string.
