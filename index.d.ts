@@ -33,7 +33,7 @@ declare class ExtendedPoint {
     double(): ExtendedPoint;
     add(other: ExtendedPoint): ExtendedPoint;
     subtract(other: ExtendedPoint): ExtendedPoint;
-    multiplyUnsafe(scalar: bigint): ExtendedPoint;
+    multiplyUnsafe(scalar: number | bigint): ExtendedPoint;
     private precomputeWindow;
     private wNAF;
     multiply(scalar: number | bigint, affinePoint?: Point): ExtendedPoint;

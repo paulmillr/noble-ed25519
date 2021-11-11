@@ -137,7 +137,7 @@ class ExtendedPoint {
   // https://ristretto.group/formulas/encoding.html
   toRistrettoBytes(): Uint8Array {
     let { x, y, z, t } = this;
-    const u1 = mod((z + y) * (z - y)); // 1
+    const u1 = mod(mod(z + y) * mod(z - y)); // 1
     const u2 = mod(x * y); // 2
     // Square root always exists
     const { value: invsqrt } = invertSqrt(mod(u1 * u2 ** 2n)); // 3
@@ -232,9 +232,8 @@ class ExtendedPoint {
   // Non-constant-time multiplication. Uses double-and-add algorithm.
   // It's faster, but should only be used when you don't care about
   // an exposed private key e.g. sig verification.
-  multiplyUnsafe(scalar: bigint): ExtendedPoint {
-    if (!isValidScalar(scalar)) throw new TypeError('Point#multiply: expected number or bigint');
-    let n = mod(BigInt(scalar), CURVE.n);
+  multiplyUnsafe(scalar: number | bigint): ExtendedPoint {
+    let n = normalizePrivateScalar(scalar);
     if (n === 1n) return this;
     let p = ExtendedPoint.ZERO;
     let d: ExtendedPoint = this;
@@ -319,8 +318,7 @@ class ExtendedPoint {
   // Uses wNAF method. Windowed method may be 10% faster,
   // but takes 2x longer to generate and consumes 2x memory.
   multiply(scalar: number | bigint, affinePoint?: Point): ExtendedPoint {
-    if (!isValidScalar(scalar)) throw new TypeError('Point#multiply: expected number or bigint');
-    const n = mod(BigInt(scalar), CURVE.n);
+    const n = normalizePrivateScalar(scalar);
     return ExtendedPoint.normalizeZ(this.wNAF(n, affinePoint))[0];
   }
 
@@ -535,7 +533,7 @@ function edIsNegative(num: bigint) {
 }
 
 function isValidScalar(num: number | bigint): boolean {
-  if (typeof num === 'bigint' && num > 0n) return true;
+  if (typeof num === 'bigint') return true;
   if (typeof num === 'number' && num > 0 && Number.isSafeInteger(num)) return true;
   return false;
 }
@@ -717,6 +715,19 @@ function normalizePrivateKey(key: PrivKey): Uint8Array {
   } else {
     throw new TypeError('Expected valid private key');
   }
+}
+
+function normalizePrivateScalar(scalar: number | bigint): bigint {
+  let num: bigint;
+  if (typeof scalar === 'bigint') {
+    num = scalar;
+  } else if (typeof scalar === 'number' && Number.isSafeInteger(scalar) && scalar > 0) {
+    num = BigInt(scalar);
+  } else {
+    throw new TypeError('Expected valid private scalar');
+  }
+  if (!isWithinCurveOrder(num)) throw new Error('Expected private scalar: 0 < scalar < curve.n');
+  return num;
 }
 
 export function getPublicKey(privateKey: Uint8Array | bigint | number): Promise<Uint8Array>;

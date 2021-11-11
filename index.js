@@ -95,7 +95,7 @@ class ExtendedPoint {
     }
     toRistrettoBytes() {
         let { x, y, z, t } = this;
-        const u1 = mod((z + y) * (z - y));
+        const u1 = mod(mod(z + y) * mod(z - y));
         const u2 = mod(x * y);
         const { value: invsqrt } = invertSqrt(mod(u1 * u2 ** 2n));
         const D1 = mod(invsqrt * u1);
@@ -174,9 +174,7 @@ class ExtendedPoint {
         return this.add(other.negate());
     }
     multiplyUnsafe(scalar) {
-        if (!isValidScalar(scalar))
-            throw new TypeError('Point#multiply: expected number or bigint');
-        let n = mod(BigInt(scalar), CURVE.n);
+        let n = normalizePrivateScalar(scalar);
         if (n === 1n)
             return this;
         let p = ExtendedPoint.ZERO;
@@ -246,9 +244,7 @@ class ExtendedPoint {
         return [p, f];
     }
     multiply(scalar, affinePoint) {
-        if (!isValidScalar(scalar))
-            throw new TypeError('Point#multiply: expected number or bigint');
-        const n = mod(BigInt(scalar), CURVE.n);
+        const n = normalizePrivateScalar(scalar);
         return ExtendedPoint.normalizeZ(this.wNAF(n, affinePoint))[0];
     }
     toAffine(invZ = invert(this.z)) {
@@ -405,7 +401,7 @@ function edIsNegative(num) {
     return (mod(num) & 1n) === 1n;
 }
 function isValidScalar(num) {
-    if (typeof num === 'bigint' && num > 0n)
+    if (typeof num === 'bigint')
         return true;
     if (typeof num === 'number' && num > 0 && Number.isSafeInteger(num))
         return true;
@@ -567,6 +563,21 @@ function normalizePrivateKey(key) {
     else {
         throw new TypeError('Expected valid private key');
     }
+}
+function normalizePrivateScalar(scalar) {
+    let num;
+    if (typeof scalar === 'bigint') {
+        num = scalar;
+    }
+    else if (typeof scalar === 'number' && Number.isSafeInteger(scalar) && scalar > 0) {
+        num = BigInt(scalar);
+    }
+    else {
+        throw new TypeError('Expected valid private key');
+    }
+    if (!isWithinCurveOrder(num))
+        throw new Error('Expected private key: 0 < key < n');
+    return num;
 }
 async function getPublicKey(privateKey) {
     const key = await Point.fromPrivateKey(privateKey);
