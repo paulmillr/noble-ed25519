@@ -146,7 +146,10 @@ class ExtendedPoint {
     const zInv = mod(D1 * D2 * t); // 6
     let D: bigint; // 7
     if (edIsNegative(t * zInv)) {
-      [x, y] = [mod(y * SQRT_M1), mod(x * SQRT_M1)];
+      let _x = mod(y * SQRT_M1);
+      let _y = mod(x * SQRT_M1);
+      x = _x;
+      y = _y;
       D = mod(D1 * INVSQRT_A_MINUS_D);
     } else {
       D = D2; // 8
@@ -162,8 +165,7 @@ class ExtendedPoint {
   equals(other: ExtendedPoint): boolean {
     const a = this;
     const b = other;
-    const [T1, T2, Z1, Z2] = [a.t, b.t, a.z, b.z];
-    return mod(T1 * Z2) === mod(T2 * Z1);
+    return mod(a.t * b.z) === mod(b.t * a.z);
   }
 
   // Inverses point to one corresponding to (x, -y) in Affine coordinates.
@@ -233,7 +235,7 @@ class ExtendedPoint {
   // It's faster, but should only be used when you don't care about
   // an exposed private key e.g. sig verification.
   multiplyUnsafe(scalar: number | bigint): ExtendedPoint {
-    let n = normalizePrivateScalar(scalar);
+    let n = normalizeScalar(scalar);
     if (n === 1n) return this;
     let p = ExtendedPoint.ZERO;
     let d: ExtendedPoint = this;
@@ -305,10 +307,13 @@ class ExtendedPoint {
       // Check if we're onto Zero point.
       // Add random point inside current window to f.
       if (wbits === 0) {
-        f = f.add(window % 2 ? precomputes[offset].negate() : precomputes[offset]);
+        let pr = precomputes[offset];
+        if (window % 2) pr = pr.negate();
+        f = f.add(pr);
       } else {
-        const cached = precomputes[offset + Math.abs(wbits) - 1];
-        p = p.add(wbits < 0 ? cached.negate() : cached);
+        let cached = precomputes[offset + Math.abs(wbits) - 1];
+        if (wbits < 0) cached = cached.negate()
+        p = p.add(cached);
       }
     }
     return [p, f];
@@ -318,7 +323,7 @@ class ExtendedPoint {
   // Uses wNAF method. Windowed method may be 10% faster,
   // but takes 2x longer to generate and consumes 2x memory.
   multiply(scalar: number | bigint, affinePoint?: Point): ExtendedPoint {
-    const n = normalizePrivateScalar(scalar);
+    const n = normalizeScalar(scalar);
     return ExtendedPoint.normalizeZ(this.wNAF(n, affinePoint))[0];
   }
 
@@ -532,12 +537,6 @@ function edIsNegative(num: bigint) {
   return (mod(num) & 1n) === 1n;
 }
 
-function isValidScalar(num: number | bigint): boolean {
-  if (typeof num === 'bigint') return true;
-  if (typeof num === 'number' && num > 0 && Number.isSafeInteger(num)) return true;
-  return false;
-}
-
 // Little Endian
 function bytesToNumberLE(uint8a: Uint8Array): bigint {
   let value = 0n;
@@ -566,15 +565,15 @@ function invert(number: bigint, modulo: bigint = CURVE.P): bigint {
   // Eucledian GCD https://brilliant.org/wiki/extended-euclidean-algorithm/
   let a = mod(number, modulo);
   let b = modulo;
-  let [x, y, u, v] = [0n, 1n, 1n, 0n];
+  // prettier-ignore
+  let x = 0n, y = 1n, u = 1n, v = 0n;
   while (a !== 0n) {
     const q = b / a;
     const r = b % a;
     const m = x - u * q;
     const n = y - v * q;
-    [b, a] = [a, r];
-    [x, y] = [u, v];
-    [u, v] = [m, n];
+    // prettier-ignore
+    b = a, a = r, x = u, y = v, u = m, v = n;
   }
   const gcd = b;
   if (gcd !== 1n) throw new Error('invert: does not exist');
@@ -717,17 +716,10 @@ function normalizePrivateKey(key: PrivKey): Uint8Array {
   }
 }
 
-function normalizePrivateScalar(scalar: number | bigint): bigint {
-  let num: bigint;
-  if (typeof scalar === 'bigint') {
-    num = scalar;
-  } else if (typeof scalar === 'number' && Number.isSafeInteger(scalar) && scalar > 0) {
-    num = BigInt(scalar);
-  } else {
-    throw new TypeError('Expected valid private scalar');
-  }
-  if (!isWithinCurveOrder(num)) throw new Error('Expected private scalar: 0 < scalar < curve.n');
-  return num;
+function normalizeScalar(num: number | bigint): bigint {
+  if (typeof num === 'number' && num > 0 && Number.isSafeInteger(num)) return BigInt(num);
+  if (typeof num === 'bigint' && isWithinCurveOrder(num)) return num;
+  throw new TypeError('Expected valid private scalar: 0 < scalar < curve.n');
 }
 
 export function getPublicKey(privateKey: Uint8Array | bigint | number): Promise<Uint8Array>;
@@ -766,7 +758,7 @@ export async function verify(signature: SigType, hash: Hex, publicKey: PubKey): 
 // Enable precomputes. Slows down first publicKey computation by 20ms.
 Point.BASE._setWindowSize(8);
 
-const crypto: { node?: any; web?: Crypto } = (() => {
+const crypto: { node?: any; web?: any } = (() => {
   const webCrypto = typeof self === 'object' && 'crypto' in self ? self.crypto : undefined;
   const nodeRequire = typeof module !== 'undefined' && typeof require === 'function';
   return {

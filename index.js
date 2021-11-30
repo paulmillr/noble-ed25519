@@ -103,7 +103,10 @@ class ExtendedPoint {
         const zInv = mod(D1 * D2 * t);
         let D;
         if (edIsNegative(t * zInv)) {
-            [x, y] = [mod(y * SQRT_M1), mod(x * SQRT_M1)];
+            let _x = mod(y * SQRT_M1);
+            let _y = mod(x * SQRT_M1);
+            x = _x;
+            y = _y;
             D = mod(D1 * INVSQRT_A_MINUS_D);
         }
         else {
@@ -119,8 +122,7 @@ class ExtendedPoint {
     equals(other) {
         const a = this;
         const b = other;
-        const [T1, T2, Z1, Z2] = [a.t, b.t, a.z, b.z];
-        return mod(T1 * Z2) === mod(T2 * Z1);
+        return mod(a.t * b.z) === mod(b.t * a.z);
     }
     negate() {
         return new ExtendedPoint(mod(-this.x), this.y, this.z, mod(-this.t));
@@ -174,7 +176,7 @@ class ExtendedPoint {
         return this.add(other.negate());
     }
     multiplyUnsafe(scalar) {
-        let n = normalizePrivateScalar(scalar);
+        let n = normalizeScalar(scalar);
         if (n === 1n)
             return this;
         let p = ExtendedPoint.ZERO;
@@ -234,17 +236,22 @@ class ExtendedPoint {
                 n += 1n;
             }
             if (wbits === 0) {
-                f = f.add(window % 2 ? precomputes[offset].negate() : precomputes[offset]);
+                let pr = precomputes[offset];
+                if (window % 2)
+                    pr = pr.negate();
+                f = f.add(pr);
             }
             else {
-                const cached = precomputes[offset + Math.abs(wbits) - 1];
-                p = p.add(wbits < 0 ? cached.negate() : cached);
+                let cached = precomputes[offset + Math.abs(wbits) - 1];
+                if (wbits < 0)
+                    cached = cached.negate();
+                p = p.add(cached);
             }
         }
         return [p, f];
     }
     multiply(scalar, affinePoint) {
-        const n = normalizePrivateScalar(scalar);
+        const n = normalizeScalar(scalar);
         return ExtendedPoint.normalizeZ(this.wNAF(n, affinePoint))[0];
     }
     toAffine(invZ = invert(this.z)) {
@@ -400,13 +407,6 @@ function numberToBytesPadded(num, length = B32) {
 function edIsNegative(num) {
     return (mod(num) & 1n) === 1n;
 }
-function isValidScalar(num) {
-    if (typeof num === 'bigint')
-        return true;
-    if (typeof num === 'number' && num > 0 && Number.isSafeInteger(num))
-        return true;
-    return false;
-}
 function bytesToNumberLE(uint8a) {
     let value = 0n;
     for (let i = 0; i < uint8a.length; i++) {
@@ -427,15 +427,13 @@ function invert(number, modulo = CURVE.P) {
     }
     let a = mod(number, modulo);
     let b = modulo;
-    let [x, y, u, v] = [0n, 1n, 1n, 0n];
+    let x = 0n, y = 1n, u = 1n, v = 0n;
     while (a !== 0n) {
         const q = b / a;
         const r = b % a;
         const m = x - u * q;
         const n = y - v * q;
-        [b, a] = [a, r];
-        [x, y] = [u, v];
-        [u, v] = [m, n];
+        b = a, a = r, x = u, y = v, u = m, v = n;
     }
     const gcd = b;
     if (gcd !== 1n)
@@ -564,20 +562,12 @@ function normalizePrivateKey(key) {
         throw new TypeError('Expected valid private key');
     }
 }
-function normalizePrivateScalar(scalar) {
-    let num;
-    if (typeof scalar === 'bigint') {
-        num = scalar;
-    }
-    else if (typeof scalar === 'number' && Number.isSafeInteger(scalar) && scalar > 0) {
-        num = BigInt(scalar);
-    }
-    else {
-        throw new TypeError('Expected valid private key');
-    }
-    if (!isWithinCurveOrder(num))
-        throw new Error('Expected private key: 0 < key < n');
-    return num;
+function normalizeScalar(num) {
+    if (typeof num === 'number' && num > 0 && Number.isSafeInteger(num))
+        return BigInt(num);
+    if (typeof num === 'bigint' && isWithinCurveOrder(num))
+        return num;
+    throw new TypeError('Expected valid private scalar: 0 < scalar < curve.n');
 }
 async function getPublicKey(privateKey) {
     const key = await Point.fromPrivateKey(privateKey);
