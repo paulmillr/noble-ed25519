@@ -312,7 +312,7 @@ class ExtendedPoint {
         f = f.add(pr);
       } else {
         let cached = precomputes[offset + Math.abs(wbits) - 1];
-        if (wbits < 0) cached = cached.negate()
+        if (wbits < 0) cached = cached.negate();
         p = p.add(cached);
       }
     }
@@ -758,6 +758,8 @@ export async function verify(signature: SigType, hash: Hex, publicKey: PubKey): 
 // Enable precomputes. Slows down first publicKey computation by 20ms.
 Point.BASE._setWindowSize(8);
 
+// Global symbol available in browsers only
+declare const self: Record<string, any> | undefined;
 const crypto: { node?: any; web?: any } = (() => {
   const webCrypto = typeof self === 'object' && 'crypto' in self ? self.crypto : undefined;
   const nodeRequire = typeof module !== 'undefined' && typeof require === 'function';
