@@ -28,8 +28,9 @@ Use NPM in node.js / browser, or include single file from
 > npm install @noble/ed25519
 
 ```js
+// Common.js and ECMAScript Modules (ESM)
 import * as ed from '@noble/ed25519';
-// if you're using single file, use global variable nobleEd25519
+// If you're using single file, use global variable: nobleEd25519
 
 const privateKey = ed.utils.randomPrivateKey(); // 32-byte Uint8Array or string.
 const msgHash = 'deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef';
