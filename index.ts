@@ -773,12 +773,14 @@ export async function verify(sig: SigType, msgHash: Hex, publicKey: PubKey): Pro
 // Enable precomputes. Slows down first publicKey computation by 20ms.
 Point.BASE._setWindowSize(8);
 
-// Global symbol available in browsers only
+// Global symbol available in browsers only. Ensure we do not depend on @types/dom
 declare const self: Record<string, any> | undefined;
 const crypto: { node?: any; web?: any } = (() => {
   const webCrypto = typeof self === 'object' && 'crypto' in self ? self.crypto : undefined;
+  // @ts-ignore
   const nodeRequire = typeof module !== 'undefined' && typeof require === 'function';
   return {
+    // @ts-ignore
     node: nodeRequire && !webCrypto ? require('crypto') : undefined,
     web: webCrypto,
   };
