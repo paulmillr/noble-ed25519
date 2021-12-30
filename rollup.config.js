@@ -3,9 +3,9 @@ import resolve from '@rollup/plugin-node-resolve';
 export default {
   input: 'lib/esm/index.js',
   output: {
-    file: 'build/noble-secp256k1.js',
+    file: 'build/noble-ed25519.js',
     format: 'umd',
-    name: 'nobleSecp256k1',
+    name: 'nobleEd25519',
     exports: 'named',
     preferConst: true,
   },
