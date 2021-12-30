@@ -1,14 +1,13 @@
 import resolve from '@rollup/plugin-node-resolve';
-import commonjs from '@rollup/plugin-commonjs';
 
 export default {
-  input: 'index.js',
+  input: 'lib/esm/index.js',
   output: {
-    file: 'build/noble-ed25519.js',
+    file: 'build/noble-secp256k1.js',
     format: 'umd',
-    name: 'nobleEd25519',
+    name: 'nobleSecp256k1',
     exports: 'named',
     preferConst: true,
   },
-  plugins: [resolve(), commonjs()],
+  plugins: [resolve({ browser: true })],
 };
