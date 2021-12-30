@@ -41,7 +41,7 @@ const msgHash = 'deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbee
 })();
 ```
 
-To use with Deno:
+To use with [Deno](https://deno.land):
 
 ```typescript
 import * as ed from 'https://deno.land/x/ed25519/mod.ts';
