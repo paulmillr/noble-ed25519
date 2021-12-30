@@ -397,7 +397,7 @@ class Point {
   }
 
   static async fromPrivateKey(privateKey: PrivKey) {
-    const privBytes = await utils.sha512(normalizePrivateKey(privateKey));
+    const privBytes = await getPrivateBytes(privateKey);
     return Point.BASE.multiply(encodePrivate(privBytes));
   }
 
@@ -412,7 +412,7 @@ class Point {
     const hex = numberToHex(this.y);
     const u8 = new Uint8Array(B32);
     for (let i = hex.length - 2, j = 0; j < B32 && i >= 0; i -= 2, j++) {
-      u8[j] = Number.parseInt(hex[i] + hex[i + 1], 16);
+      u8[j] = parseHexByte(hex[i] + hex[i + 1]);
     }
     const mask = this.x & 1n ? 0x80 : 0;
     u8[B32 - 1] |= mask;
@@ -509,6 +509,12 @@ function bytesToHex(uint8a: Uint8Array): string {
   return hex;
 }
 
+function parseHexByte(hexByte: string): number {
+  const byte = Number.parseInt(hexByte, 16);
+  if (Number.isNaN(byte)) throw new Error('Invalid byte sequence');
+  return byte;
+}
+
 function hexToBytes(hex: string): Uint8Array {
   if (typeof hex !== 'string') {
     throw new TypeError('hexToBytes: expected string, got ' + typeof hex);
@@ -517,7 +523,7 @@ function hexToBytes(hex: string): Uint8Array {
   const array = new Uint8Array(hex.length / 2);
   for (let i = 0; i < array.length; i++) {
     const j = i * 2;
-    array[i] = Number.parseInt(hex.slice(j, j + 2), 16);
+    array[i] = parseHexByte(hex.slice(j, j + 2));
   }
   return array;
 }
@@ -580,20 +586,20 @@ function invert(number: bigint, modulo: bigint = CURVE.P): bigint {
   return mod(x, modulo);
 }
 
-function invertBatch(nums: bigint[], n: bigint = CURVE.P): bigint[] {
+function invertBatch(nums: bigint[], modulo: bigint = CURVE.P): bigint[] {
   const len = nums.length;
   const scratch = new Array(len);
   let acc = 1n;
   for (let i = 0; i < len; i++) {
     if (nums[i] === 0n) continue;
     scratch[i] = acc;
-    acc = mod(acc * nums[i], n);
+    acc = mod(acc * nums[i], modulo);
   }
-  acc = invert(acc, n);
+  acc = invert(acc, modulo);
   for (let i = len - 1; i >= 0; i--) {
     if (nums[i] === 0n) continue;
-    let tmp = mod(acc * nums[i], n);
-    nums[i] = mod(acc * scratch[i], n);
+    let tmp = mod(acc * nums[i], modulo);
+    nums[i] = mod(acc * scratch[i], modulo);
     acc = tmp;
   }
   return nums;
@@ -635,6 +641,7 @@ function pow_2_252_3(x: bigint): bigint {
 }
 
 // Ratio of u to v. Allows us to combine inversion and square root. Uses algo from RFC8032 5.1.3.
+// Constant-time
 // prettier-ignore
 function uvRatio(u: bigint, v: bigint): {isValid: boolean, value: bigint} {
   const v3 = mod(v * v * v);                  // v³
@@ -679,6 +686,7 @@ function encodePrivate(privateBytes: Uint8Array): bigint {
 }
 
 function equalBytes(b1: Uint8Array, b2: Uint8Array) {
+  // We don't care about timing attacks here
   if (b1.length !== b2.length) {
     return false;
   }
@@ -698,22 +706,29 @@ function isWithinCurveOrder(num: bigint): boolean {
   return 0 < num && num < CURVE.n;
 }
 
+const MAX_PRIV_KEY = 2n ** 256n - 1n;
 function normalizePrivateKey(key: PrivKey): Uint8Array {
-  let num: bigint;
+  let bytes: Uint8Array;
+  let err = 'Expected 32 bytes of private key';
   if (typeof key === 'bigint' || (typeof key === 'number' && Number.isSafeInteger(key))) {
-    num = BigInt(key);
-    if (num < 0n || num > 2n ** 256n) throw new Error('Expected 32 bytes of private key');
-    key = num.toString(16).padStart(B32 * 2, '0');
-  }
-  if (typeof key === 'string') {
-    if (key.length !== 64) throw new Error('Expected 32 bytes of private key');
-    return hexToBytes(key);
+    let num = BigInt(key);
+    if (num < 0 || num > MAX_PRIV_KEY) throw new Error(err);
+    bytes = hexToBytes(num.toString(16).padStart(B32 * 2, '0'));
+  } else if (typeof key === 'string') {
+    if (key.length !== 64) throw new Error(err);
+    bytes = hexToBytes(key);
   } else if (key instanceof Uint8Array) {
-    if (key.length !== 32) throw new Error('Expected 32 bytes of private key');
-    return key;
+    if (key.length !== 32) throw new Error(err);
+    bytes = key;
   } else {
     throw new TypeError('Expected valid private key');
   }
+  // There is no check for isWithinCurveOrder
+  return bytes;
+}
+
+async function getPrivateBytes(privateKey: PrivKey) {
+  return await utils.sha512(normalizePrivateKey(privateKey));
 }
 
 function normalizeScalar(num: number | bigint): bigint {
@@ -729,29 +744,29 @@ export async function getPublicKey(privateKey: PrivKey) {
   return typeof privateKey === 'string' ? key.toHex() : key.toRawBytes();
 }
 
-export function sign(hash: Uint8Array, privateKey: Hex): Promise<Uint8Array>;
-export function sign(hash: string, privateKey: Hex): Promise<string>;
-export async function sign(hash: Hex, privateKey: Hex) {
-  const privBytes = await utils.sha512(normalizePrivateKey(privateKey));
+export function sign(msgHash: Uint8Array, privateKey: Hex): Promise<Uint8Array>;
+export function sign(msgHash: string, privateKey: Hex): Promise<string>;
+export async function sign(msgHash: Hex, privateKey: Hex) {
+  const privBytes = await getPrivateBytes(privateKey);
   const p = encodePrivate(privBytes);
   const P = Point.BASE.multiply(p);
-  const msg = ensureBytes(hash);
+  const msg = ensureBytes(msgHash);
   const r = await sha512ToNumberLE(keyPrefix(privBytes), msg);
   const R = Point.BASE.multiply(r);
   const h = await sha512ToNumberLE(R.toRawBytes(), P.toRawBytes(), msg);
   const S = mod(r + h * p, CURVE.n);
   const sig = new Signature(R, S);
-  return typeof hash === 'string' ? sig.toHex() : sig.toRawBytes();
+  return typeof msgHash === 'string' ? sig.toHex() : sig.toRawBytes();
 }
 
-export async function verify(signature: SigType, hash: Hex, publicKey: PubKey): Promise<boolean> {
-  hash = ensureBytes(hash);
+export async function verify(sig: SigType, msgHash: Hex, publicKey: PubKey): Promise<boolean> {
+  msgHash = ensureBytes(msgHash);
   if (!(publicKey instanceof Point)) publicKey = Point.fromHex(publicKey);
-  if (!(signature instanceof Signature)) signature = Signature.fromHex(signature);
-  const hs = await sha512ToNumberLE(signature.r.toRawBytes(), publicKey.toRawBytes(), hash);
+  if (!(sig instanceof Signature)) sig = Signature.fromHex(sig);
+  const hs = await sha512ToNumberLE(sig.r.toRawBytes(), publicKey.toRawBytes(), msgHash);
   const Ph = ExtendedPoint.fromAffine(publicKey).multiplyUnsafe(hs);
-  const Gs = ExtendedPoint.BASE.multiply(signature.s);
-  const RPh = ExtendedPoint.fromAffine(signature.r).add(Ph);
+  const Gs = ExtendedPoint.BASE.multiply(sig.s);
+  const RPh = ExtendedPoint.fromAffine(sig.r).add(Ph);
   return RPh.subtract(Gs).multiplyUnsafe(8n).equals(ExtendedPoint.ZERO);
 }
 
