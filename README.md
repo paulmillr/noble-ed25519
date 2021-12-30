@@ -41,13 +41,27 @@ const msgHash = 'deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbee
 })();
 ```
 
-To use with [Deno](https://deno.land):
+To use the module with [Deno](https://deno.land),
+you will need [import map](https://deno.land/manual/linking_to_external_code/import_maps):
 
-```typescript
-import * as ed from 'https://deno.land/x/ed25519/mod.ts';
-const privateKey = ed.utils.randomPrivateKey();
-const publicKey = await ed.getPublicKey(privateKey);
-```
+- `deno run --import-map=imports.json app.ts`
+
+- `app.ts`
+
+    ```typescript
+    import * as secp from "https://deno.land/x/secp256k1/mod.ts";
+    const publicKey = secp.getPublicKey(ed.utils.randomPrivateKey());
+    console.log(publicKey);
+    ```
+- `imports.json`
+
+    ```json
+    {
+      "imports": {
+        "crypto": "https://deno.land/std@0.119.0/node/crypto.ts"
+      }
+    }
+    ```
 
 ## API
 

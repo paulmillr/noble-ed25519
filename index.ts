@@ -1,8 +1,10 @@
 /*! noble-ed25519 - MIT License (c) Paul Miller (paulmillr.com) */
-
 // Thanks DJB https://ed25519.cr.yp.to
 // https://tools.ietf.org/html/rfc8032, https://en.wikipedia.org/wiki/EdDSA
 // Includes Ristretto https://ristretto.group
+
+import nodeCrypto from "crypto";
+
 // Curve formula is −x² + y² = 1 − (121665/121666) * x² * y²
 const CURVE = {
   // Params: a, b
@@ -775,16 +777,10 @@ Point.BASE._setWindowSize(8);
 
 // Global symbol available in browsers only. Ensure we do not depend on @types/dom
 declare const self: Record<string, any> | undefined;
-const crypto: { node?: any; web?: any } = (() => {
-  const webCrypto = typeof self === 'object' && 'crypto' in self ? self.crypto : undefined;
-  // @ts-ignore
-  const nodeRequire = typeof module !== 'undefined' && typeof require === 'function';
-  return {
-    // @ts-ignore
-    node: nodeRequire && !webCrypto ? require('crypto') : undefined,
-    web: webCrypto,
-  };
-})();
+const crypto: { node?: any; web?: any } = {
+  node: nodeCrypto,
+  web: typeof self === 'object' && 'crypto' in self ? self.crypto : undefined,
+};
 
 export const utils = {
   // The 8-torsion subgroup ℰ8.
