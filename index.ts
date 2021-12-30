@@ -806,16 +806,10 @@ export const utils = {
       throw new Error("The environment doesn't have randomBytes function");
     }
   },
-  // NIST SP 800-56A rev 3, section 5.6.1.2.2
-  // https://research.kudelskisecurity.com/2020/07/28/the-definitive-guide-to-modulo-bias-and-how-to-avoid-it/
+  // Note: ed25519 private keys are uniform 32-bit strings. We do not need
+  // to check for modulo bias like we do in noble-secp256k1 randomPrivateKey()
   randomPrivateKey: (): Uint8Array => {
-    let i = 1024;
-    while (i--) {
-      const b32 = utils.randomBytes(32);
-      const num = bytesToNumberLE(b32);
-      if (num > 1n && num < CURVE.n) return b32;
-    }
-    throw new Error('Valid private key was not found in 1024 iterations. PRNG is broken');
+    return utils.randomBytes(32);
   },
   sha512: async (message: Uint8Array): Promise<Uint8Array> => {
     if (crypto.web) {
