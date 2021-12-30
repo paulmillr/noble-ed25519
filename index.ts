@@ -3,7 +3,7 @@
 // https://tools.ietf.org/html/rfc8032, https://en.wikipedia.org/wiki/EdDSA
 // Includes Ristretto https://ristretto.group
 
-import nodeCrypto from "crypto";
+import nodeCrypto from 'crypto';
 
 // Curve formula is −x² + y² = 1 − (121665/121666) * x² * y²
 const CURVE = {
