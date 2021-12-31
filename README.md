@@ -229,7 +229,7 @@ verify x 726 ops/sec @ 1ms/op
 verifyBatch x 842 ops/sec @ 1ms/op
 Point.fromHex decompression x 11,332 ops/sec @ 88μs/op
 ristretto255#fromHash x 5,428 ops/sec @ 184μs/op
-ristretto255 round x 2,461 ops/sec @ 406μs/op
+ristretto255 round x 5,467 ops/sec @ 182μs/op
 ```
 
 Compare to alternative implementations:

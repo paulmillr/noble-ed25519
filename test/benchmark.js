@@ -87,7 +87,7 @@ run(async () => {
     'aa52e000df2e16f55fb1032fc33bc42742dad6bd5a8fc0be0167436c5948501f',
     '46376b80f409b29dc2b5f6f0c52591990896e5716f41477cd30085ab7f10301e',
     'e0c418f7c8d9c4cdd7395b93ea124f3ad99021bb681dfc3302a9d99a2e53e64e'
-  ];
+  ].map(n => hexToArray(n));
   const {ExtendedPoint} = ed;
   const hash = new Uint8Array([
     0xde, 0xad, 0xbe, 0xef, 0xde, 0xad, 0xbe, 0xef,
@@ -103,13 +103,14 @@ run(async () => {
     ExtendedPoint.fromRistrettoHash(hash);
   });
   await mark('ristretto255 round', 2000, () => {
-    let B = ExtendedPoint.BASE;
-    let P = ExtendedPoint.ZERO;
-    for (const encoded of encodingsOfSmallMultiples.slice(0, 2)) {
-      arrayToHex(P.toRistrettoBytes());
-      ExtendedPoint.fromRistrettoBytes(hexToArray(encoded)).toRistrettoBytes();
-      P = P.add(B);
-    }
+    // Not sure why those were used? TODO: investigate
+    // let B = ExtendedPoint.BASE;
+    // let P = ExtendedPoint.ZERO;
+    // for (const encoded of encodingsOfSmallMultiples.slice(2, 4)) {
+    //   ExtendedPoint.fromRistrettoBytes(encoded).toRistrettoBytes();
+    //   // P = P.add(B);
+    // }
+    ExtendedPoint.fromRistrettoBytes(encodingsOfSmallMultiples[2]).toRistrettoBytes();
   });
 
   logMem();
