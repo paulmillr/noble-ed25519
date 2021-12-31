@@ -5,22 +5,29 @@
 
 import nodeCrypto from 'crypto';
 
+// Be friendly to bad ECMAScript parsers by not using bigint literals like 123n
+const _0n = BigInt(0);
+const _1n = BigInt(1);
+const _2n = BigInt(2);
+const _8n = BigInt(8);
+const _255n = BigInt(255);
+
 // Curve formula is −x² + y² = 1 − (121665/121666) * x² * y²
 const CURVE = {
   // Params: a, b
-  a: -1n,
+  a: BigInt(-1),
   // Equal to -121665/121666 over finite field.
   // Negative number is P - number, and division is invert(number, P)
-  d: 37095705934669439343138083508754565189542113879843219016388785533085940283555n,
+  d: BigInt('37095705934669439343138083508754565189542113879843219016388785533085940283555'),
   // Finite field 𝔽p over which we'll do calculations
-  P: 2n ** 255n - 19n,
+  P: _2n ** _255n - BigInt(19),
   // Subgroup order aka C
-  n: 2n ** 252n + 27742317777372353535851937790883648493n,
+  n: _2n ** BigInt(252) + BigInt('27742317777372353535851937790883648493'),
   // Cofactor
-  h: 8n,
+  h: BigInt(8),
   // Base point (x, y) aka generator point
-  Gx: 15112221349535400772501151409588531511454012693041857206046113283949847762202n,
-  Gy: 46316835694926478169428394003475163141307993866256225615783033603165251855960n,
+  Gx: BigInt('15112221349535400772501151409588531511454012693041857206046113283949847762202'),
+  Gy: BigInt('46316835694926478169428394003475163141307993866256225615783033603165251855960'),
 };
 
 // Cleaner output this way.
@@ -33,19 +40,25 @@ type SigType = Hex | Signature;
 const B32 = 32;
 
 // √(-1) aka √(a) aka 2^((p-1)/4)
-const SQRT_M1 = 19681161376707505956807079304988542015446066515923890162744021073123829784752n;
+const SQRT_M1 = BigInt(
+  '19681161376707505956807079304988542015446066515923890162744021073123829784752'
+);
 // √(ad - 1)
-const SQRT_AD_MINUS_ONE =
-  25063068953384623474111414158702152701244531502492656460079210482610430750235n;
+const SQRT_AD_MINUS_ONE = BigInt(
+  '25063068953384623474111414158702152701244531502492656460079210482610430750235'
+);
 // 1 / √(a-d)
-const INVSQRT_A_MINUS_D =
-  54469307008909316920995813868745141605393597292927456921205312896311721017578n;
+const INVSQRT_A_MINUS_D = BigInt(
+  '54469307008909316920995813868745141605393597292927456921205312896311721017578'
+);
 // 1-d²
-const ONE_MINUS_D_SQ =
-  1159843021668779879193775521855586647937357759715417654439879720876111806838n;
+const ONE_MINUS_D_SQ = BigInt(
+  '1159843021668779879193775521855586647937357759715417654439879720876111806838'
+);
 // (d-1)²
-const D_MINUS_ONE_SQ =
-  40440834346308536858101042469323190826248399146238708352240133220865137265952n;
+const D_MINUS_ONE_SQ = BigInt(
+  '40440834346308536858101042469323190826248399146238708352240133220865137265952'
+);
 
 // Default Point works in default aka affine coordinates: (x, y)
 // Extended Point works in extended coordinates: (x, y, z, t) ∋ (x=x/z, y=y/z, t=xy)
@@ -53,14 +66,14 @@ const D_MINUS_ONE_SQ =
 class ExtendedPoint {
   constructor(public x: bigint, public y: bigint, public z: bigint, public t: bigint) {}
 
-  static BASE = new ExtendedPoint(CURVE.Gx, CURVE.Gy, 1n, mod(CURVE.Gx * CURVE.Gy));
-  static ZERO = new ExtendedPoint(0n, 1n, 1n, 0n);
+  static BASE = new ExtendedPoint(CURVE.Gx, CURVE.Gy, _1n, mod(CURVE.Gx * CURVE.Gy));
+  static ZERO = new ExtendedPoint(_0n, _1n, _1n, _0n);
   static fromAffine(p: Point): ExtendedPoint {
     if (!(p instanceof Point)) {
       throw new TypeError('ExtendedPoint#fromAffine: expected Point');
     }
     if (p.equals(Point.ZERO)) return ExtendedPoint.ZERO;
-    return new ExtendedPoint(p.x, p.y, 1n, mod(p.x * p.y));
+    return new ExtendedPoint(p.x, p.y, _1n, mod(p.x * p.y));
   }
   // Takes a bunch of Jacobian Points but executes only one
   // invert on all of them. invert is very slow operation,
@@ -92,20 +105,20 @@ class ExtendedPoint {
   private static calcElligatorRistrettoMap(r0: bigint) {
     const { d } = CURVE;
     const r = mod(SQRT_M1 * r0 * r0); // 1
-    const Ns = mod((r + 1n) * ONE_MINUS_D_SQ); // 2
-    let c = -1n; // 3
+    const Ns = mod((r + _1n) * ONE_MINUS_D_SQ); // 2
+    let c = BigInt(-1); // 3
     const D = mod((c - d * r) * mod(r + d)); // 4
     let { isValid: Ns_D_is_sq, value: s } = uvRatio(Ns, D); // 5
     let s_ = mod(s * r0); // 6
     if (!edIsNegative(s_)) s_ = mod(-s_);
     if (!Ns_D_is_sq) s = s_; // 7
     if (!Ns_D_is_sq) c = r; // 8
-    const Nt = mod(c * (r - 1n) * D_MINUS_ONE_SQ - D); // 9
+    const Nt = mod(c * (r - _1n) * D_MINUS_ONE_SQ - D); // 9
     const s2 = s * s;
     const W0 = mod((s + s) * D); // 10
     const W1 = mod(Nt * SQRT_AD_MINUS_ONE); // 11
-    const W2 = mod(1n - s2); // 12
-    const W3 = mod(1n + s2); // 13
+    const W2 = mod(_1n - s2); // 12
+    const W3 = mod(_1n + s2); // 13
     return new ExtendedPoint(mod(W0 * W3), mod(W2 * W1), mod(W1 * W3), mod(W0 * W2));
   }
 
@@ -119,8 +132,8 @@ class ExtendedPoint {
     // 3. Check that s is non-negative, or else abort
     if (!equalBytes(numberToBytesPadded(s, B32), bytes) || edIsNegative(s)) throw new Error(emsg);
     const s2 = mod(s * s);
-    const u1 = mod(1n + a * s2); // 4 (a is -1)
-    const u2 = mod(1n - a * s2); // 5
+    const u1 = mod(_1n + a * s2); // 4 (a is -1)
+    const u2 = mod(_1n - a * s2); // 5
     const u1_2 = mod(u1 * u1);
     const u2_2 = mod(u2 * u2);
     const v = mod(a * d * u1_2 - u2_2); // 6
@@ -131,8 +144,8 @@ class ExtendedPoint {
     if (edIsNegative(x)) x = mod(-x); // 10
     const y = mod(u1 * Dy); // 11
     const t = mod(x * y); // 12
-    if (!isValid || edIsNegative(t) || y === 0n) throw new Error(emsg);
-    return new ExtendedPoint(x, y, 1n, t);
+    if (!isValid || edIsNegative(t) || y === _0n) throw new Error(emsg);
+    return new ExtendedPoint(x, y, _1n, t);
   }
 
   // Ristretto: Encoding from Extended Coordinates
@@ -142,7 +155,7 @@ class ExtendedPoint {
     const u1 = mod(mod(z + y) * mod(z - y)); // 1
     const u2 = mod(x * y); // 2
     // Square root always exists
-    const { value: invsqrt } = invertSqrt(mod(u1 * u2 ** 2n)); // 3
+    const { value: invsqrt } = invertSqrt(mod(u1 * u2 ** _2n)); // 3
     const D1 = mod(invsqrt * u1); // 4
     const D2 = mod(invsqrt * u2); // 5
     const zInv = mod(D1 * D2 * t); // 6
@@ -183,11 +196,11 @@ class ExtendedPoint {
     const Y1 = this.y;
     const Z1 = this.z;
     const { a } = CURVE;
-    const A = mod(X1 ** 2n);
-    const B = mod(Y1 ** 2n);
-    const C = mod(2n * Z1 ** 2n);
+    const A = mod(X1 ** _2n);
+    const B = mod(Y1 ** _2n);
+    const C = mod(_2n * Z1 ** _2n);
     const D = mod(a * A);
-    const E = mod((X1 + Y1) ** 2n - A - B);
+    const E = mod((X1 + Y1) ** _2n - A - B);
     const G = mod(D + B);
     const F = mod(G - C);
     const H = mod(D - B);
@@ -213,12 +226,12 @@ class ExtendedPoint {
     const A = mod((Y1 - X1) * (Y2 + X2));
     const B = mod((Y1 + X1) * (Y2 - X2));
     const F = mod(B - A);
-    if (F === 0n) {
+    if (F === _0n) {
       // Same point.
       return this.double();
     }
-    const C = mod(Z1 * 2n * T2);
-    const D = mod(T1 * 2n * Z2);
+    const C = mod(Z1 * _2n * T2);
+    const D = mod(T1 * _2n * Z2);
     const E = mod(D + C);
     const G = mod(B + A);
     const H = mod(D - C);
@@ -238,13 +251,13 @@ class ExtendedPoint {
   // an exposed private key e.g. sig verification.
   multiplyUnsafe(scalar: number | bigint): ExtendedPoint {
     let n = normalizeScalar(scalar);
-    if (n === 1n) return this;
+    if (n === _1n) return this;
     let p = ExtendedPoint.ZERO;
     let d: ExtendedPoint = this;
-    while (n > 0n) {
-      if (n & 1n) p = p.add(d);
+    while (n > _0n) {
+      if (n & _1n) p = p.add(d);
       d = d.double();
-      n >>= 1n;
+      n >>= _1n;
     }
     return p;
   }
@@ -303,7 +316,7 @@ class ExtendedPoint {
       // +224 => 256 - 32
       if (wbits > windowSize) {
         wbits -= maxNumber;
-        n += 1n;
+        n += _1n;
       }
 
       // Check if we're onto Zero point.
@@ -348,7 +361,7 @@ class Point {
   static BASE: Point = new Point(CURVE.Gx, CURVE.Gy);
   // Identity point aka point at infinity
   // point = point + zero_point
-  static ZERO: Point = new Point(0n, 1n);
+  static ZERO: Point = new Point(_0n, _1n);
   // We calculate precomputes for elliptic curve point multiplication
   // using windowed method. This specifies window size and
   // stores precomputed values. Usually only base point would be precomputed.
@@ -383,15 +396,15 @@ class Point {
     // x² = (y² - 1) / (d y² + 1) (mod p).  The denominator is always
     // non-zero mod p.  Let u = y² - 1 and v = d y² + 1.
     const y2 = mod(y * y);
-    const u = mod(y2 - 1n);
-    const v = mod(d * y2 + 1n);
+    const u = mod(y2 - _1n);
+    const v = mod(d * y2 + _1n);
     let { isValid, value: x } = uvRatio(u, v);
     if (!isValid) throw new Error('Point.fromHex: invalid y coordinate');
 
     // 4.  Finally, use the x_0 bit to select the right square root.  If
     // x = 0, and x_0 = 1, decoding fails.  Otherwise, if x_0 != x mod
     // 2, set x <-- p - x.  Return the decoded point (x,y).
-    const isXOdd = (x & 1n) === 1n;
+    const isXOdd = (x & _1n) === _1n;
     if (isLastByteOdd !== isXOdd) {
       x = mod(-x);
     }
@@ -416,7 +429,7 @@ class Point {
     for (let i = hex.length - 2, j = 0; j < B32 && i >= 0; i -= 2, j++) {
       u8[j] = parseHexByte(hex[i] + hex[i + 1]);
     }
-    const mask = this.x & 1n ? 0x80 : 0;
+    const mask = this.x & _1n ? 0x80 : 0;
     u8[B32 - 1] |= mask;
     return u8;
   }
@@ -434,7 +447,7 @@ class Point {
     // u, v: x25519 coordinates
     // u = (1 + y) / (1 - y)
     // See https://blog.filippo.io/using-ed25519-keys-for-encryption
-    return mod((1n + this.y) * invert(1n - this.y));
+    return mod((_1n + this.y) * invert(_1n - this.y));
   }
 
   equals(other: Point): boolean {
@@ -542,40 +555,40 @@ function numberToBytesPadded(num: bigint, length: number = B32) {
 
 // Little-endian check for first LE bit (last BE bit);
 function edIsNegative(num: bigint) {
-  return (mod(num) & 1n) === 1n;
+  return (mod(num) & _1n) === _1n;
 }
 
 // Little Endian
 function bytesToNumberLE(uint8a: Uint8Array): bigint {
-  let value = 0n;
+  let value = _0n;
   for (let i = 0; i < uint8a.length; i++) {
-    value += BigInt(uint8a[i]) << (8n * BigInt(i));
+    value += BigInt(uint8a[i]) << (_8n * BigInt(i));
   }
   return value;
 }
 
 function bytes255ToNumberLE(bytes: Uint8Array): bigint {
-  return mod(bytesToNumberLE(bytes) & (2n ** 255n - 1n));
+  return mod(bytesToNumberLE(bytes) & (_2n ** _255n - _1n));
 }
 // -------------------------
 
 function mod(a: bigint, b: bigint = CURVE.P) {
   const res = a % b;
-  return res >= 0n ? res : b + res;
+  return res >= _0n ? res : b + res;
 }
 
 // Note: this egcd-based invert is faster than powMod-based one.
 // Inverses number over modulo
 function invert(number: bigint, modulo: bigint = CURVE.P): bigint {
-  if (number === 0n || modulo <= 0n) {
+  if (number === _0n || modulo <= _0n) {
     throw new Error(`invert: expected positive integers, got n=${number} mod=${modulo}`);
   }
   // Eucledian GCD https://brilliant.org/wiki/extended-euclidean-algorithm/
   let a = mod(number, modulo);
   let b = modulo;
   // prettier-ignore
-  let x = 0n, y = 1n, u = 1n, v = 0n;
-  while (a !== 0n) {
+  let x = _0n, y = _1n, u = _1n, v = _0n;
+  while (a !== _0n) {
     const q = b / a;
     const r = b % a;
     const m = x - u * q;
@@ -584,22 +597,22 @@ function invert(number: bigint, modulo: bigint = CURVE.P): bigint {
     b = a, a = r, x = u, y = v, u = m, v = n;
   }
   const gcd = b;
-  if (gcd !== 1n) throw new Error('invert: does not exist');
+  if (gcd !== _1n) throw new Error('invert: does not exist');
   return mod(x, modulo);
 }
 
 function invertBatch(nums: bigint[], modulo: bigint = CURVE.P): bigint[] {
   const len = nums.length;
   const scratch = new Array(len);
-  let acc = 1n;
+  let acc = _1n;
   for (let i = 0; i < len; i++) {
-    if (nums[i] === 0n) continue;
+    if (nums[i] === _0n) continue;
     scratch[i] = acc;
     acc = mod(acc * nums[i], modulo);
   }
   acc = invert(acc, modulo);
   for (let i = len - 1; i >= 0; i--) {
-    if (nums[i] === 0n) continue;
+    if (nums[i] === _0n) continue;
     let tmp = mod(acc * nums[i], modulo);
     nums[i] = mod(acc * scratch[i], modulo);
     acc = tmp;
@@ -611,7 +624,7 @@ function invertBatch(nums: bigint[], modulo: bigint = CURVE.P): bigint[] {
 function pow2(x: bigint, power: bigint): bigint {
   const { P } = CURVE;
   let res = x;
-  while (power-- > 0n) {
+  while (power-- > _0n) {
     res *= res;
     res %= P;
   }
@@ -626,18 +639,20 @@ function pow2(x: bigint, power: bigint): bigint {
 // We are multiplying it bit-by-bit
 function pow_2_252_3(x: bigint): bigint {
   const { P } = CURVE;
+  const [_5n, _10n, _20n, _40n, _80n] = [5, 10, 20, 40, 80].map((n) => BigInt(n));
+  // const _5n = BigInt(5), _10n = BigInt(10), _20n = BigInt(20), _40n = BigInt(40), _80n = BigInt(80);
   const x2 = (x * x) % P;
   const b2 = (x2 * x) % P; // x^3, 11
-  const b4 = (pow2(b2, 2n) * b2) % P; // x^15, 1111
-  const b5 = (pow2(b4, 1n) * x) % P; // x^31
-  const b10 = (pow2(b5, 5n) * b5) % P;
-  const b20 = (pow2(b10, 10n) * b10) % P;
-  const b40 = (pow2(b20, 20n) * b20) % P;
-  const b80 = (pow2(b40, 40n) * b40) % P;
-  const b160 = (pow2(b80, 80n) * b80) % P;
-  const b240 = (pow2(b160, 80n) * b80) % P;
-  const b250 = (pow2(b240, 10n) * b10) % P;
-  const pow_p_5_8 = (pow2(b250, 2n) * x) % P;
+  const b4 = (pow2(b2, _2n) * b2) % P; // x^15, 1111
+  const b5 = (pow2(b4, _1n) * x) % P; // x^31
+  const b10 = (pow2(b5, _5n) * b5) % P;
+  const b20 = (pow2(b10, _10n) * b10) % P;
+  const b40 = (pow2(b20, _20n) * b20) % P;
+  const b80 = (pow2(b40, _40n) * b40) % P;
+  const b160 = (pow2(b80, _80n) * b80) % P;
+  const b240 = (pow2(b160, _80n) * b80) % P;
+  const b250 = (pow2(b240, _10n) * b10) % P;
+  const pow_p_5_8 = (pow2(b250, _2n) * x) % P;
   // ^ To pow to (p+3)/8, multiply it by x.
   return pow_p_5_8;
 }
@@ -663,7 +678,7 @@ function uvRatio(u: bigint, v: bigint): {isValid: boolean, value: bigint} {
 
 // Calculates 1/√(number)
 function invertSqrt(number: bigint) {
-  return uvRatio(1n, number);
+  return uvRatio(_1n, number);
 }
 // Math end
 
@@ -708,7 +723,7 @@ function isWithinCurveOrder(num: bigint): boolean {
   return 0 < num && num < CURVE.n;
 }
 
-const MAX_PRIV_KEY = 2n ** 256n - 1n;
+const MAX_PRIV_KEY = _2n ** BigInt(256) - _1n;
 function normalizePrivateKey(key: PrivKey): Uint8Array {
   let bytes: Uint8Array;
   let err = 'Expected 32 bytes of private key';
@@ -769,7 +784,7 @@ export async function verify(sig: SigType, msgHash: Hex, publicKey: PubKey): Pro
   const Ph = ExtendedPoint.fromAffine(publicKey).multiplyUnsafe(hs);
   const Gs = ExtendedPoint.BASE.multiply(sig.s);
   const RPh = ExtendedPoint.fromAffine(sig.r).add(Ph);
-  return RPh.subtract(Gs).multiplyUnsafe(8n).equals(ExtendedPoint.ZERO);
+  return RPh.subtract(Gs).multiplyUnsafe(_8n).equals(ExtendedPoint.ZERO);
 }
 
 // Enable precomputes. Slows down first publicKey computation by 20ms.
@@ -824,7 +839,7 @@ export const utils = {
   precompute(windowSize = 8, point = Point.BASE): Point {
     const cached = point.equals(Point.BASE) ? point : new Point(point.x, point.y);
     cached._setWindowSize(windowSize);
-    cached.multiply(1n);
+    cached.multiply(_1n);
     return cached;
   },
 };
