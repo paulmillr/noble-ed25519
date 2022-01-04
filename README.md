@@ -184,8 +184,8 @@ ed25519.Point {
 ed25519.ExtendedPoint {
   constructor(x: bigint, y: bigint, z: bigint, t: bigint);
   static fromAffine(point: Point): ExtendedPoint;
-  static fromRistrettoHash(hash: Uint8Array): ExtendedPoint;
-  static fromRistrettoBytes(bytes: Uint8Array): ExtendedPoint;
+  static fromRistrettoHash(hash: Uint8Array | string): ExtendedPoint;
+  static fromRistrettoBytes(bytes: Uint8Array | string): ExtendedPoint;
   toRistrettoBytes(): Uint8Array;
   toAffine(): Point;
 }
