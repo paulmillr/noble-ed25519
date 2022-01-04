@@ -9,7 +9,6 @@ import nodeCrypto from 'crypto';
 const _0n = BigInt(0);
 const _1n = BigInt(1);
 const _2n = BigInt(2);
-const _8n = BigInt(8);
 const _255n = BigInt(255);
 
 // Curve formula is −x² + y² = 1 − (121665/121666) * x² * y²
@@ -92,6 +91,8 @@ class ExtendedPoint {
   // The hash-to-group operation applies Elligator twice and adds the results.
   // https://ristretto.group/formulas/elligator.html
   static fromRistrettoHash(hash: Uint8Array): ExtendedPoint {
+    if (typeof hash === 'string') hash = hexToBytes(hash);
+    if (hash.length !== 64) throw new Error('Invalid ristretto hash, need 64 bytes');
     const r1 = bytes255ToNumberLE(hash.slice(0, B32));
     // const h = hash.slice(0, B32);
     const R1 = this.calcElligatorRistrettoMap(r1);
@@ -124,7 +125,9 @@ class ExtendedPoint {
 
   // Ristretto: Decoding to Extended Coordinates
   // https://ristretto.group/formulas/decoding.html
-  static fromRistrettoBytes(bytes: Uint8Array): ExtendedPoint {
+  static fromRistrettoBytes(bytes: Hex): ExtendedPoint {
+    if (typeof bytes === 'string') bytes = hexToBytes(bytes);
+    if (bytes.length !== 32) throw new Error('Invalid ristretto hash, need 64 bytes');
     const { a, d } = CURVE;
     const emsg = 'ExtendedPoint.fromRistrettoBytes: Cannot convert bytes to Ristretto Point';
     const s = bytes255ToNumberLE(bytes);
@@ -515,11 +518,12 @@ function concatBytes(...arrays: Uint8Array[]): Uint8Array {
 
 // Convert between types
 // ---------------------
+const hexes = Array.from({ length: 256 }, (v, i) => i.toString(16).padStart(2, '0'));
 function bytesToHex(uint8a: Uint8Array): string {
   // pre-caching chars could speed this up 6x.
   let hex = '';
   for (let i = 0; i < uint8a.length; i++) {
-    hex += uint8a[i].toString(16).padStart(2, '0');
+    hex += hexes[uint8a[i]];
   }
   return hex;
 }
@@ -562,7 +566,7 @@ function edIsNegative(num: bigint) {
 function bytesToNumberLE(uint8a: Uint8Array): bigint {
   let value = _0n;
   for (let i = 0; i < uint8a.length; i++) {
-    value += BigInt(uint8a[i]) << (_8n * BigInt(i));
+    value += BigInt(uint8a[i]) << (BigInt(8) * BigInt(i));
   }
   return value;
 }
@@ -754,16 +758,12 @@ function normalizeScalar(num: number | bigint): bigint {
   throw new TypeError('Expected valid private scalar: 0 < scalar < curve.n');
 }
 
-export function getPublicKey(privateKey: Uint8Array | bigint | number): Promise<Uint8Array>;
-export function getPublicKey(privateKey: string): Promise<string>;
-export async function getPublicKey(privateKey: PrivKey) {
+export async function getPublicKey(privateKey: PrivKey): Promise<Uint8Array> {
   const key = await Point.fromPrivateKey(privateKey);
-  return typeof privateKey === 'string' ? key.toHex() : key.toRawBytes();
+  return key.toRawBytes();
 }
 
-export function sign(msgHash: Uint8Array, privateKey: Hex): Promise<Uint8Array>;
-export function sign(msgHash: string, privateKey: Hex): Promise<string>;
-export async function sign(msgHash: Hex, privateKey: Hex) {
+export async function sign(msgHash: Hex, privateKey: Hex): Promise<Uint8Array> {
   const privBytes = await getPrivateBytes(privateKey);
   const p = encodePrivate(privBytes);
   const P = Point.BASE.multiply(p);
@@ -773,7 +773,7 @@ export async function sign(msgHash: Hex, privateKey: Hex) {
   const h = await sha512ToNumberLE(R.toRawBytes(), P.toRawBytes(), msg);
   const S = mod(r + h * p, CURVE.n);
   const sig = new Signature(R, S);
-  return typeof msgHash === 'string' ? sig.toHex() : sig.toRawBytes();
+  return sig.toRawBytes();
 }
 
 export async function verify(sig: SigType, msgHash: Hex, publicKey: PubKey): Promise<boolean> {
@@ -784,7 +784,7 @@ export async function verify(sig: SigType, msgHash: Hex, publicKey: PubKey): Pro
   const Ph = ExtendedPoint.fromAffine(publicKey).multiplyUnsafe(hs);
   const Gs = ExtendedPoint.BASE.multiply(sig.s);
   const RPh = ExtendedPoint.fromAffine(sig.r).add(Ph);
-  return RPh.subtract(Gs).multiplyUnsafe(_8n).equals(ExtendedPoint.ZERO);
+  return RPh.subtract(Gs).multiplyUnsafe(CURVE.h).equals(ExtendedPoint.ZERO);
 }
 
 // Enable precomputes. Slows down first publicKey computation by 20ms.
@@ -811,6 +811,7 @@ export const utils = {
     '0000000000000000000000000000000000000000000000000000000000000000',
     'c7176a703d4dd84fba3c0b760d10670f2a2053fa2c39ccc64ec7fd7792ac03fa',
   ],
+  bytesToHex,
   randomBytes: (bytesLength: number = 32): Uint8Array => {
     if (crypto.web) {
       return crypto.web.getRandomValues(new Uint8Array(bytesLength));
