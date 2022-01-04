@@ -111,13 +111,13 @@ To use Ristretto, simply use `fromRistrettoHash()` and `toRistrettoBytes()` meth
 
 ```typescript
 // The hash-to-group operation applies Elligator twice and adds the results.
-ExtendedPoint.fromRistrettoHash(hash: Uint8Array): ExtendedPoint;
+ExtendedPoint.fromRistrettoHash(hash: Uint8Array | string): ExtendedPoint;
 
 // Decode a byte-string s_bytes representing a compressed Ristretto point into extended coordinates.
-ExtendedPoint.fromRistrettoBytes(bytes: Uint8Array): ExtendedPoint;
+ExtendedPoint.fromRistrettoBytes(bytes: Uint8Array | string): ExtendedPoint;
 
 // Encode a Ristretto point represented by the point (X:Y:Z:T) in extended coordinates to Uint8Array.
-ExtendedPoint.toRistrettoBytes(): Uint8Array
+ExtendedPoint#toRistrettoBytes(): Uint8Array
 ```
 
 It extends Mike Hamburg's Decaf approach to cofactor elimination to support cofactor-8 curves such as Curve25519.
