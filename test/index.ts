@@ -34,9 +34,10 @@ describe('ed25519', () => {
     ed.utils.precompute(8);
   });
   it('should not accept >32byte private keys', async () => {
-    const invalidPriv = 100000000000000000000000000000000000009000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000090000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000800073278156000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000n;
+    const invalidPriv =
+      100000000000000000000000000000000000009000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000090000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000800073278156000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000n;
     expect(() => ed.getPublicKey(invalidPriv)).rejects.toThrowError();
-  })
+  });
   it('should verify just signed message', async () => {
     await fc.assert(
       fc.asyncProperty(
@@ -92,33 +93,29 @@ describe('ed25519', () => {
   describe('BASE_POINT.multiply()', () => {
     // https://xmr.llcoins.net/addresstests.html
     it('should create right publicKey without SHA-512 hashing TEST 1', () => {
-      const publicKey = ed.Point.BASE.multiply(
-        0x90af56259a4b6bfbc4337980d5d75fbe3c074630368ff3804d33028e5dbfa77n
-      );
+      const publicKey =
+        ed.Point.BASE.multiply(0x90af56259a4b6bfbc4337980d5d75fbe3c074630368ff3804d33028e5dbfa77n);
       expect(publicKey.toHex()).toBe(
         '0f3b913371411b27e646b537e888f685bf929ea7aab93c950ed84433f064480d'
       );
     });
     it('should create right publicKey without SHA-512 hashing TEST 2', () => {
-      const publicKey = ed.Point.BASE.multiply(
-        0x364e8711a60780382a5d57b061c126f039940f28a9e91fe039d4d3094d8b88n
-      );
+      const publicKey =
+        ed.Point.BASE.multiply(0x364e8711a60780382a5d57b061c126f039940f28a9e91fe039d4d3094d8b88n);
       expect(publicKey.toHex()).toBe(
         'ad545340b58610f0cd62f17d55af1ab11ecde9c084d5476865ddb4dbda015349'
       );
     });
     it('should create right publicKey without SHA-512 hashing TEST 3', () => {
-      const publicKey = ed.Point.BASE.multiply(
-        0xb9bf90ff3abec042752cac3a07a62f0c16cfb9d32a3fc2305d676ec2d86e941n
-      );
+      const publicKey =
+        ed.Point.BASE.multiply(0xb9bf90ff3abec042752cac3a07a62f0c16cfb9d32a3fc2305d676ec2d86e941n);
       expect(publicKey.toHex()).toBe(
         'e097c4415fe85724d522b2e449e8fd78dd40d20097bdc9ae36fe8ec6fe12cb8c'
       );
     });
     it('should create right publicKey without SHA-512 hashing TEST 4', () => {
-      const publicKey = ed.Point.BASE.multiply(
-        0x69d896f02d79524c9878e080308180e2859d07f9f54454e0800e8db0847a46en
-      );
+      const publicKey =
+        ed.Point.BASE.multiply(0x69d896f02d79524c9878e080308180e2859d07f9f54454e0800e8db0847a46en);
       expect(publicKey.toHex()).toBe(
         'f12cb7c43b59971395926f278ce7c2eaded9444fbce62ca717564cb508a0db1d'
       );
@@ -187,8 +184,8 @@ describe('ed25519 official vectors', () => {
       const expectedSignature = vector[3].slice(0, 128);
 
       // Calculate
-      const pub = (await ed.getPublicKey(toBytes(priv)));
-      expect(hex(pub)).toEqual((expectedPub));
+      const pub = await ed.getPublicKey(toBytes(priv));
+      expect(hex(pub)).toEqual(expectedPub);
       expect(pub).toEqual(ed.Point.fromHex(pub).toRawBytes());
 
       const signature = hex(await ed.sign(msg, priv));
