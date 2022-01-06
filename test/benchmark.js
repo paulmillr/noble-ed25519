@@ -38,26 +38,22 @@ run(async () => {
   let sigHex;
   await mark('sign', 1000, async () => {
     sigHex = await ed.sign(msg, priv2);
+    return sigHex;
   });
 
   await mark('verify', 1000, async () => {
-    const verified = await ed.verify(sigHex, msg, pubHex);
+    return await ed.verify(sigHex, msg, pubHex);
   });
 
-  const sig = ed.SignResult.fromHex(sigHex);
+  const sig = ed.Signature.fromHex(sigHex);
   const pub = ed.Point.fromHex(pubHex);
   await mark('verifyBatch', 1000, async () => {
-    const verified = await ed.verify(sig, msg, pub);
+    return await ed.verify(sig, msg, pub);
   });
-  await mark('Point.fromHex decompression', 1000, async () => {
+  await mark('Point.fromHex decompression', 1000, () => {
     ed.Point.fromHex(pubHex);
   });
 
-  function arrayToHex(bytes) {
-    return Array.from(bytes)
-      .map(a => a.toString(16).padStart(2, '0'))
-      .join('');
-  }
   function hexToArray(hash) {
     hash = hash.length & 1 ? `0${hash}` : hash;
     const len = hash.length;

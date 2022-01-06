@@ -414,8 +414,7 @@ class Point {
   }
 
   static async fromPrivateKey(privateKey: PrivKey) {
-    const privBytes = await getPrivateBytes(privateKey);
-    return Point.BASE.multiply(encodePrivate(privBytes));
+    return (await calcPub(privateKey)).P;
   }
 
   /**
@@ -477,7 +476,7 @@ class Point {
 class Signature {
   constructor(readonly r: Point, readonly s: bigint) {
     if (!(r instanceof Point)) throw new Error('Expected Point instance');
-    if (!isWithinCurveOrder(s)) throw new Error('Signature expects 0 <s <= CURVE.n');
+    if (!isWithinCurveOrder(s)) throw new Error('Signature expects 0 < s <= CURVE.n');
   }
 
   static fromHex(hex: Hex) {
@@ -690,7 +689,7 @@ function invertSqrt(number: bigint) {
 }
 // Math end
 
-async function sha512ToNumberLE(...args: Uint8Array[]): Promise<bigint> {
+async function sha512ModnLE(...args: Uint8Array[]): Promise<bigint> {
   const messageArray = concatBytes(...args);
   const hash = await utils.sha512(messageArray);
   const value = bytesToNumberLE(hash);
@@ -752,39 +751,40 @@ function normalizePrivateKey(key: PrivKey): Uint8Array {
   return bytes;
 }
 
-async function getPrivateBytes(privateKey: PrivKey) {
-  return await utils.sha512(normalizePrivateKey(privateKey));
-}
-
 function normalizeScalar(num: number | bigint): bigint {
   if (typeof num === 'number' && num > 0 && Number.isSafeInteger(num)) return BigInt(num);
   if (typeof num === 'bigint' && isWithinCurveOrder(num)) return num;
   throw new TypeError('Expected valid private scalar: 0 < scalar < curve.n');
 }
 
+// Private method
+async function calcPub(privateKey: PrivKey) {
+  const privBytes = await utils.sha512(normalizePrivateKey(privateKey));
+  const p = encodePrivate(privBytes);
+  const P = Point.BASE.multiply(p);
+  const pubBytes = P.toRawBytes();
+  return { privBytes, p, P, pubBytes };
+}
+
 export async function getPublicKey(privateKey: PrivKey): Promise<Uint8Array> {
-  const key = await Point.fromPrivateKey(privateKey);
-  return key.toRawBytes();
+  return (await calcPub(privateKey)).pubBytes;
 }
 
 export async function sign(msgHash: Hex, privateKey: Hex): Promise<Uint8Array> {
-  const privBytes = await getPrivateBytes(privateKey);
-  const p = encodePrivate(privBytes);
-  const P = Point.BASE.multiply(p);
   const msg = ensureBytes(msgHash);
-  const r = await sha512ToNumberLE(keyPrefix(privBytes), msg);
+  const { privBytes, p, pubBytes } = await calcPub(privateKey);
+  const r = await sha512ModnLE(keyPrefix(privBytes), msg);
   const R = Point.BASE.multiply(r);
-  const h = await sha512ToNumberLE(R.toRawBytes(), P.toRawBytes(), msg);
-  const S = mod(r + h * p, CURVE.n);
-  const sig = new Signature(R, S);
-  return sig.toRawBytes();
+  const k = await sha512ModnLE(R.toRawBytes(), pubBytes, msg);
+  const S = mod(r + k * p, CURVE.n);
+  return new Signature(R, S).toRawBytes();
 }
 
 export async function verify(sig: SigType, msgHash: Hex, publicKey: PubKey): Promise<boolean> {
   msgHash = ensureBytes(msgHash);
   if (!(publicKey instanceof Point)) publicKey = Point.fromHex(publicKey);
   if (!(sig instanceof Signature)) sig = Signature.fromHex(sig);
-  const hs = await sha512ToNumberLE(sig.r.toRawBytes(), publicKey.toRawBytes(), msgHash);
+  const hs = await sha512ModnLE(sig.r.toRawBytes(), publicKey.toRawBytes(), msgHash);
   const Ph = ExtendedPoint.fromAffine(publicKey).multiplyUnsafe(hs);
   const Gs = ExtendedPoint.BASE.multiply(sig.s);
   const RPh = ExtendedPoint.fromAffine(sig.r).add(Ph);
