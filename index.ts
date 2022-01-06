@@ -63,7 +63,7 @@ const D_MINUS_ONE_SQ = BigInt(
 // Extended Point works in extended coordinates: (x, y, z, t) ∋ (x=x/z, y=y/z, t=xy)
 // https://en.wikipedia.org/wiki/Twisted_Edwards_curve#Extended_coordinates
 class ExtendedPoint {
-  constructor(public x: bigint, public y: bigint, public z: bigint, public t: bigint) {}
+  constructor(readonly x: bigint, readonly y: bigint, readonly z: bigint, readonly t: bigint) {}
 
   static BASE = new ExtendedPoint(CURVE.Gx, CURVE.Gy, _1n, mod(CURVE.Gx * CURVE.Gy));
   static ZERO = new ExtendedPoint(_0n, _1n, _1n, _0n);
@@ -94,7 +94,6 @@ class ExtendedPoint {
     if (typeof hash === 'string') hash = hexToBytes(hash);
     if (hash.length !== 64) throw new Error('Invalid ristretto hash, need 64 bytes');
     const r1 = bytes255ToNumberLE(hash.slice(0, B32));
-    // const h = hash.slice(0, B32);
     const R1 = this.calcElligatorRistrettoMap(r1);
     const r2 = bytes255ToNumberLE(hash.slice(B32, B32 * 2));
     const R2 = this.calcElligatorRistrettoMap(r2);
@@ -127,7 +126,7 @@ class ExtendedPoint {
   // https://ristretto.group/formulas/decoding.html
   static fromRistrettoBytes(bytes: Hex): ExtendedPoint {
     if (typeof bytes === 'string') bytes = hexToBytes(bytes);
-    if (bytes.length !== 32) throw new Error('Invalid ristretto hash, need 64 bytes');
+    if (bytes.length !== 32) throw new Error('Invalid ristretto hash, need 32 bytes');
     const { a, d } = CURVE;
     const emsg = 'ExtendedPoint.fromRistrettoBytes: Cannot convert bytes to Ristretto Point';
     const s = bytes255ToNumberLE(bytes);
@@ -370,7 +369,7 @@ class Point {
   // stores precomputed values. Usually only base point would be precomputed.
   _WINDOW_SIZE?: number;
 
-  constructor(public x: bigint, public y: bigint) {}
+  constructor(readonly x: bigint, readonly y: bigint) {}
 
   // "Private method", don't use it directly.
   _setWindowSize(windowSize: number) {
@@ -476,13 +475,16 @@ class Point {
 }
 
 class Signature {
-  constructor(public r: Point, public s: bigint) {}
+  constructor(readonly r: Point, readonly s: bigint) {
+    if (!(r instanceof Point)) throw new Error('Expected Point instance');
+    if (!isWithinCurveOrder(s)) throw new Error('Signature expects 0 <s <= CURVE.n');
+  }
 
   static fromHex(hex: Hex) {
     hex = ensureBytes(hex);
+    if (hex.length !== 64) throw new Error('Expected 64-byte hex');
     const r = Point.fromHex(hex.slice(0, 32));
     const s = bytesToNumberLE(hex.slice(32));
-    if (!isWithinCurveOrder(s)) throw new Error('Signature.fromHex expects s <= CURVE.n');
     return new Signature(r, s);
   }
 
@@ -494,7 +496,6 @@ class Signature {
     res.set(this.r.toRawBytes());
     res.set(sBytes, 32);
     return res;
-    // return concatTypedArrays(this.r.toRawBytes(), sBytes);
   }
 
   toHex() {
@@ -502,7 +503,7 @@ class Signature {
   }
 }
 
-export { ExtendedPoint, Point, Signature, Signature as SignResult };
+export { ExtendedPoint, Point, Signature };
 
 function concatBytes(...arrays: Uint8Array[]): Uint8Array {
   if (arrays.length === 1) return arrays[0];
@@ -643,8 +644,11 @@ function pow2(x: bigint, power: bigint): bigint {
 // We are multiplying it bit-by-bit
 function pow_2_252_3(x: bigint): bigint {
   const { P } = CURVE;
-  const [_5n, _10n, _20n, _40n, _80n] = [5, 10, 20, 40, 80].map((n) => BigInt(n));
-  // const _5n = BigInt(5), _10n = BigInt(10), _20n = BigInt(20), _40n = BigInt(40), _80n = BigInt(80);
+  const _5n = BigInt(5);
+  const _10n = BigInt(10);
+  const _20n = BigInt(20);
+  const _40n = BigInt(40);
+  const _80n = BigInt(80);
   const x2 = (x * x) % P;
   const b2 = (x2 * x) % P; // x^3, 11
   const b4 = (pow2(b2, _2n) * b2) % P; // x^15, 1111
