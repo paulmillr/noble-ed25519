@@ -747,11 +747,11 @@ function normalizeScalar(num: number | bigint): bigint {
 
 // Private convenience method
 async function calcPub(privateKey: PrivKey) {
-  const privBytes = await utils.sha512(normalizePrivateKey(privateKey)); // hash to 64 bytes
-  const p = encodePrivate(privBytes); // clear 3 bits
+  const priv64Bytes = await utils.sha512(normalizePrivateKey(privateKey)); // hash to 64 bytes
+  const p = encodePrivate(priv64Bytes); // clear 3 bits
   const P = Point.BASE.multiply(p); // multiply by generator
   const pubBytes = P.toRawBytes(); // convert to bytes
-  return { privBytes, p, P, pubBytes };
+  return { priv64Bytes, p, P, pubBytes };
 }
 
 // RFC8032 5.1.5
@@ -762,8 +762,8 @@ export async function getPublicKey(privateKey: PrivKey): Promise<Uint8Array> {
 // RFC8032 5.1.6
 export async function sign(msgHash: Hex, privateKey: Hex): Promise<Uint8Array> {
   const msg = ensureBytes(msgHash);
-  const { privBytes, p, pubBytes } = await calcPub(privateKey);
-  const r = await sha512ModnLE(keyPrefix(privBytes), msg); // r = hash(priv[32:] + msg)
+  const { priv64Bytes, p, pubBytes } = await calcPub(privateKey);
+  const r = await sha512ModnLE(keyPrefix(priv64Bytes), msg); // r = hash(priv[32:] + msg)
   const R = Point.BASE.multiply(r); // R = rG
   const k = await sha512ModnLE(R.toRawBytes(), pubBytes, msg); // k = hash(R + P + msg)
   const S = mod(r + k * p, CURVE.n); // S = r + kp
