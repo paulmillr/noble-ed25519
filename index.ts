@@ -379,9 +379,9 @@ class Point {
 
   // Converts hash string or Uint8Array to Point.
   // Uses algo from RFC8032 5.1.3.
-  static fromHex(hash: Hex) {
+  static fromHex(hex: Hex) {
     const { d, P } = CURVE;
-    const bytes = hash instanceof Uint8Array ? hash : hexToBytes(hash);
+    const bytes = ensureBytes(hex);
     if (bytes.length !== 32) throw new Error('Point.fromHex: expected 32 bytes');
     // 1.  First, interpret the string as an integer in little-endian
     // representation. Bit 255 of this number is the least significant
@@ -651,7 +651,7 @@ function pow_2_252_3(x: bigint): bigint {
 // Ratio of u to v. Allows us to combine inversion and square root. Uses algo from RFC8032 5.1.3.
 // Constant-time
 // prettier-ignore
-function uvRatio(u: bigint, v: bigint): {isValid: boolean, value: bigint} {
+function uvRatio(u: bigint, v: bigint): { isValid: boolean, value: bigint } {
   const v3 = mod(v * v * v);                  // v³
   const v7 = mod(v3 * v3 * v);                // v⁷
   let x = mod(u * v3 * pow_2_252_3(u * v7));  // (uv³)(uv⁷)^(p-5)/8
@@ -745,8 +745,8 @@ function normalizeScalar(num: number | bigint): bigint {
 }
 
 // Private convenience method
-async function calcPub(privateKey: PrivKey) {
-  const priv64Bytes = await utils.sha512(normalizePrivateKey(privateKey)); // hash to 64 bytes
+async function calcPub(seed: PrivKey) {
+  const priv64Bytes = await utils.sha512(normalizePrivateKey(seed)); // hash to 64 bytes
   const p = encodePrivate(priv64Bytes); // take 32 bytes, clear 3 bits
   const P = Point.BASE.multiply(p); // multiply by generator
   const pubBytes = P.toRawBytes(); // convert to bytes
