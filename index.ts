@@ -36,7 +36,6 @@ type Hex = Uint8Array | string;
 type PrivKey = Hex | bigint | number;
 type PubKey = Hex | Point;
 type SigType = Hex | Signature;
-const B32 = 32;
 
 // √(-1) aka √(a) aka 2^((p-1)/4)
 const SQRT_M1 = BigInt(
@@ -93,9 +92,9 @@ class ExtendedPoint {
   static fromRistrettoHash(hash: Uint8Array): ExtendedPoint {
     if (typeof hash === 'string') hash = hexToBytes(hash);
     if (hash.length !== 64) throw new Error('Invalid ristretto hash, need 64 bytes');
-    const r1 = bytes255ToNumberLE(hash.slice(0, B32));
+    const r1 = bytes255ToNumberLE(hash.slice(0, 32));
     const R1 = this.calcElligatorRistrettoMap(r1);
-    const r2 = bytes255ToNumberLE(hash.slice(B32, B32 * 2));
+    const r2 = bytes255ToNumberLE(hash.slice(32, 64));
     const R2 = this.calcElligatorRistrettoMap(r2);
     return R1.add(R2);
   }
@@ -132,7 +131,7 @@ class ExtendedPoint {
     const s = bytes255ToNumberLE(bytes);
     // 1. Check that s_bytes is the canonical encoding of a field element, or else abort.
     // 3. Check that s is non-negative, or else abort
-    if (!equalBytes(numberToBytesPadded(s, B32), bytes) || edIsNegative(s)) throw new Error(emsg);
+    if (!equalBytes(numberToBytesLEPadded(s, 32), bytes) || edIsNegative(s)) throw new Error(emsg);
     const s2 = mod(s * s);
     const u1 = mod(_1n + a * s2); // 4 (a is -1)
     const u2 = mod(_1n - a * s2); // 5
@@ -174,7 +173,7 @@ class ExtendedPoint {
     if (edIsNegative(x * zInv)) y = mod(-y); // 9
     let s = mod((z - y) * D); // 10 (check footer's note, no sqrt(-a))
     if (edIsNegative(s)) s = mod(-s);
-    return numberToBytesPadded(s, B32); // 11
+    return numberToBytesLEPadded(s, 32); // 11
   }
   // Ristretto methods end.
 
@@ -377,6 +376,7 @@ class Point {
     this._WINDOW_SIZE = windowSize;
     pointPrecomputes.delete(this);
   }
+
   // Converts hash string or Uint8Array to Point.
   // Uses algo from RFC8032 5.1.3.
   static fromHex(hash: Hex) {
@@ -418,21 +418,13 @@ class Point {
     return (await calcPub(privateKey)).P;
   }
 
-  /**
-   * Converts point to compressed representation of its Y.
-   * ECDSA uses `04${x}${y}` to represent long form and
-   * `02${x}` / `03${x}` to represent short form,
-   * where leading bit signifies positive or negative Y.
-   * EDDSA (ed25519) uses short form.
-   */
+  // There can always be only two x values (x, -x) for any y
+  // When compressing point, it's enough to only store its y coordinate
+  // and use the last byte to encode sign of x.
   toRawBytes(): Uint8Array {
-    const hex = numberToHex(this.y);
-    const u8 = new Uint8Array(B32);
-    for (let i = hex.length - 2, j = 0; j < B32 && i >= 0; i -= 2, j++) {
-      u8[j] = parseHexByte(hex[i] + hex[i + 1]);
-    }
+    const u8 = numberToBytesLEPadded(this.y, 32);
     const mask = this.x & _1n ? 0x80 : 0;
-    u8[B32 - 1] |= mask;
+    u8[32 - 1] |= mask;
     return u8;
   }
 
@@ -489,13 +481,10 @@ class Signature {
   }
 
   toRawBytes() {
-    const numberBytes = hexToBytes(numberToHex(this.s)).reverse();
-    const sBytes = new Uint8Array(B32);
-    sBytes.set(numberBytes);
-    const res = new Uint8Array(B32 * 2);
-    res.set(this.r.toRawBytes());
-    res.set(sBytes, 32);
-    return res;
+    const u8 = new Uint8Array(64);
+    u8.set(this.r.toRawBytes());
+    u8.set(numberToBytesLEPadded(this.s, 32), 32);
+    return u8;
   }
 
   toHex() {
@@ -506,6 +495,7 @@ class Signature {
 export { ExtendedPoint, Point, Signature };
 
 function concatBytes(...arrays: Uint8Array[]): Uint8Array {
+  if (!arrays.every((a) => a instanceof Uint8Array)) throw new Error('Uint8Array list expected');
   if (arrays.length === 1) return arrays[0];
   const length = arrays.reduce((a, arr) => a + arr.length, 0);
   const result = new Uint8Array(length);
@@ -529,12 +519,7 @@ function bytesToHex(uint8a: Uint8Array): string {
   return hex;
 }
 
-function parseHexByte(hexByte: string): number {
-  const byte = Number.parseInt(hexByte, 16);
-  if (Number.isNaN(byte)) throw new Error('Invalid byte sequence');
-  return byte;
-}
-
+// Caching slows it down 2-3x
 function hexToBytes(hex: string): Uint8Array {
   if (typeof hex !== 'string') {
     throw new TypeError('hexToBytes: expected string, got ' + typeof hex);
@@ -543,18 +528,16 @@ function hexToBytes(hex: string): Uint8Array {
   const array = new Uint8Array(hex.length / 2);
   for (let i = 0; i < array.length; i++) {
     const j = i * 2;
-    array[i] = parseHexByte(hex.slice(j, j + 2));
+    const hexByte = hex.slice(j, j + 2);
+    const byte = Number.parseInt(hexByte, 16);
+    if (Number.isNaN(byte)) throw new Error('Invalid byte sequence');
+    array[i] = byte;
   }
   return array;
 }
 
-function numberToHex(num: number | bigint): string {
-  const hex = num.toString(16);
-  return hex.length & 1 ? `0${hex}` : hex;
-}
-
-function numberToBytesPadded(num: bigint, length: number = B32) {
-  const hex = numberToHex(num).padStart(length * 2, '0');
+function numberToBytesLEPadded(num: bigint, length: number = 32) {
+  const hex = num.toString(16).padStart(length * 2, '0');
   return hexToBytes(hex).reverse();
 }
 
@@ -700,14 +683,14 @@ async function sha512ModnLE(...args: Uint8Array[]): Promise<bigint> {
 }
 
 function keyPrefix(privateBytes: Uint8Array) {
-  return privateBytes.slice(B32);
+  return privateBytes.slice(32);
 }
 
 // Takes first 32 bytes of 64b uniformingly random input, clears 3 bits of it
 // to produce a random field element.
 function encodePrivate(privateBytes: Uint8Array): bigint {
-  const last = B32 - 1;
-  const head = privateBytes.slice(0, B32);
+  const last = 32 - 1;
+  const head = privateBytes.slice(0, 32);
   head[0] &= 248;
   head[last] &= 127;
   head[last] |= 64;
@@ -742,7 +725,7 @@ function normalizePrivateKey(key: PrivKey): Uint8Array {
   if (typeof key === 'bigint' || (typeof key === 'number' && Number.isSafeInteger(key))) {
     let num = BigInt(key);
     if (num < 0 || num > MAX_PRIV_KEY) throw new Error(err);
-    bytes = hexToBytes(num.toString(16).padStart(B32 * 2, '0'));
+    bytes = hexToBytes(num.toString(16).padStart(32 * 2, '0'));
   } else if (typeof key === 'string') {
     if (key.length !== 64) throw new Error(err);
     bytes = hexToBytes(key);
@@ -764,10 +747,10 @@ function normalizeScalar(num: number | bigint): bigint {
 
 // Private convenience method
 async function calcPub(privateKey: PrivKey) {
-  const privBytes = await utils.sha512(normalizePrivateKey(privateKey));
-  const p = encodePrivate(privBytes);
-  const P = Point.BASE.multiply(p);
-  const pubBytes = P.toRawBytes();
+  const privBytes = await utils.sha512(normalizePrivateKey(privateKey)); // hash to 64 bytes
+  const p = encodePrivate(privBytes); // clear 3 bits
+  const P = Point.BASE.multiply(p); // multiply by generator
+  const pubBytes = P.toRawBytes(); // convert to bytes
   return { privBytes, p, P, pubBytes };
 }
 
