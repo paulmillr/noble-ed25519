@@ -748,7 +748,7 @@ function normalizeScalar(num: number | bigint): bigint {
 // Private convenience method
 async function calcPub(privateKey: PrivKey) {
   const priv64Bytes = await utils.sha512(normalizePrivateKey(privateKey)); // hash to 64 bytes
-  const p = encodePrivate(priv64Bytes); // clear 3 bits
+  const p = encodePrivate(priv64Bytes); // take 32 bytes, clear 3 bits
   const P = Point.BASE.multiply(p); // multiply by generator
   const pubBytes = P.toRawBytes(); // convert to bytes
   return { priv64Bytes, p, P, pubBytes };
