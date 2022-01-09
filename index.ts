@@ -422,10 +422,9 @@ class Point {
   // When compressing point, it's enough to only store its y coordinate
   // and use the last byte to encode sign of x.
   toRawBytes(): Uint8Array {
-    const u8 = numberToBytesLEPadded(this.y, 32);
-    const mask = this.x & _1n ? 0x80 : 0;
-    u8[32 - 1] |= mask;
-    return u8;
+    const bytes = numberToBytesLEPadded(this.y, 32);
+    bytes[31] |= this.x & _1n ? 0x80 : 0;
+    return bytes;
   }
 
   // Same as toRawBytes, but returns string.
@@ -536,7 +535,7 @@ function hexToBytes(hex: string): Uint8Array {
   return array;
 }
 
-function numberToBytesLEPadded(num: bigint, length: number = 32) {
+function numberToBytesLEPadded(num: bigint, length: number) {
   const hex = num.toString(16).padStart(length * 2, '0');
   return hexToBytes(hex).reverse();
 }
