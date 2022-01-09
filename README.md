@@ -210,7 +210,7 @@ no serious issues have been found. You can run the fuzzer by yourself to check i
 
 We're using built-in JS `BigInt`, which is "unsuitable for use in cryptography" as [per official spec](https://github.com/tc39/proposal-bigint#cryptography). This means that the lib is potentially vulnerable to [timing attacks](https://en.wikipedia.org/wiki/Timing_attack). But, *JIT-compiler* and *Garbage Collector* make "constant time" extremely hard to achieve in a scripting language. Which means *any other JS library doesn't use constant-time bigints*. Including bn.js or anything else. Even statically typed Rust, a language without GC, [makes it harder to achieve constant-time](https://www.chosenplaintext.ca/open-source/rust-timing-shield/security) for some cases. If your goal is absolute security, don't use any JS lib — including bindings to native ones. Use low-level libraries & languages.
 
-We however consider infrastructure attacks like rogue NPM modules very important; that's why it's crucial to minimize the amount of 3rd-party dependencies & native bindings. If your app uses 500 dependencies, any dep could get hacked and you'll be downloading rootkits with every `npm install`. Our goal is to minimize this attack vector.
+We however consider infrastructure attacks like rogue NPM modules very important; that's why it's crucial to minimize the amount of 3rd-party dependencies & native bindings. If your app uses 500 dependencies, any dep could get hacked and you'll be downloading malware with every `npm install`. Our goal is to minimize this attack vector.
 
 ## Speed
 
@@ -218,7 +218,7 @@ Benchmarks done with Apple M1.
 
 ```
 getPublicKey(utils.randomPrivateKey()) x 6,790 ops/sec @ 147μs/op
-sign x 3,247 ops/sec @ 307μs/op
+sign x 3,276 ops/sec @ 305μs/op
 verify x 726 ops/sec @ 1ms/op
 verifyBatch x 842 ops/sec @ 1ms/op
 Point.fromHex decompression x 11,332 ops/sec @ 88μs/op

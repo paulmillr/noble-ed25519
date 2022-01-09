@@ -253,8 +253,9 @@ class ExtendedPoint {
   // an exposed private key e.g. sig verification.
   multiplyUnsafe(scalar: number | bigint): ExtendedPoint {
     let n = normalizeScalar(scalar);
-    if (n === _1n) return this;
-    let p = ExtendedPoint.ZERO;
+    const P0 = ExtendedPoint.ZERO;
+    if (this.equals(P0) || n === _1n) return this;
+    let p = P0;
     let d: ExtendedPoint = this;
     while (n > _0n) {
       if (n & _1n) p = p.add(d);
@@ -520,7 +521,7 @@ function concatBytes(...arrays: Uint8Array[]): Uint8Array {
 // ---------------------
 const hexes = Array.from({ length: 256 }, (v, i) => i.toString(16).padStart(2, '0'));
 function bytesToHex(uint8a: Uint8Array): string {
-  // pre-caching chars could speed this up 6x.
+  // pre-caching improves the speed 6x
   let hex = '';
   for (let i = 0; i < uint8a.length; i++) {
     hex += hexes[uint8a[i]];
@@ -565,8 +566,9 @@ function edIsNegative(num: bigint) {
 // Little Endian
 function bytesToNumberLE(uint8a: Uint8Array): bigint {
   let value = _0n;
+  const _8n = BigInt(8);
   for (let i = 0; i < uint8a.length; i++) {
-    value += BigInt(uint8a[i]) << (BigInt(8) * BigInt(i));
+    value += BigInt(uint8a[i]) << (_8n * BigInt(i));
   }
   return value;
 }
@@ -689,6 +691,7 @@ function invertSqrt(number: bigint) {
 }
 // Math end
 
+// Little-endian SHA512 with modulo n
 async function sha512ModnLE(...args: Uint8Array[]): Promise<bigint> {
   const messageArray = concatBytes(...args);
   const hash = await utils.sha512(messageArray);
@@ -700,6 +703,8 @@ function keyPrefix(privateBytes: Uint8Array) {
   return privateBytes.slice(B32);
 }
 
+// Takes first 32 bytes of 64b uniformingly random input, clears 3 bits of it
+// to produce a random field element.
 function encodePrivate(privateBytes: Uint8Array): bigint {
   const last = B32 - 1;
   const head = privateBytes.slice(0, B32);
@@ -733,7 +738,7 @@ function isWithinCurveOrder(num: bigint): boolean {
 const MAX_PRIV_KEY = _2n ** BigInt(256) - _1n;
 function normalizePrivateKey(key: PrivKey): Uint8Array {
   let bytes: Uint8Array;
-  let err = 'Expected 32 bytes of private key';
+  const err = 'Expected 32 bytes of private key';
   if (typeof key === 'bigint' || (typeof key === 'number' && Number.isSafeInteger(key))) {
     let num = BigInt(key);
     if (num < 0 || num > MAX_PRIV_KEY) throw new Error(err);
@@ -757,7 +762,7 @@ function normalizeScalar(num: number | bigint): bigint {
   throw new TypeError('Expected valid private scalar: 0 < scalar < curve.n');
 }
 
-// Private method
+// Private convenience method
 async function calcPub(privateKey: PrivKey) {
   const privBytes = await utils.sha512(normalizePrivateKey(privateKey));
   const p = encodePrivate(privBytes);
@@ -766,29 +771,33 @@ async function calcPub(privateKey: PrivKey) {
   return { privBytes, p, P, pubBytes };
 }
 
+// RFC8032 5.1.5
 export async function getPublicKey(privateKey: PrivKey): Promise<Uint8Array> {
   return (await calcPub(privateKey)).pubBytes;
 }
 
+// RFC8032 5.1.6
 export async function sign(msgHash: Hex, privateKey: Hex): Promise<Uint8Array> {
   const msg = ensureBytes(msgHash);
   const { privBytes, p, pubBytes } = await calcPub(privateKey);
-  const r = await sha512ModnLE(keyPrefix(privBytes), msg);
-  const R = Point.BASE.multiply(r);
-  const k = await sha512ModnLE(R.toRawBytes(), pubBytes, msg);
-  const S = mod(r + k * p, CURVE.n);
+  const r = await sha512ModnLE(keyPrefix(privBytes), msg); // r = hash(priv[32:] + msg)
+  const R = Point.BASE.multiply(r); // R = rG
+  const k = await sha512ModnLE(R.toRawBytes(), pubBytes, msg); // k = hash(R + P + msg)
+  const S = mod(r + k * p, CURVE.n); // S = r + kp
   return new Signature(R, S).toRawBytes();
 }
 
+// RFC8032 5.1.7
 export async function verify(sig: SigType, msgHash: Hex, publicKey: PubKey): Promise<boolean> {
   msgHash = ensureBytes(msgHash);
   if (!(publicKey instanceof Point)) publicKey = Point.fromHex(publicKey);
   if (!(sig instanceof Signature)) sig = Signature.fromHex(sig);
-  const hs = await sha512ModnLE(sig.r.toRawBytes(), publicKey.toRawBytes(), msgHash);
-  const Ph = ExtendedPoint.fromAffine(publicKey).multiplyUnsafe(hs);
-  const Gs = ExtendedPoint.BASE.multiply(sig.s);
-  const RPh = ExtendedPoint.fromAffine(sig.r).add(Ph);
-  return RPh.subtract(Gs).multiplyUnsafe(CURVE.h).equals(ExtendedPoint.ZERO);
+  const SB = ExtendedPoint.BASE.multiply(sig.s);
+  const k = await sha512ModnLE(sig.r.toRawBytes(), publicKey.toRawBytes(), msgHash);
+  const kA = ExtendedPoint.fromAffine(publicKey).multiplyUnsafe(k);
+  const RkA = ExtendedPoint.fromAffine(sig.r).add(kA);
+  // [8][S]B = [8]R + [8][k]A'
+  return RkA.subtract(SB).multiplyUnsafe(CURVE.h).equals(ExtendedPoint.ZERO);
 }
 
 // Enable precomputes. Slows down first publicKey computation by 20ms.
