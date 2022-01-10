@@ -90,8 +90,8 @@ class ExtendedPoint {
   // The hash-to-group operation applies Elligator twice and adds the results.
   // https://ristretto.group/formulas/elligator.html
   static fromRistrettoHash(hash: Uint8Array): ExtendedPoint {
-    if (typeof hash === 'string') hash = hexToBytes(hash);
-    if (hash.length !== 64) throw new Error('Invalid ristretto hash, need 64 bytes');
+    hash = ensureBytes(hash);
+    assertLen(64, hash);
     const r1 = bytes255ToNumberLE(hash.slice(0, 32));
     const R1 = this.calcElligatorRistrettoMap(r1);
     const r2 = bytes255ToNumberLE(hash.slice(32, 64));
@@ -124,8 +124,8 @@ class ExtendedPoint {
   // Ristretto: Decoding to Extended Coordinates
   // https://ristretto.group/formulas/decoding.html
   static fromRistrettoBytes(bytes: Hex): ExtendedPoint {
-    if (typeof bytes === 'string') bytes = hexToBytes(bytes);
-    if (bytes.length !== 32) throw new Error('Invalid ristretto hash, need 32 bytes');
+    bytes = ensureBytes(bytes);
+    assertLen(32, bytes);
     const { a, d } = CURVE;
     const emsg = 'ExtendedPoint.fromRistrettoBytes: Cannot convert bytes to Ristretto Point';
     const s = bytes255ToNumberLE(bytes);
@@ -382,17 +382,16 @@ class Point {
   static fromHex(hex: Hex) {
     const { d, P } = CURVE;
     const bytes = ensureBytes(hex);
-    if (bytes.length !== 32) throw new Error('Point.fromHex: expected 32 bytes');
+    assertLen(32, bytes);
     // 1.  First, interpret the string as an integer in little-endian
     // representation. Bit 255 of this number is the least significant
     // bit of the x-coordinate and denote this value x_0.  The
     // y-coordinate is recovered simply by clearing this bit.  If the
     // resulting value is >= p, decoding fails.
-    const last = bytes[31];
-    const normedLast = last & ~0x80;
-    const isLastByteOdd = (last & 0x80) !== 0;
-    const normed = Uint8Array.from(Array.from(bytes.slice(0, 31)).concat(normedLast));
+    const normed = bytes.slice();
+    normed[31] = bytes[31] & ~0x80;
     const y = bytesToNumberLE(normed);
+
     if (y >= P) throw new Error('Point.fromHex expects hex <= Fp');
 
     // 2.  To recover the x-coordinate, the curve equation implies
@@ -408,6 +407,7 @@ class Point {
     // x = 0, and x_0 = 1, decoding fails.  Otherwise, if x_0 != x mod
     // 2, set x <-- p - x.  Return the decoded point (x,y).
     const isXOdd = (x & _1n) === _1n;
+    const isLastByteOdd = (bytes[31] & 0x80) !== 0;
     if (isLastByteOdd !== isXOdd) {
       x = mod(-x);
     }
@@ -415,7 +415,7 @@ class Point {
   }
 
   static async fromPrivateKey(privateKey: PrivKey) {
-    return (await calcPub(privateKey)).P;
+    return (await calcKeys(privateKey)).P;
   }
 
   // There can always be only two x values (x, -x) for any y
@@ -466,16 +466,17 @@ class Point {
 }
 
 class Signature {
-  constructor(readonly r: Point, readonly s: bigint) {
+  readonly s: bigint;
+  constructor(readonly r: Point, s: bigint) {
     if (!(r instanceof Point)) throw new Error('Expected Point instance');
-    if (!isWithinCurveOrder(s)) throw new Error('Signature expects 0 < s <= CURVE.n');
+    this.s = normalizeScalar(s);
   }
 
   static fromHex(hex: Hex) {
-    hex = ensureBytes(hex);
-    if (hex.length !== 64) throw new Error('Expected 64-byte hex');
-    const r = Point.fromHex(hex.slice(0, 32));
-    const s = bytesToNumberLE(hex.slice(32));
+    const bytes = ensureBytes(hex);
+    assertLen(64, bytes);
+    const r = Point.fromHex(bytes.slice(0, 32));
+    const s = bytesToNumberLE(bytes.slice(32));
     return new Signature(r, s);
   }
 
@@ -494,7 +495,7 @@ class Signature {
 export { ExtendedPoint, Point, Signature };
 
 function concatBytes(...arrays: Uint8Array[]): Uint8Array {
-  if (!arrays.every((a) => a instanceof Uint8Array)) throw new Error('Uint8Array list expected');
+  if (!arrays.every((a) => a instanceof Uint8Array)) throw new Error('Expected Uint8Array list');
   if (arrays.length === 1) return arrays[0];
   const length = arrays.reduce((a, arr) => a + arr.length, 0);
   const result = new Uint8Array(length);
@@ -535,9 +536,13 @@ function hexToBytes(hex: string): Uint8Array {
   return array;
 }
 
-function numberToBytesLEPadded(num: bigint, length: number) {
+function numberToBytesBEPadded(num: bigint, length: number) {
   const hex = num.toString(16).padStart(length * 2, '0');
-  return hexToBytes(hex).reverse();
+  return hexToBytes(hex);
+}
+
+function numberToBytesLEPadded(num: bigint, length: number) {
+  return numberToBytesBEPadded(num, length).reverse();
 }
 
 // Little-endian check for first LE bit (last BE bit);
@@ -713,40 +718,29 @@ function ensureBytes(hash: Hex): Uint8Array {
   return hash instanceof Uint8Array ? hash : hexToBytes(hash);
 }
 
-function isWithinCurveOrder(num: bigint): boolean {
-  return 0 < num && num < CURVE.n;
+function assertLen(len: number, bytes: Uint8Array): void {
+  if (bytes.length !== len) throw new Error(`Expected ${len} bytes`);
 }
 
-const MAX_PRIV_KEY = _2n ** BigInt(256) - _1n;
+function normalizeScalar(num: number | bigint, max = CURVE.n): bigint {
+  if (typeof num === 'number' && num > 0 && Number.isSafeInteger(num)) return BigInt(num);
+  if (typeof num === 'bigint' && _0n < num && num < max) return num;
+  throw new TypeError('Expected valid scalar: 0 < scalar < max');
+}
+
 function normalizePrivateKey(key: PrivKey): Uint8Array {
-  let bytes: Uint8Array;
-  const err = 'Expected 32 bytes of private key';
-  if (typeof key === 'bigint' || (typeof key === 'number' && Number.isSafeInteger(key))) {
-    let num = BigInt(key);
-    if (num < 0 || num > MAX_PRIV_KEY) throw new Error(err);
-    bytes = hexToBytes(num.toString(16).padStart(32 * 2, '0'));
-  } else if (typeof key === 'string') {
-    if (key.length !== 64) throw new Error(err);
-    bytes = hexToBytes(key);
-  } else if (key instanceof Uint8Array) {
-    if (key.length !== 32) throw new Error(err);
-    bytes = key;
-  } else {
-    throw new TypeError('Expected valid private key');
-  }
-  // There is no check for isWithinCurveOrder
+  const bytes =
+    typeof key === 'bigint' || typeof key === 'number'
+      ? numberToBytesBEPadded(normalizeScalar(key, _2n ** BigInt(256)), 32)
+      : ensureBytes(key);
+  assertLen(32, bytes);
   return bytes;
 }
 
-function normalizeScalar(num: number | bigint): bigint {
-  if (typeof num === 'number' && num > 0 && Number.isSafeInteger(num)) return BigInt(num);
-  if (typeof num === 'bigint' && isWithinCurveOrder(num)) return num;
-  throw new TypeError('Expected valid private scalar: 0 < scalar < curve.n');
-}
-
 // Private convenience method
-async function calcPub(seed: PrivKey) {
-  const priv64Bytes = await utils.sha512(normalizePrivateKey(seed)); // hash to 64 bytes
+// RFC8032 5.1.5
+async function calcKeys(key: PrivKey) {
+  const priv64Bytes = await utils.sha512(normalizePrivateKey(key)); // hash to 64 bytes
   const p = encodePrivate(priv64Bytes); // take 32 bytes, clear 3 bits
   const P = Point.BASE.multiply(p); // multiply by generator
   const pubBytes = P.toRawBytes(); // convert to bytes
@@ -755,13 +749,13 @@ async function calcPub(seed: PrivKey) {
 
 // RFC8032 5.1.5
 export async function getPublicKey(privateKey: PrivKey): Promise<Uint8Array> {
-  return (await calcPub(privateKey)).pubBytes;
+  return (await calcKeys(privateKey)).pubBytes;
 }
 
 // RFC8032 5.1.6
 export async function sign(msgHash: Hex, privateKey: Hex): Promise<Uint8Array> {
   const msg = ensureBytes(msgHash);
-  const { priv64Bytes, p, pubBytes } = await calcPub(privateKey);
+  const { priv64Bytes, p, pubBytes } = await calcKeys(privateKey);
   const r = await sha512ModnLE(keyPrefix(priv64Bytes), msg); // r = hash(priv[32:] + msg)
   const R = Point.BASE.multiply(r); // R = rG
   const k = await sha512ModnLE(R.toRawBytes(), pubBytes, msg); // k = hash(R + P + msg)
