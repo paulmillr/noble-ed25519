@@ -815,7 +815,7 @@ export const utils = {
       const buffer = await crypto.web.subtle.digest('SHA-512', message.buffer);
       return new Uint8Array(buffer);
     } else if (crypto.node) {
-      return Uint8Array.from(crypto.node.createHash('sha512').update(message).digest());
+      return new Uint8Array(crypto.node.createHash('sha512').update(message).digest().buffer);
     } else {
       throw new Error("The environment doesn't have sha512 function");
     }
