@@ -686,21 +686,6 @@ async function sha512ModnLE(...args: Uint8Array[]): Promise<bigint> {
   return mod(value, CURVE.n);
 }
 
-function keyPrefix(privateBytes: Uint8Array) {
-  return privateBytes.slice(32);
-}
-
-// Takes first 32 bytes of 64b uniformingly random input, clears 3 bits of it
-// to produce a random field element.
-function encodePrivate(privateBytes: Uint8Array): bigint {
-  const last = 32 - 1;
-  const head = privateBytes.slice(0, 32);
-  head[0] &= 248;
-  head[last] &= 127;
-  head[last] |= 64;
-  return mod(bytesToNumberLE(head), CURVE.n);
-}
-
 function equalBytes(b1: Uint8Array, b2: Uint8Array) {
   // We don't care about timing attacks here
   if (b1.length !== b2.length) {
@@ -740,11 +725,20 @@ function normalizePrivateKey(key: PrivKey): Uint8Array {
 // Private convenience method
 // RFC8032 5.1.5
 async function calcKeys(key: PrivKey) {
-  const priv64Bytes = await utils.sha512(normalizePrivateKey(key)); // hash to 64 bytes
-  const p = encodePrivate(priv64Bytes); // take 32 bytes, clear 3 bits
-  const P = Point.BASE.multiply(p); // multiply by generator
-  const pubBytes = P.toRawBytes(); // convert to bytes
-  return { priv64Bytes, p, P, pubBytes };
+  // hash to produce 64 bytes
+  const hashed = await utils.sha512(normalizePrivateKey(key));
+  // Takes first 32 bytes of 64b uniformingly random input,
+  // clears 3 bits of it to produce a random field element.
+  const head = hashed.slice(0, 32);
+  head[0] &= 248;
+  head[31] &= 127;
+  head[31] |= 64;
+  // Second 32 bytes is called key prefix (5.1.6)
+  const prefix = hashed.slice(32);
+  const p = mod(bytesToNumberLE(head), CURVE.n);
+  const P = Point.BASE.multiply(p);
+  const pubBytes = P.toRawBytes();
+  return { prefix, p, P, pubBytes };
 }
 
 // RFC8032 5.1.5
@@ -755,8 +749,8 @@ export async function getPublicKey(privateKey: PrivKey): Promise<Uint8Array> {
 // RFC8032 5.1.6
 export async function sign(msgHash: Hex, privateKey: Hex): Promise<Uint8Array> {
   const msg = ensureBytes(msgHash);
-  const { priv64Bytes, p, pubBytes } = await calcKeys(privateKey);
-  const r = await sha512ModnLE(keyPrefix(priv64Bytes), msg); // r = hash(priv[32:] + msg)
+  const { prefix, p, pubBytes } = await calcKeys(privateKey);
+  const r = await sha512ModnLE(prefix, msg); // r = hash(prefix + msg)
   const R = Point.BASE.multiply(r); // R = rG
   const k = await sha512ModnLE(R.toRawBytes(), pubBytes, msg); // k = hash(R + P + msg)
   const S = mod(r + k * p, CURVE.n); // S = r + kp
