@@ -41,6 +41,10 @@ type SigType = Hex | Signature;
 const SQRT_M1 = BigInt(
   '19681161376707505956807079304988542015446066515923890162744021073123829784752'
 );
+// √d
+const SQRT_D = BigInt(
+  '6853475219497561581579357271197624642482790079785650197046958215289687604742'
+);
 // √(ad - 1)
 const SQRT_AD_MINUS_ONE = BigInt(
   '25063068953384623474111414158702152701244531502492656460079210482610430750235'
@@ -436,11 +440,15 @@ class Point {
   // We don't have fromX25519, because we don't know sign!
   toX25519() {
     // curve25519 is birationally equivalent to ed25519
+    // u, v: curve25519 coordinates
     // x, y: ed25519 coordinates
-    // u, v: x25519 coordinates
-    // u = (1 + y) / (1 - y)
+    // (u, v) = ((1+y)/(1-y), sqrt(-486664)*u/x)
+    // (x, y) = (sqrt(-486664)*u/v, (u-1)/(u+1))
     // See https://blog.filippo.io/using-ed25519-keys-for-encryption
-    return mod((_1n + this.y) * invert(_1n - this.y));
+    const { x, y } = this;
+    const u = mod((_1n + y) * invert(_1n - y));
+    // const v = SQRT_D * u * invert(x);
+    return u;
   }
 
   equals(other: Point): boolean {
@@ -568,6 +576,16 @@ function bytes255ToNumberLE(bytes: Uint8Array): bigint {
 function mod(a: bigint, b: bigint = CURVE.P) {
   const res = a % b;
   return res >= _0n ? res : b + res;
+}
+
+function powMod(a: bigint, power: bigint, modulo: bigint): bigint {
+  let res = 1n;
+  while (power > 0n) {
+    if (power & 1n) res = (res * a) % modulo;
+    a = (a * a) % modulo;
+    power >>= 1n;
+  }
+  return res;
 }
 
 // Note: this egcd-based invert is faster than powMod-based one.
@@ -772,6 +790,70 @@ export async function verify(sig: SigType, msgHash: Hex, publicKey: PubKey): Pro
 
 // Enable precomputes. Slows down first publicKey computation by 20ms.
 Point.BASE._setWindowSize(8);
+
+// curve25519-related code
+
+// cswap from RFC7748
+function cswap(swap: bigint, x_2: bigint, x_3: bigint): [bigint, bigint] {
+  const dummy = mod(swap * (x_2 - x_3));
+  x_2 = mod(x_2 - dummy);
+  x_3 = mod(x_3 + dummy);
+  return [ x_2, x_3 ]
+}
+
+// x25519 from RFC7748
+function montgomeryLadder(scalar: bigint, u: bigint): bigint {
+  const k = scalar;
+  const _121665 = BigInt(121665);
+  const x_1 = u;
+  let x_2 = _1n;
+  let z_2 = _0n;
+  let x_3 = u;
+  let z_3 = _1n;
+  let swap = _0n;
+  let sw: [bigint, bigint];
+  for (let t = BigInt(255 - 1); t >= _0n; t--) {
+    const k_t = (k >> t) & 1n;
+    swap ^= k_t;
+    sw = cswap(swap, x_2, x_3);
+    x_2 = sw[0];
+    x_3 = sw[1];
+    sw = cswap(swap, z_2, z_3);
+    z_2 = sw[0];
+    z_3 = sw[1];
+    swap = k_t;
+
+    const A = mod(x_2 + z_2);
+    const AA = mod(A * A);
+    const B = mod(x_2 - z_2);
+    const BB = mod(B * B);
+    const E = mod(AA - BB);
+    const C = mod(x_3 + z_3);
+    const D = mod(x_3 - z_3);
+    const DA = mod(D * A);
+    const CB = mod(C * B);
+    x_3 = mod(mod(DA + CB) ** 2n);
+    z_3 = mod(x_1 * mod(DA - CB) ** 2n);
+    x_2 = mod(AA * BB);
+    z_2 = mod(E * (AA + mod(_121665 * E)));
+  }
+  sw = cswap(swap, x_2, x_3);
+  x_2 = sw[0];
+  x_3 = sw[1];
+  sw = cswap(swap, z_2, z_3);
+  z_2 = sw[0];
+  z_3 = sw[1];
+  return mod(x_2 * powMod(z_2, CURVE.P - 2n, CURVE.P));
+}
+
+export const curve25519 = {
+  getPublicKey(privateKey: bigint) {
+    return montgomeryLadder(privateKey, 9n);
+  },
+  getSharedSecret(privateKey: bigint, publicKey: bigint) {
+    return montgomeryLadder(privateKey, publicKey);
+  }
+}
 
 // Global symbol available in browsers only. Ensure we do not depend on @types/dom
 declare const self: Record<string, any> | undefined;
