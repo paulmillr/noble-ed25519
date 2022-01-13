@@ -648,7 +648,7 @@ function pow2(x: bigint, power: bigint): bigint {
 // We are unwrapping the loop because it's 2x faster.
 // (2n**252n-3n).toString(2) would produce bits [250x 1, 0, 1]
 // We are multiplying it bit-by-bit
-function pow_2_252_3(x: bigint): bigint {
+function pow_2_252_3(x: bigint) {
   const { P } = CURVE;
   const _5n = BigInt(5);
   const _10n = BigInt(10);
@@ -668,7 +668,7 @@ function pow_2_252_3(x: bigint): bigint {
   const b250 = (pow2(b240, _10n) * b10) % P;
   const pow_p_5_8 = (pow2(b250, _2n) * x) % P;
   // ^ To pow to (p+3)/8, multiply it by x.
-  return pow_p_5_8;
+  return { pow_p_5_8, b2 };
 }
 
 // Ratio of u to v. Allows us to combine inversion and square root. Uses algo from RFC8032 5.1.3.
@@ -677,7 +677,8 @@ function pow_2_252_3(x: bigint): bigint {
 function uvRatio(u: bigint, v: bigint): { isValid: boolean, value: bigint } {
   const v3 = mod(v * v * v);                  // v³
   const v7 = mod(v3 * v3 * v);                // v⁷
-  let x = mod(u * v3 * pow_2_252_3(u * v7));  // (uv³)(uv⁷)^(p-5)/8
+  const pow = pow_2_252_3(u * v7).pow_p_5_8;
+  let x = mod(u * v3 * pow);                  // (uv³)(uv⁷)^(p-5)/8
   const vx2 = mod(v * x * x);                 // vx²
   const root1 = x;                            // First root candidate
   const root2 = mod(x * SQRT_M1);             // Second root candidate
@@ -792,18 +793,28 @@ export async function verify(sig: SigType, msgHash: Hex, publicKey: PubKey): Pro
 Point.BASE._setWindowSize(8);
 
 // curve25519-related code
+// https://datatracker.ietf.org/doc/html/rfc7748
 
 // cswap from RFC7748
 function cswap(swap: bigint, x_2: bigint, x_3: bigint): [bigint, bigint] {
   const dummy = mod(swap * (x_2 - x_3));
   x_2 = mod(x_2 - dummy);
   x_3 = mod(x_3 + dummy);
-  return [ x_2, x_3 ]
+  return [x_2, x_3];
 }
 
-// x25519 from RFC7748
-function montgomeryLadder(scalar: bigint, u: bigint): bigint {
-  const k = scalar;
+// x25519 from 4
+/**
+ *
+ * @param pointU u coordinate (x) on Montgomery Curve 25519
+ * @param scalar by which the point would be multiplied
+ * @returns new Point on Montgomery curve
+ */
+function montgomeryLadder(pointU: bigint, scalar: bigint): bigint {
+  const { P, n } = CURVE;
+  const u = normalizeScalar(pointU, P);
+  const k = normalizeScalar(scalar, n);
+
   const _121665 = BigInt(121665);
   const x_1 = u;
   let x_2 = _1n;
@@ -843,17 +854,20 @@ function montgomeryLadder(scalar: bigint, u: bigint): bigint {
   sw = cswap(swap, z_2, z_3);
   z_2 = sw[0];
   z_3 = sw[1];
-  return mod(x_2 * powMod(z_2, CURVE.P - 2n, CURVE.P));
+  const { pow_p_5_8, b2 } = pow_2_252_3(z_2);
+  // x^(p-2) aka x^(2^255-21)
+  const xp2 = mod(pow2(pow_p_5_8, BigInt(3)) * b2);
+  return mod(x_2 * xp2);
 }
 
 export const curve25519 = {
   getPublicKey(privateKey: bigint) {
-    return montgomeryLadder(privateKey, 9n);
+    return montgomeryLadder(9n, privateKey);
   },
   getSharedSecret(privateKey: bigint, publicKey: bigint) {
-    return montgomeryLadder(privateKey, publicKey);
-  }
-}
+    return montgomeryLadder(publicKey, privateKey);
+  },
+};
 
 // Global symbol available in browsers only. Ensure we do not depend on @types/dom
 declare const self: Record<string, any> | undefined;

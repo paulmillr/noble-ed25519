@@ -108,6 +108,9 @@ run(async () => {
     // }
     ExtendedPoint.fromRistrettoBytes(encodingsOfSmallMultiples[2]).toRistrettoBytes();
   });
+  mark('x25519 getSharedSecret aka ecdh', 3000, () => {
+    ed.curve25519.getSharedSecret(123124235n, 13102128112478605087429008770554112377589817502765893410564362989657524873652n);
+  })
 
   logMem();
 });
