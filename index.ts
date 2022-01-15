@@ -635,6 +635,7 @@ function invert(number: bigint, modulo: bigint = CURVE.P): bigint {
   return mod(x, modulo);
 }
 
+// Takes a bunch of numbers, inverses all of them
 function invertBatch(nums: bigint[], modulo: bigint = CURVE.P): bigint[] {
   const len = nums.length;
   const scratch = new Array(len);
