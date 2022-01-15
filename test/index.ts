@@ -461,7 +461,7 @@ export function utf8ToBytes(str: string): Uint8Array {
 }
 
 describe('curve25519', () => {
-  it('getSharedSecret 1', () => {
+  it('scalarMult 1', () => {
     const X25519_VECTORS = [
       {
         k: 'a546e36bf0527c9d3b16154b82465edd62144c0ac1fc5a18506a2244ba449ac4',
@@ -477,10 +477,10 @@ describe('curve25519', () => {
     for (const { k, u, ku } of X25519_VECTORS) {
       const _k = Uint8Array.from(hexToBytes(k));
       const _u = Uint8Array.from(hexToBytes(u));
-      expect(bytesToHex(ed.curve25519.getSharedSecret(_k, _u))).toBe(ku);
+      expect(bytesToHex(ed.curve25519.scalarMult(_k, _u))).toBe(ku);
     }
   });
-  it('getPublicKey recursive', () => {
+  it('scalarMultBase recursive', () => {
     // https://datatracker.ietf.org/doc/html/rfc7748#section-5.2
     const VECTORS = [
       { iters: 1, res: '422c8e7a6227d7bca1350b3e2bb7279f7897b87bb6854b783c60e80311ae3079' },
@@ -492,21 +492,21 @@ describe('curve25519', () => {
       let u = k;
       for (let i = 0; i < iters; i++) {
         if (i > 0 && i % 100000 === 0) console.log('10k');
-        [k, u] = [ed.curve25519.getSharedSecret(k, u), k];
+        [k, u] = [ed.curve25519.scalarMult(k, u), k];
       }
       expect(bytesToHex(k)).toBe(res);
     }
   });
-  it('getSharedSecret 2', () => {
+  it('scalarMult 2', () => {
     const a_priv = hexToBytes('77076d0a7318a57d3c16c17251b26645df4c2f87ebc0992ab177fba51db92c2a');
     const a_pub = hexToBytes('8520f0098930a754748b7ddcb43ef75a0dbf3a0d26381af4eba4a98eaa9b4e6a');
     const b_priv = hexToBytes('5dab087e624a8a4b79e17f8b83800ee66f3bb1292618b6fd1c2f8b27ff88e0eb');
     const b_pub = hexToBytes('de9edb7d7b7dc1b4d35b61c2ece435373f8343c85b78674dadfc7e146f882b4f');
     const k = '4a5d9d5ba4ce2de1728e3bf480350f25e07e21c947d19e3376f09b3c1e161742';
 
-    expect(bytesToHex(ed.curve25519.getPublicKey(a_priv))).toBe(bytesToHex(a_pub));
-    expect(bytesToHex(ed.curve25519.getPublicKey(b_priv))).toBe(bytesToHex(b_pub));
-    expect(bytesToHex(ed.curve25519.getSharedSecret(a_priv, b_pub))).toBe(k);
-    expect(bytesToHex(ed.curve25519.getSharedSecret(b_priv, a_pub))).toBe(k);
+    expect(bytesToHex(ed.curve25519.scalarMultBase(a_priv))).toBe(bytesToHex(a_pub));
+    expect(bytesToHex(ed.curve25519.scalarMultBase(b_priv))).toBe(bytesToHex(b_pub));
+    expect(bytesToHex(ed.curve25519.scalarMult(a_priv, b_pub))).toBe(k);
+    expect(bytesToHex(ed.curve25519.scalarMult(b_priv, a_pub))).toBe(k);
   });
 });

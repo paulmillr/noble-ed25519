@@ -126,8 +126,8 @@ Conforms to [RFC7748](https://datatracker.ietf.org/doc/html/rfc7748).
 ##### Curve25519
 
 ```js
-const pub = ed25519.curve25519.getPublicKey(privateKey);
-const shared = ed25519.curve25519.getSharedSecret(privateKeyA, publicKeyB);
+const pub = ed25519.curve25519.scalarMultBase(privateKey);
+const shared = ed25519.curve25519.scalarMult(privateKeyA, publicKeyB);
 ```
 
 The library includes namespace `curve25519` that you could use to calculate
@@ -257,6 +257,8 @@ verifyBatch x 842 ops/sec @ 1ms/op
 Point.fromHex decompression x 11,332 ops/sec @ 88μs/op
 ristretto255#fromHash x 5,428 ops/sec @ 184μs/op
 ristretto255 round x 5,467 ops/sec @ 182μs/op
+getSharedSecret x 778 ops/sec @ 1285μs/op
+curve25519.scalarMultBase x 1,010 ops/sec @ 989μs/op
 ```
 
 Compare to alternative implementations:

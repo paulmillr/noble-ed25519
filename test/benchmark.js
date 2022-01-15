@@ -101,8 +101,8 @@ run(async () => {
   await mark('ristretto255 round', 2000, () => {
     ExtendedPoint.fromRistrettoBytes(encodingsOfSmallMultiples[2]).toRistrettoBytes();
   });
-  mark('curve25519.getSharedSecret', 3000, () => {
-    ed.curve25519.getPublicKey('aeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef');
+  mark('curve25519.scalarMultBase', 3000, () => {
+    ed.curve25519.scalarMultBase('aeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef');
   })
   await mark('ed25519.getSharedSecret', 3000, async () => {
     await ed.getSharedSecret(0x12345, 'aeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef');

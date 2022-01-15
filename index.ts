@@ -1,8 +1,10 @@
 /*! noble-ed25519 - MIT License (c) Paul Miller (paulmillr.com) */
 // Thanks DJB https://ed25519.cr.yp.to
-// https://tools.ietf.org/html/rfc8032, https://en.wikipedia.org/wiki/EdDSA
-// Includes Ristretto https://ristretto.group
+// https://tools.ietf.org/html/rfc7748 https://tools.ietf.org/html/rfc8032
+// https://ristretto.group https://en.wikipedia.org/wiki/EdDSA
 
+// Uses built-in crypto module from node.js to generate randomness / hmac-sha256.
+// In browser the line is automatically removed during build time: uses crypto.subtle instead.
 import nodeCrypto from 'crypto';
 
 // Be friendly to bad ECMAScript parsers by not using bigint literals like 123n
@@ -11,7 +13,12 @@ const _1n = BigInt(1);
 const _2n = BigInt(2);
 const _255n = BigInt(255);
 
-// Curve formula is −x² + y² = 1 − (121665/121666) * x² * y²
+/**
+ * ed25519 is Twisted Edwards curve with equation of
+ * ```
+ * −x² + y² = 1 − (121665/121666) * x² * y²
+ * ```
+ */
 const CURVE = {
   // Params: a, b
   a: BigInt(-1),
@@ -62,9 +69,11 @@ const D_MINUS_ONE_SQ = BigInt(
   '40440834346308536858101042469323190826248399146238708352240133220865137265952'
 );
 
-// Default Point works in default aka affine coordinates: (x, y)
-// Extended Point works in extended coordinates: (x, y, z, t) ∋ (x=x/z, y=y/z, t=xy)
-// https://en.wikipedia.org/wiki/Twisted_Edwards_curve#Extended_coordinates
+/**
+ * Extended Point works in extended coordinates: (x, y, z, t) ∋ (x=x/z, y=y/z, t=xy).
+ * Default Point works in affine coordinates: (x, y)
+ * https://en.wikipedia.org/wiki/Twisted_Edwards_curve#Extended_coordinates
+ */
 class ExtendedPoint {
   constructor(readonly x: bigint, readonly y: bigint, readonly z: bigint, readonly t: bigint) {}
 
@@ -360,7 +369,9 @@ class ExtendedPoint {
 // Stores precomputed values for points.
 const pointPrecomputes = new WeakMap<Point, ExtendedPoint[]>();
 
-// Default Point works in default aka affine coordinates: (x, y)
+/**
+ * Default Point works in affine coordinates: (x, y)
+ */
 class Point {
   // Base point aka generator
   // public_key = Point.BASE * private_key
@@ -480,6 +491,9 @@ class Point {
   }
 }
 
+/**
+ * EDDSA signature.
+ */
 class Signature {
   readonly s: bigint;
   constructor(readonly r: Point, s: bigint) {
@@ -782,14 +796,23 @@ async function getExtendedPublicKey(key: PrivKey) {
   return { head, prefix, scalar, point, pubBytes };
 }
 
-// RFC8032 5.1.5
+//
+/**
+ * Calculates ed25519 public key.
+ * 1. private key is hashed with sha512, then first 32 bytes are taken from the hash
+ * 2. 3 least significant bits of the first byte are cleared
+ * RFC8032 5.1.5
+ */
 export async function getPublicKey(privateKey: PrivKey): Promise<Uint8Array> {
   return (await getExtendedPublicKey(privateKey)).pubBytes;
 }
 
-// RFC8032 5.1.6
-export async function sign(msgHash: Hex, privateKey: Hex): Promise<Uint8Array> {
-  const msg = ensureBytes(msgHash);
+/**
+ * Signs message with privateKey.
+ * RFC8032 5.1.6
+ */
+export async function sign(message: Hex, privateKey: Hex): Promise<Uint8Array> {
+  const msg = ensureBytes(message);
   const { prefix, scalar: p, pubBytes } = await getExtendedPublicKey(privateKey);
   const r = await sha512ModnLE(prefix, msg); // r = hash(prefix + msg)
   const R = Point.BASE.multiply(r); // R = rG
@@ -798,13 +821,17 @@ export async function sign(msgHash: Hex, privateKey: Hex): Promise<Uint8Array> {
   return new Signature(R, S).toRawBytes();
 }
 
-// RFC8032 5.1.7
-export async function verify(sig: SigType, msgHash: Hex, publicKey: PubKey): Promise<boolean> {
-  msgHash = ensureBytes(msgHash);
+/**
+ * Verifies ed25519 signature against message and public key.
+ * An extended group equation is checked.
+ * RFC8032 5.1.7
+ */
+export async function verify(sig: SigType, message: Hex, publicKey: PubKey): Promise<boolean> {
+  message = ensureBytes(message);
   if (!(publicKey instanceof Point)) publicKey = Point.fromHex(publicKey);
   if (!(sig instanceof Signature)) sig = Signature.fromHex(sig);
   const SB = ExtendedPoint.BASE.multiply(sig.s);
-  const k = await sha512ModnLE(sig.r.toRawBytes(), publicKey.toRawBytes(), msgHash);
+  const k = await sha512ModnLE(sig.r.toRawBytes(), publicKey.toRawBytes(), message);
   const kA = ExtendedPoint.fromAffine(publicKey).multiplyUnsafe(k);
   const RkA = ExtendedPoint.fromAffine(sig.r).add(kA);
   // [8][S]B = [8]R + [8][k]A'
@@ -812,7 +839,7 @@ export async function verify(sig: SigType, msgHash: Hex, publicKey: PubKey): Pro
 }
 
 /**
- * Non-standard: calculates diffie-hellman shared secret from ed25519 private & public keys.
+ * Calculates X25519 DH shared secret from ed25519 private & public keys.
  * @param privateKey ed25519 private key
  * @param publicKey ed25519 public key
  * @returns X25519 shared key
@@ -827,7 +854,7 @@ export async function getSharedSecret(privateKey: PrivKey, publicKey: Hex): Prom
 Point.BASE._setWindowSize(8);
 
 // curve25519-related code
-// v^2 = u^3 + A*u^2 + u
+// Curve equation: v^2 = u^3 + A*u^2 + u
 // https://datatracker.ietf.org/doc/html/rfc7748
 
 // cswap from RFC7748
@@ -848,8 +875,9 @@ function cswap(swap: bigint, x_2: bigint, x_3: bigint): [bigint, bigint] {
 function montgomeryLadder(pointU: bigint, scalar: bigint): bigint {
   const { P, n } = CURVE;
   const u = normalizeScalar(pointU, P);
-  // const k = normalizeScalar(scalar, n);
-  const k = scalar;
+  // Section 5: Implementations MUST accept non-canonical values and process them as
+  // if they had been reduced modulo the field prime.
+  const k = normalizeScalar(scalar, P);
   // The constant a24 is (486662 - 2) / 4 = 121665 for curve25519/X25519
   const a24 = BigInt(121665);
   const x_1 = u;
@@ -896,6 +924,10 @@ function montgomeryLadder(pointU: bigint, scalar: bigint): bigint {
   return mod(x_2 * xp2);
 }
 
+function encodeUCoordinate(u: bigint): Uint8Array {
+  return numberToBytesLEPadded(mod(u, CURVE.P), 32);
+}
+
 function montgomeryLadderChecked(u: bigint, p: bigint): Uint8Array {
   const pu = montgomeryLadder(u, p);
   if (pu === 0n) throw new Error('Invalid private or public key received');
@@ -911,24 +943,19 @@ function decodeUCoordinate(uEnc: Hex): bigint {
   return bytesToNumberLE(_s);
 }
 
-function encodeUCoordinate(u: bigint): Uint8Array {
-  return numberToBytesLEPadded(mod(u, CURVE.P), 32);
-}
-
-// const u = 9n; // u-coordinate of curve25519 base point
-// const p = decodeScalar25519(privateKey);
-// return encodeUCoordinate(montgomeryLadder(u, p));
 export const curve25519 = {
   BASE_POINT_U: '0900000000000000000000000000000000000000000000000000000000000000',
 
-  getPublicKey(privateKey: Hex): Uint8Array {
-    return curve25519.getSharedSecret(privateKey, curve25519.BASE_POINT_U);
-  },
-
-  getSharedSecret(privateKey: Hex, publicKey: Hex): Uint8Array {
+  // crypto_scalarmult aka getSharedSecret
+  scalarMult(privateKey: Hex, publicKey: Hex): Uint8Array {
     const u = decodeUCoordinate(publicKey);
     const p = decodeScalar25519(privateKey);
     return montgomeryLadderChecked(u, p);
+  },
+
+  // crypto_scalarmult_base aka getPublicKey
+  scalarMultBase(privateKey: Hex): Uint8Array {
+    return curve25519.scalarMult(privateKey, curve25519.BASE_POINT_U);
   },
 };
 
