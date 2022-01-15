@@ -3,7 +3,7 @@
 Fastest JS implementation of [ed25519](https://en.wikipedia.org/wiki/EdDSA),
 an elliptic curve that could be used for EDDSA signature scheme and X25519 ECDH key agreement.
 
-Conforms to [RFC8032](https://tools.ietf.org/html/rfc8032) and [RFC7748](https://datatracker.ietf.org/doc/html/rfc7748). Includes support for [ristretto255](https://ristretto.group): a technique for constructing prime order elliptic curve groups with non-malleable encodings.
+Conforms to [RFC7748](https://datatracker.ietf.org/doc/html/rfc7748) and [RFC8032](https://tools.ietf.org/html/rfc8032). Includes support for [ristretto255](https://ristretto.group): a technique for constructing prime order elliptic curve groups with non-malleable encodings.
 
 Check out [the online demo](https://paulmillr.com/ecc).
 
@@ -69,7 +69,7 @@ you will need [import map](https://deno.land/manual/linking_to_external_code/imp
 - [`getPublicKey(privateKey)`](#getpublickeyprivatekey)
 - [`sign(hash, privateKey)`](#signhash-privatekey)
 - [`verify(signature, hash, publicKey)`](#verifysignature-hash-publickey)
-- [`getSharedSecret(privateKey, publicKey)`](#getsharedsecret-privatekey-publickey)
+- [`getSharedSecret(privateKey, publicKey)`](#getsharedsecretprivatekey-publickey)
 - [Helpers & Point](#helpers--point)
 
 ##### `getPublicKey(privateKey)`
