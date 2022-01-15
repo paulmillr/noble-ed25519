@@ -70,8 +70,8 @@ you will need [import map](https://deno.land/manual/linking_to_external_code/imp
 - [`sign(hash, privateKey)`](#signhash-privatekey)
 - [`verify(signature, hash, publicKey)`](#verifysignature-hash-publickey)
 - [`getSharedSecret(privateKey, publicKey)`](#getsharedsecretprivatekey-publickey)
-- [curve25519](#curve25519)
-- [ristretto255](#ristretto255)
+- [Curve25519](#curve25519)
+- [Ristretto255](#ristretto255)
 - [Helpers & Point](#helpers--point)
 
 ##### `getPublicKey(privateKey)`
