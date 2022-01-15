@@ -41,7 +41,7 @@ type SigType = Hex | Signature;
 const SQRT_M1 = BigInt(
   '19681161376707505956807079304988542015446066515923890162744021073123829784752'
 );
-// √d
+// √d aka sqrt(-486664)
 const SQRT_D = BigInt(
   '6853475219497561581579357271197624642482790079785650197046958215289687604742'
 );
@@ -419,7 +419,7 @@ class Point {
   }
 
   static async fromPrivateKey(privateKey: PrivKey) {
-    return (await calcKeys(privateKey)).P;
+    return (await getExtendedPublicKey(privateKey)).point;
   }
 
   // There can always be only two x values (x, -x) for any y
@@ -436,19 +436,22 @@ class Point {
     return bytesToHex(this.toRawBytes());
   }
 
-  // Converts to Montgomery; aka x coordinate of curve25519.
-  // We don't have fromX25519, because we don't know sign!
+  /**
+   * Converts to Montgomery; aka x coordinate of curve25519.
+   * We don't have fromX25519, because we don't know sign.
+   *
+   * ```
+   * u, v: curve25519 coordinates
+   * x, y: ed25519 coordinates
+   * (u, v) = ((1+y)/(1-y), sqrt(-486664)*u/x)
+   * (x, y) = (sqrt(-486664)*u/v, (u-1)/(u+1))
+   * ```
+   * https://blog.filippo.io/using-ed25519-keys-for-encryption
+   * @returns u coordinate of curve25519 point
+   */
   toX25519() {
-    // curve25519 is birationally equivalent to ed25519
-    // u, v: curve25519 coordinates
-    // x, y: ed25519 coordinates
-    // (u, v) = ((1+y)/(1-y), sqrt(-486664)*u/x)
-    // (x, y) = (sqrt(-486664)*u/v, (u-1)/(u+1))
-    // See https://blog.filippo.io/using-ed25519-keys-for-encryption
-    const { x, y } = this;
-    const u = mod((_1n + y) * invert(_1n - y));
-    // const v = SQRT_D * u * invert(x);
-    return u;
+    const { y } = this;
+    return mod((_1n + y) * invert(_1n - y));
   }
 
   equals(other: Point): boolean {
@@ -467,7 +470,11 @@ class Point {
     return this.add(other.negate());
   }
 
-  // Constant time multiplication.
+  /**
+   * Constant time multiplication.
+   * @param scalar Big-Endian number
+   * @returns new point
+   */
   multiply(scalar: number | bigint): Point {
     return ExtendedPoint.fromAffine(this).multiply(scalar, this).toAffine();
   }
@@ -484,7 +491,7 @@ class Signature {
     const bytes = ensureBytes(hex);
     assertLen(64, bytes);
     const r = Point.fromHex(bytes.slice(0, 32));
-    const s = bytesToNumberLE(bytes.slice(32));
+    const s = bytesToNumberLE(bytes.slice(32, 64));
     return new Signature(r, s);
   }
 
@@ -560,6 +567,8 @@ function edIsNegative(num: bigint) {
 
 // Little Endian
 function bytesToNumberLE(uint8a: Uint8Array): bigint {
+  if (!(uint8a instanceof Uint8Array))
+    throw new Error(`bytesToNumberLE: expected Uint8Array, got ${uint8a}`);
   let value = _0n;
   const _8n = BigInt(8);
   for (let i = 0; i < uint8a.length; i++) {
@@ -741,34 +750,47 @@ function normalizePrivateKey(key: PrivKey): Uint8Array {
   return bytes;
 }
 
+function decodeScalar25519(n: Hex): bigint {
+  n = ensureBytes(n);
+  assertLen(32, n);
+  const _n = n.slice();
+  // Section 5: For X25519, in order to decode 32 random bytes as an integer scalar,
+  // set the three least significant bits of the first byte
+  _n[0] &= 248; // 0b1111_1000
+  // and the most significant bit of the last to zero,
+  _n[31] &= 127; // 0b0111_1111
+  // set the second most significant bit of the last byte to 1
+  _n[31] |= 64; // 0b0100_0000
+  // and, finally, decode as little-endian.
+  // This means that the resulting integer is of the form 2 ^ 254 plus eight times a value between 0 and 2 ^ 251 - 1(inclusive).
+  return bytesToNumberLE(_n);
+}
+
 // Private convenience method
 // RFC8032 5.1.5
-async function calcKeys(key: PrivKey) {
+async function getExtendedPublicKey(key: PrivKey) {
   // hash to produce 64 bytes
   const hashed = await utils.sha512(normalizePrivateKey(key));
   // Takes first 32 bytes of 64b uniformingly random input,
   // clears 3 bits of it to produce a random field element.
   const head = hashed.slice(0, 32);
-  head[0] &= 248;
-  head[31] &= 127;
-  head[31] |= 64;
   // Second 32 bytes is called key prefix (5.1.6)
-  const prefix = hashed.slice(32);
-  const p = mod(bytesToNumberLE(head), CURVE.n);
-  const P = Point.BASE.multiply(p);
-  const pubBytes = P.toRawBytes();
-  return { prefix, p, P, pubBytes };
+  const prefix = hashed.slice(32, 64);
+  const scalar = mod(decodeScalar25519(head), CURVE.n);
+  const point = Point.BASE.multiply(scalar);
+  const pubBytes = point.toRawBytes();
+  return { head, prefix, scalar, point, pubBytes };
 }
 
 // RFC8032 5.1.5
 export async function getPublicKey(privateKey: PrivKey): Promise<Uint8Array> {
-  return (await calcKeys(privateKey)).pubBytes;
+  return (await getExtendedPublicKey(privateKey)).pubBytes;
 }
 
 // RFC8032 5.1.6
 export async function sign(msgHash: Hex, privateKey: Hex): Promise<Uint8Array> {
   const msg = ensureBytes(msgHash);
-  const { prefix, p, pubBytes } = await calcKeys(privateKey);
+  const { prefix, scalar: p, pubBytes } = await getExtendedPublicKey(privateKey);
   const r = await sha512ModnLE(prefix, msg); // r = hash(prefix + msg)
   const R = Point.BASE.multiply(r); // R = rG
   const k = await sha512ModnLE(R.toRawBytes(), pubBytes, msg); // k = hash(R + P + msg)
@@ -789,10 +811,23 @@ export async function verify(sig: SigType, msgHash: Hex, publicKey: PubKey): Pro
   return RkA.subtract(SB).multiplyUnsafe(CURVE.h).equals(ExtendedPoint.ZERO);
 }
 
+/**
+ * Non-standard: calculates diffie-hellman shared secret from ed25519 private & public keys.
+ * @param privateKey ed25519 private key
+ * @param publicKey ed25519 public key
+ * @returns X25519 shared key
+ */
+export async function getSharedSecret(privateKey: PrivKey, publicKey: Hex): Promise<Uint8Array> {
+  const { scalar: p } = await getExtendedPublicKey(privateKey);
+  const u = Point.fromHex(publicKey).toX25519();
+  return montgomeryLadderChecked(p, u);
+}
+
 // Enable precomputes. Slows down first publicKey computation by 20ms.
 Point.BASE._setWindowSize(8);
 
 // curve25519-related code
+// v^2 = u^3 + A*u^2 + u
 // https://datatracker.ietf.org/doc/html/rfc7748
 
 // cswap from RFC7748
@@ -813,9 +848,10 @@ function cswap(swap: bigint, x_2: bigint, x_3: bigint): [bigint, bigint] {
 function montgomeryLadder(pointU: bigint, scalar: bigint): bigint {
   const { P, n } = CURVE;
   const u = normalizeScalar(pointU, P);
-  const k = normalizeScalar(scalar, n);
-
-  const _121665 = BigInt(121665);
+  // const k = normalizeScalar(scalar, n);
+  const k = scalar;
+  // The constant a24 is (486662 - 2) / 4 = 121665 for curve25519/X25519
+  const a24 = BigInt(121665);
   const x_1 = u;
   let x_2 = _1n;
   let z_2 = _0n;
@@ -846,7 +882,7 @@ function montgomeryLadder(pointU: bigint, scalar: bigint): bigint {
     x_3 = mod(mod(DA + CB) ** 2n);
     z_3 = mod(x_1 * mod(DA - CB) ** 2n);
     x_2 = mod(AA * BB);
-    z_2 = mod(E * (AA + mod(_121665 * E)));
+    z_2 = mod(E * (AA + mod(a24 * E)));
   }
   sw = cswap(swap, x_2, x_3);
   x_2 = sw[0];
@@ -860,12 +896,39 @@ function montgomeryLadder(pointU: bigint, scalar: bigint): bigint {
   return mod(x_2 * xp2);
 }
 
+function montgomeryLadderChecked(u: bigint, p: bigint): Uint8Array {
+  const pu = montgomeryLadder(u, p);
+  if (pu === 0n) throw new Error('Invalid private or public key received');
+  return encodeUCoordinate(pu);
+}
+
+function decodeUCoordinate(uEnc: Hex): bigint {
+  const _s = ensureBytes(uEnc);
+  assertLen(32, _s);
+  // Section 5: When receiving such an array, implementations of X25519
+  // MUST mask the most significant bit in the final byte.
+  _s[31] &= 127; // 0b0111_1111
+  return bytesToNumberLE(_s);
+}
+
+function encodeUCoordinate(u: bigint): Uint8Array {
+  return numberToBytesLEPadded(mod(u, CURVE.P), 32);
+}
+
+// const u = 9n; // u-coordinate of curve25519 base point
+// const p = decodeScalar25519(privateKey);
+// return encodeUCoordinate(montgomeryLadder(u, p));
 export const curve25519 = {
-  getPublicKey(privateKey: bigint) {
-    return montgomeryLadder(9n, privateKey);
+  BASE_POINT_U: '0900000000000000000000000000000000000000000000000000000000000000',
+
+  getPublicKey(privateKey: Hex): Uint8Array {
+    return curve25519.getSharedSecret(privateKey, curve25519.BASE_POINT_U);
   },
-  getSharedSecret(privateKey: bigint, publicKey: bigint) {
-    return montgomeryLadder(publicKey, privateKey);
+
+  getSharedSecret(privateKey: Hex, publicKey: Hex): Uint8Array {
+    const u = decodeUCoordinate(publicKey);
+    const p = decodeScalar25519(privateKey);
+    return montgomeryLadderChecked(u, p);
   },
 };
 
@@ -891,6 +954,7 @@ export const utils = {
     'c7176a703d4dd84fba3c0b760d10670f2a2053fa2c39ccc64ec7fd7792ac03fa',
   ],
   bytesToHex,
+  getExtendedPublicKey,
   randomBytes: (bytesLength: number = 32): Uint8Array => {
     if (crypto.web) {
       return crypto.web.getRandomValues(new Uint8Array(bytesLength));

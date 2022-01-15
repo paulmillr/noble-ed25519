@@ -99,17 +99,13 @@ run(async () => {
     ExtendedPoint.fromRistrettoHash(hash);
   });
   await mark('ristretto255 round', 2000, () => {
-    // Not sure why those were used? TODO: investigate
-    // let B = ExtendedPoint.BASE;
-    // let P = ExtendedPoint.ZERO;
-    // for (const encoded of encodingsOfSmallMultiples.slice(2, 4)) {
-    //   ExtendedPoint.fromRistrettoBytes(encoded).toRistrettoBytes();
-    //   // P = P.add(B);
-    // }
     ExtendedPoint.fromRistrettoBytes(encodingsOfSmallMultiples[2]).toRistrettoBytes();
   });
-  mark('x25519 getSharedSecret aka ecdh', 3000, () => {
-    ed.curve25519.getSharedSecret(123124235n, 13102128112478605087429008770554112377589817502765893410564362989657524873652n);
+  mark('curve25519.getSharedSecret', 3000, () => {
+    ed.curve25519.getPublicKey('aeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef');
+  })
+  await mark('ed25519.getSharedSecret', 3000, async () => {
+    await ed.getSharedSecret(0x12345, 'aeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef');
   })
 
   logMem();
