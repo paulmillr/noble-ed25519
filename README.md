@@ -159,7 +159,7 @@ In particular, this allows an existing Curve25519 library to implement a prime-o
 
 `utils.randomPrivateKey()`
 
-Returns cryptographically random `Uint8Array` that could be used as Private Key.
+Returns cryptographically secure random `Uint8Array` that could be used as Private Key.
 
 `utils.precompute(W = 8, point = Point.BASE)`
 
