@@ -1,4 +1,4 @@
-/*! noble-ed25519 - MIT License (c) Paul Miller (paulmillr.com) */
+/*! noble-ed25519 - MIT License (c) 2019 Paul Miller (paulmillr.com) */
 // Thanks DJB https://ed25519.cr.yp.to
 // https://tools.ietf.org/html/rfc7748 https://tools.ietf.org/html/rfc8032
 // https://ristretto.group https://en.wikipedia.org/wiki/EdDSA

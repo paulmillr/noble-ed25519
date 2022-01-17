@@ -283,4 +283,4 @@ sodium-native#sign x 58,661 ops/sec @ 17μs/op
 
 ## License
 
-MIT (c) Paul Miller [(https://paulmillr.com)](https://paulmillr.com), see LICENSE file.
+MIT (c) 2019 Paul Miller [(https://paulmillr.com)](https://paulmillr.com), see LICENSE file.
