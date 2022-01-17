@@ -199,7 +199,6 @@ ed25519.Point.BASE // new ed25519.Point(Gx, Gy) where
 // Elliptic curve point in Affine (x, y) coordinates.
 ed25519.Point {
   constructor(x: bigint, y: bigint);
-  static fromY(y: bigint);
   static fromHex(hash: string);
   static fromPrivateKey(privateKey: string | Uint8Array);
   toX25519(): bigint; // Converts to Curve25519 u coordinate
