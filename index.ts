@@ -601,17 +601,7 @@ function mod(a: bigint, b: bigint = CURVE.P) {
   return res >= _0n ? res : b + res;
 }
 
-function powMod(a: bigint, power: bigint, modulo: bigint): bigint {
-  let res = 1n;
-  while (power > 0n) {
-    if (power & 1n) res = (res * a) % modulo;
-    a = (a * a) % modulo;
-    power >>= 1n;
-  }
-  return res;
-}
-
-// Note: this egcd-based invert is faster than powMod-based one.
+// Note: this egcd-based invert is 50% faster than powMod-based one.
 // Inverses number over modulo
 function invert(number: bigint, modulo: bigint = CURVE.P): bigint {
   if (number === _0n || modulo <= _0n) {

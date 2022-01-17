@@ -51,7 +51,8 @@
     "signature",
     "ecc",
     "eddsa",
-    "ecdsa",
+    "RFC7748",
+    "RFC8032",
     "cryptography",
     "security"
   ],
