@@ -70,5 +70,11 @@
     },
     "useStderr": true,
     "bail": 2
-  }
+  },
+  "funding": [
+    {
+      "type": "individual",
+      "url": "https://paulmillr.com/funding/"
+    }
+  ]
 }
