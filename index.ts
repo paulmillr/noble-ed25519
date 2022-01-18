@@ -926,12 +926,12 @@ function montgomeryLadderChecked(u: bigint, p: bigint): Uint8Array {
 }
 
 function decodeUCoordinate(uEnc: Hex): bigint {
-  const _s = ensureBytes(uEnc);
-  assertLen(32, _s);
+  const u = ensureBytes(uEnc);
+  assertLen(32, u);
   // Section 5: When receiving such an array, implementations of X25519
   // MUST mask the most significant bit in the final byte.
-  _s[31] &= 127; // 0b0111_1111
-  return bytesToNumberLE(_s);
+  u[31] &= 127; // 0b0111_1111
+  return bytesToNumberLE(u);
 }
 
 export const curve25519 = {
