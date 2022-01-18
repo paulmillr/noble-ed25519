@@ -733,7 +733,9 @@ function equalBytes(b1: Uint8Array, b2: Uint8Array) {
 }
 
 function ensureBytes(hash: Hex): Uint8Array {
-  return hash instanceof Uint8Array ? hash : hexToBytes(hash);
+  // Uint8Array.from() instead of hash.slice() because node.js Buffer
+  // is instance of Uint8Array, and its slice() creates **mutable** copy
+  return hash instanceof Uint8Array ? Uint8Array.from(hash) : hexToBytes(hash);
 }
 
 function assertLen(len: number, bytes: Uint8Array): void {
@@ -758,17 +760,16 @@ function normalizePrivateKey(key: PrivKey): Uint8Array {
 function decodeScalar25519(n: Hex): bigint {
   n = ensureBytes(n);
   assertLen(32, n);
-  const _n = n.slice();
   // Section 5: For X25519, in order to decode 32 random bytes as an integer scalar,
   // set the three least significant bits of the first byte
-  _n[0] &= 248; // 0b1111_1000
+  n[0] &= 248; // 0b1111_1000
   // and the most significant bit of the last to zero,
-  _n[31] &= 127; // 0b0111_1111
+  n[31] &= 127; // 0b0111_1111
   // set the second most significant bit of the last byte to 1
-  _n[31] |= 64; // 0b0100_0000
+  n[31] |= 64; // 0b0100_0000
   // and, finally, decode as little-endian.
   // This means that the resulting integer is of the form 2 ^ 254 plus eight times a value between 0 and 2 ^ 251 - 1(inclusive).
-  return bytesToNumberLE(_n);
+  return bytesToNumberLE(n);
 }
 
 // Private convenience method

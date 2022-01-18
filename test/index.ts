@@ -510,3 +510,26 @@ describe('curve25519', () => {
     expect(bytesToHex(ed.curve25519.scalarMult(b_priv, a_pub))).toBe(k);
   });
 });
+
+describe('input immutability', () => {
+  it('sign/verify are immutable', async () => {
+    const privateKey = ed.utils.randomPrivateKey()
+    const publicKey = await ed.getPublicKey(privateKey)
+
+    for (let i = 0; i < 100; i++) {
+      let payload = ed.utils.randomBytes(100);
+      let signature = await ed.sign(payload, privateKey)
+      if (!(await ed.verify(signature, payload, publicKey))) {
+        throw new Error('Signature verification failed')
+      }
+      const signatureCopy = Buffer.alloc(signature.byteLength)
+      signatureCopy.set(signature, 0) // <-- breaks
+      payload = payload.slice();
+      signature = signature.slice();
+
+      if (!(await ed.verify(signatureCopy, payload, publicKey))) {
+        throw new Error('Copied signature verification failed')
+      }
+    }
+  })
+})
