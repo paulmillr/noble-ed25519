@@ -879,7 +879,7 @@ function montgomeryLadder(pointU: bigint, scalar: bigint): bigint {
   let swap = _0n;
   let sw: [bigint, bigint];
   for (let t = BigInt(255 - 1); t >= _0n; t--) {
-    const k_t = (k >> t) & 1n;
+    const k_t = (k >> t) & _1n;
     swap ^= k_t;
     sw = cswap(swap, x_2, x_3);
     x_2 = sw[0];
@@ -898,8 +898,8 @@ function montgomeryLadder(pointU: bigint, scalar: bigint): bigint {
     const D = mod(x_3 - z_3);
     const DA = mod(D * A);
     const CB = mod(C * B);
-    x_3 = mod(mod(DA + CB) ** 2n);
-    z_3 = mod(x_1 * mod(DA - CB) ** 2n);
+    x_3 = mod(mod(DA + CB) ** _2n);
+    z_3 = mod(x_1 * mod(DA - CB) ** _2n);
     x_2 = mod(AA * BB);
     z_2 = mod(E * (AA + mod(a24 * E)));
   }
@@ -921,7 +921,7 @@ function encodeUCoordinate(u: bigint): Uint8Array {
 
 function montgomeryLadderChecked(u: bigint, p: bigint): Uint8Array {
   const pu = montgomeryLadder(u, p);
-  if (pu === 0n) throw new Error('Invalid private or public key received');
+  if (pu === _0n) throw new Error('Invalid private or public key received');
   return encodeUCoordinate(pu);
 }
 
