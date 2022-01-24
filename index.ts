@@ -523,8 +523,15 @@ class Signature {
 
 export { ExtendedPoint, Point, Signature };
 
+// We can't do `instanceof Uint8Array` because it's unreliable between Web Workers etc
+function isUint8a(bytes: Uint8Array | unknown): bytes is Uint8Array {
+  // Caching fn and tag is 1% faster. We don't do it.
+  return bytes != null && Object.prototype.toString.call(bytes) === '[object Uint8Array]';
+}
+
+// Concatenates several Uint8Arrays into one.
 function concatBytes(...arrays: Uint8Array[]): Uint8Array {
-  if (!arrays.every((a) => a instanceof Uint8Array)) throw new Error('Expected Uint8Array list');
+  if (!arrays.every(isUint8a)) throw new Error('Expected Uint8Array list');
   if (arrays.length === 1) return arrays[0];
   const length = arrays.reduce((a, arr) => a + arr.length, 0);
   const result = new Uint8Array(length);
@@ -581,8 +588,7 @@ function edIsNegative(num: bigint) {
 
 // Little Endian
 function bytesToNumberLE(uint8a: Uint8Array): bigint {
-  if (!(uint8a instanceof Uint8Array))
-    throw new Error(`bytesToNumberLE: expected Uint8Array, got ${uint8a}`);
+  if (!isUint8a(uint8a)) throw new Error(`bytesToNumberLE: expected Uint8Array, got ${uint8a}`);
   let value = _0n;
   const _8n = BigInt(8);
   for (let i = 0; i < uint8a.length; i++) {
@@ -735,7 +741,7 @@ function equalBytes(b1: Uint8Array, b2: Uint8Array) {
 function ensureBytes(hash: Hex): Uint8Array {
   // Uint8Array.from() instead of hash.slice() because node.js Buffer
   // is instance of Uint8Array, and its slice() creates **mutable** copy
-  return hash instanceof Uint8Array ? Uint8Array.from(hash) : hexToBytes(hash);
+  return isUint8a(hash) ? Uint8Array.from(hash) : hexToBytes(hash);
 }
 
 function assertLen(len: number, bytes: Uint8Array): void {
