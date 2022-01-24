@@ -974,6 +974,7 @@ export const utils = {
   ],
   bytesToHex,
   getExtendedPublicKey,
+  mod,
   randomBytes: (bytesLength: number = 32): Uint8Array => {
     if (crypto.web) {
       return crypto.web.getRandomValues(new Uint8Array(bytesLength));
