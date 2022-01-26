@@ -103,8 +103,7 @@ class ExtendedPoint {
   // The hash-to-group operation applies Elligator twice and adds the results.
   // https://ristretto.group/formulas/elligator.html
   static fromRistrettoHash(hash: Uint8Array): ExtendedPoint {
-    hash = ensureBytes(hash);
-    assertLen(64, hash);
+    hash = ensureBytes(hash, 64);
     const r1 = bytes255ToNumberLE(hash.slice(0, 32));
     const R1 = this.calcElligatorRistrettoMap(r1);
     const r2 = bytes255ToNumberLE(hash.slice(32, 64));
@@ -136,15 +135,14 @@ class ExtendedPoint {
 
   // Ristretto: Decoding to Extended Coordinates
   // https://ristretto.group/formulas/decoding.html
-  static fromRistrettoBytes(bytes: Hex): ExtendedPoint {
-    bytes = ensureBytes(bytes);
-    assertLen(32, bytes);
+  static fromRistrettoBytes(hex: Hex): ExtendedPoint {
+    hex = ensureBytes(hex, 32);
     const { a, d } = CURVE;
     const emsg = 'ExtendedPoint.fromRistrettoBytes: Cannot convert bytes to Ristretto Point';
-    const s = bytes255ToNumberLE(bytes);
+    const s = bytes255ToNumberLE(hex);
     // 1. Check that s_bytes is the canonical encoding of a field element, or else abort.
     // 3. Check that s is non-negative, or else abort
-    if (!equalBytes(numberToBytesLEPadded(s, 32), bytes) || edIsNegative(s)) throw new Error(emsg);
+    if (!equalBytes(numberToBytesLEPadded(s, 32), hex) || edIsNegative(s)) throw new Error(emsg);
     const s2 = mod(s * s);
     const u1 = mod(_1n + a * s2); // 4 (a is -1)
     const u2 = mod(_1n - a * s2); // 5
@@ -396,15 +394,14 @@ class Point {
   // Uses algo from RFC8032 5.1.3.
   static fromHex(hex: Hex) {
     const { d, P } = CURVE;
-    const bytes = ensureBytes(hex);
-    assertLen(32, bytes);
+    hex = ensureBytes(hex, 32);
     // 1.  First, interpret the string as an integer in little-endian
     // representation. Bit 255 of this number is the least significant
     // bit of the x-coordinate and denote this value x_0.  The
     // y-coordinate is recovered simply by clearing this bit.  If the
     // resulting value is >= p, decoding fails.
-    const normed = bytes.slice();
-    normed[31] = bytes[31] & ~0x80;
+    const normed = hex.slice();
+    normed[31] = hex[31] & ~0x80;
     const y = bytesToNumberLE(normed);
 
     if (y >= P) throw new Error('Point.fromHex expects hex <= Fp');
@@ -422,7 +419,7 @@ class Point {
     // x = 0, and x_0 = 1, decoding fails.  Otherwise, if x_0 != x mod
     // 2, set x <-- p - x.  Return the decoded point (x,y).
     const isXOdd = (x & _1n) === _1n;
-    const isLastByteOdd = (bytes[31] & 0x80) !== 0;
+    const isLastByteOdd = (hex[31] & 0x80) !== 0;
     if (isLastByteOdd !== isXOdd) {
       x = mod(-x);
     }
@@ -502,8 +499,7 @@ class Signature {
   }
 
   static fromHex(hex: Hex) {
-    const bytes = ensureBytes(hex);
-    assertLen(64, bytes);
+    const bytes = ensureBytes(hex, 64);
     const r = Point.fromHex(bytes.slice(0, 32));
     const s = bytesToNumberLE(bytes.slice(32, 64));
     return new Signature(r, s);
@@ -541,6 +537,7 @@ function concatBytes(...arrays: Uint8Array[]): Uint8Array {
 const hexes = Array.from({ length: 256 }, (v, i) => i.toString(16).padStart(2, '0'));
 function bytesToHex(uint8a: Uint8Array): string {
   // pre-caching improves the speed 6x
+  if (!(uint8a instanceof Uint8Array)) throw new Error('Uint8Array expected');
   let hex = '';
   for (let i = 0; i < uint8a.length; i++) {
     hex += hexes[uint8a[i]];
@@ -581,14 +578,8 @@ function edIsNegative(num: bigint) {
 
 // Little Endian
 function bytesToNumberLE(uint8a: Uint8Array): bigint {
-  if (!(uint8a instanceof Uint8Array))
-    throw new Error(`bytesToNumberLE: expected Uint8Array, got ${uint8a}`);
-  let value = _0n;
-  const _8n = BigInt(8);
-  for (let i = 0; i < uint8a.length; i++) {
-    value += BigInt(uint8a[i]) << (_8n * BigInt(i));
-  }
-  return value;
+  if (!(uint8a instanceof Uint8Array)) throw new Error('Expected Uint8Array');
+  return BigInt('0x' + bytesToHex(Uint8Array.from(uint8a).reverse()));
 }
 
 function bytes255ToNumberLE(bytes: Uint8Array): bigint {
@@ -732,34 +723,23 @@ function equalBytes(b1: Uint8Array, b2: Uint8Array) {
   return true;
 }
 
-function ensureBytes(hash: Hex): Uint8Array {
+function ensureBytes(hex: Hex, expectedLength?: number): Uint8Array {
   // Uint8Array.from() instead of hash.slice() because node.js Buffer
   // is instance of Uint8Array, and its slice() creates **mutable** copy
-  return hash instanceof Uint8Array ? Uint8Array.from(hash) : hexToBytes(hash);
-}
-
-function assertLen(len: number, bytes: Uint8Array): void {
-  if (bytes.length !== len) throw new Error(`Expected ${len} bytes`);
-}
-
-function normalizeScalar(num: number | bigint, max = CURVE.n): bigint {
-  if (typeof num === 'number' && num > 0 && Number.isSafeInteger(num)) return BigInt(num);
-  if (typeof num === 'bigint' && _0n < num && num < max) return num;
-  throw new TypeError('Expected valid scalar: 0 < scalar < max');
-}
-
-function normalizePrivateKey(key: PrivKey): Uint8Array {
-  const bytes =
-    typeof key === 'bigint' || typeof key === 'number'
-      ? numberToBytesBEPadded(normalizeScalar(key, _2n ** BigInt(256)), 32)
-      : ensureBytes(key);
-  assertLen(32, bytes);
+  const bytes = hex instanceof Uint8Array ? Uint8Array.from(hex) : hexToBytes(hex);
+  if (typeof expectedLength === 'number' && bytes.length !== expectedLength)
+    throw new Error(`Expected ${expectedLength} bytes`);
   return bytes;
 }
 
+function normalizeScalar(num: number | bigint, max = CURVE.n): bigint {
+  if (typeof num === 'bigint' && _0n < num && num < max) return num;
+  if (typeof num === 'number' && Number.isSafeInteger(num) && num > 0) return BigInt(num);
+  throw new TypeError('Expected valid scalar: 0 < scalar < max');
+}
+
 function decodeScalar25519(n: Hex): bigint {
-  n = ensureBytes(n);
-  assertLen(32, n);
+  n = ensureBytes(n, 32);
   // Section 5: For X25519, in order to decode 32 random bytes as an integer scalar,
   // set the three least significant bits of the first byte
   n[0] &= 248; // 0b1111_1000
@@ -775,17 +755,25 @@ function decodeScalar25519(n: Hex): bigint {
 // Private convenience method
 // RFC8032 5.1.5
 async function getExtendedPublicKey(key: PrivKey) {
+  // Normalize bigint / number / string to Uint8Array
+  key =
+    typeof key === 'bigint' || typeof key === 'number'
+      ? numberToBytesBEPadded(normalizeScalar(key, _2n ** BigInt(256)), 32)
+      : ensureBytes(key);
+  if (key.length !== 32) throw new Error(`Expected 32 bytes`);
   // hash to produce 64 bytes
-  const hashed = await utils.sha512(normalizePrivateKey(key));
-  // Takes first 32 bytes of 64b uniformingly random input,
+  const hashed = await utils.sha512(key);
+  // First 32 bytes of 64b uniformingly random input are taken,
   // clears 3 bits of it to produce a random field element.
   const head = hashed.slice(0, 32);
   // Second 32 bytes is called key prefix (5.1.6)
   const prefix = hashed.slice(32, 64);
+  // The actual private scalar
   const scalar = mod(decodeScalar25519(head), CURVE.n);
+  // Point on Edwards curve aka public key
   const point = Point.BASE.multiply(scalar);
-  const pubBytes = point.toRawBytes();
-  return { head, prefix, scalar, point, pubBytes };
+  const pointBytes = point.toRawBytes();
+  return { head, prefix, scalar, point, pointBytes };
 }
 
 //
@@ -796,7 +784,7 @@ async function getExtendedPublicKey(key: PrivKey) {
  * RFC8032 5.1.5
  */
 export async function getPublicKey(privateKey: PrivKey): Promise<Uint8Array> {
-  return (await getExtendedPublicKey(privateKey)).pubBytes;
+  return (await getExtendedPublicKey(privateKey)).pointBytes;
 }
 
 /**
@@ -804,12 +792,12 @@ export async function getPublicKey(privateKey: PrivKey): Promise<Uint8Array> {
  * RFC8032 5.1.6
  */
 export async function sign(message: Hex, privateKey: Hex): Promise<Uint8Array> {
-  const msg = ensureBytes(message);
-  const { prefix, scalar: p, pubBytes } = await getExtendedPublicKey(privateKey);
-  const r = await sha512ModnLE(prefix, msg); // r = hash(prefix + msg)
+  message = ensureBytes(message);
+  const { prefix, scalar, pointBytes } = await getExtendedPublicKey(privateKey);
+  const r = await sha512ModnLE(prefix, message); // r = hash(prefix + msg)
   const R = Point.BASE.multiply(r); // R = rG
-  const k = await sha512ModnLE(R.toRawBytes(), pubBytes, msg); // k = hash(R + P + msg)
-  const S = mod(r + k * p, CURVE.n); // S = r + kp
+  const k = await sha512ModnLE(R.toRawBytes(), pointBytes, message); // k = hash(R + P + msg)
+  const S = mod(r + k * scalar, CURVE.n); // S = r + kp
   return new Signature(R, S).toRawBytes();
 }
 
@@ -927,8 +915,7 @@ function montgomeryLadderChecked(u: bigint, p: bigint): Uint8Array {
 }
 
 function decodeUCoordinate(uEnc: Hex): bigint {
-  const u = ensureBytes(uEnc);
-  assertLen(32, u);
+  const u = ensureBytes(uEnc, 32);
   // Section 5: When receiving such an array, implementations of X25519
   // MUST mask the most significant bit in the final byte.
   u[31] &= 127; // 0b0111_1111
@@ -1003,7 +990,7 @@ export const utils = {
   precompute(windowSize = 8, point = Point.BASE): Point {
     const cached = point.equals(Point.BASE) ? point : new Point(point.x, point.y);
     cached._setWindowSize(windowSize);
-    cached.multiply(_1n);
+    cached.multiply(_2n);
     return cached;
   },
 };

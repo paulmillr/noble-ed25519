@@ -78,7 +78,8 @@ you will need [import map](https://deno.land/manual/linking_to_external_code/imp
 ```typescript
 function getPublicKey(privateKey: Uint8Array | string | bigint): Promise<Uint8Array>;
 ```
-- `privateKey: Uint8Array | string | bigint` will be used to generate public key.
+- `privateKey: Uint8Array | string | bigint` will be used to generate public key. If you want to pass bigints,
+  ensure they are Big-Endian.
 - Returns `Promise<Uint8Array>`. Uses **promises**, because ed25519 uses SHA internally; and we're using built-in browser `window.crypto`, which returns `Promise`.
 
 To generate ed25519 public key:
@@ -250,14 +251,14 @@ Benchmarks done with Apple M1.
 
 ```
 getPublicKey(utils.randomPrivateKey()) x 6,790 ops/sec @ 147μs/op
-sign x 3,276 ops/sec @ 305μs/op
+sign x 3,474 ops/sec @ 287μs/op
 verify x 726 ops/sec @ 1ms/op
 verifyBatch x 842 ops/sec @ 1ms/op
-Point.fromHex decompression x 11,332 ops/sec @ 88μs/op
-ristretto255#fromHash x 5,428 ops/sec @ 184μs/op
-ristretto255 round x 5,467 ops/sec @ 182μs/op
-getSharedSecret x 778 ops/sec @ 1285μs/op
-curve25519.scalarMultBase x 1,010 ops/sec @ 989μs/op
+Point.fromHex decompression x 11,718 ops/sec @ 85μs/op
+ristretto255#fromHash x 5,482 ops/sec @ 182μs/op
+ristretto255 round x 5,621 ops/sec @ 177μs/op
+curve25519.scalarMultBase x 1,022 ops/sec @ 978μs/op
+ed25519.getSharedSecret x 801 ops/sec @ 1ms/op
 ```
 
 Compare to alternative implementations:
