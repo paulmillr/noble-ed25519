@@ -253,11 +253,11 @@ Benchmarks done with Apple M1.
 getPublicKey(utils.randomPrivateKey()) x 6,790 ops/sec @ 147μs/op
 sign x 3,474 ops/sec @ 287μs/op
 verify x 726 ops/sec @ 1ms/op
-verifyBatch x 842 ops/sec @ 1ms/op
+verifyBatch x 888 ops/sec @ 1ms/op
 Point.fromHex decompression x 11,718 ops/sec @ 85μs/op
 ristretto255#fromHash x 5,482 ops/sec @ 182μs/op
 ristretto255 round x 5,621 ops/sec @ 177μs/op
-curve25519.scalarMultBase x 1,022 ops/sec @ 978μs/op
+curve25519.scalarMultBase x 1,042 ops/sec @ 959μs/op
 ed25519.getSharedSecret x 801 ops/sec @ 1ms/op
 ```
 
