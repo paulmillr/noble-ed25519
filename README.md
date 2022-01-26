@@ -227,7 +227,7 @@ ed25519.Signature {
 
 // Precomputation helper
 utils.precompute(W, point);
-// returns { head, prefix, scalar, point, pubBytes }
+// returns { head, prefix, scalar, point, pointBytes }
 utils.getExtendedPublicKey(privateKey);
 ```
 
@@ -250,11 +250,11 @@ We however consider infrastructure attacks like rogue NPM modules very important
 Benchmarks done with Apple M1.
 
 ```
-getPublicKey(utils.randomPrivateKey()) x 6,790 ops/sec @ 147μs/op
+getPublicKey(utils.randomPrivateKey()) x 6,835 ops/sec @ 146μs/op
 sign x 3,474 ops/sec @ 287μs/op
 verify x 726 ops/sec @ 1ms/op
 verifyBatch x 888 ops/sec @ 1ms/op
-Point.fromHex decompression x 11,718 ops/sec @ 85μs/op
+Point.fromHex decompression x 11,783 ops/sec @ 84μs/op
 ristretto255#fromHash x 5,482 ops/sec @ 182μs/op
 ristretto255 round x 5,621 ops/sec @ 177μs/op
 curve25519.scalarMultBase x 1,042 ops/sec @ 959μs/op
