@@ -914,12 +914,6 @@ function encodeUCoordinate(u: bigint): Uint8Array {
   return numberToBytesLEPadded(mod(u, CURVE.P), 32);
 }
 
-function montgomeryLadderChecked(u: bigint, p: bigint): Uint8Array {
-  const pu = montgomeryLadder(u, p);
-  if (pu === _0n) throw new Error('Invalid private or public key received');
-  return encodeUCoordinate(pu);
-}
-
 function decodeUCoordinate(uEnc: Hex): bigint {
   const u = ensureBytes(uEnc, 32);
   // Section 5: When receiving such an array, implementations of X25519
@@ -935,7 +929,9 @@ export const curve25519 = {
   scalarMult(privateKey: Hex, publicKey: Hex): Uint8Array {
     const u = decodeUCoordinate(publicKey);
     const p = decodeScalar25519(privateKey);
-    return montgomeryLadderChecked(u, p);
+    const pu = montgomeryLadder(u, p);
+    if (pu === _0n) throw new Error('Invalid private or public key received');
+    return encodeUCoordinate(pu);
   },
 
   // crypto_scalarmult_base aka getPublicKey
