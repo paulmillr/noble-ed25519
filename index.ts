@@ -738,18 +738,21 @@ function normalizeScalar(num: number | bigint, max = CURVE.n): bigint {
   throw new TypeError('Expected valid scalar: 0 < scalar < max');
 }
 
-function decodeScalar25519(n: Hex): bigint {
-  n = ensureBytes(n, 32);
+function adjustBytes25519(bytes: Uint8Array): Uint8Array {
   // Section 5: For X25519, in order to decode 32 random bytes as an integer scalar,
   // set the three least significant bits of the first byte
-  n[0] &= 248; // 0b1111_1000
+  bytes[0] &= 248; // 0b1111_1000
   // and the most significant bit of the last to zero,
-  n[31] &= 127; // 0b0111_1111
+  bytes[31] &= 127; // 0b0111_1111
   // set the second most significant bit of the last byte to 1
-  n[31] |= 64; // 0b0100_0000
+  bytes[31] |= 64; // 0b0100_0000
+  return bytes;
+}
+
+function decodeScalar25519(n: Hex): bigint {
   // and, finally, decode as little-endian.
   // This means that the resulting integer is of the form 2 ^ 254 plus eight times a value between 0 and 2 ^ 251 - 1(inclusive).
-  return bytesToNumberLE(n);
+  return bytesToNumberLE(adjustBytes25519(ensureBytes(n, 32)));
 }
 
 // Private convenience method
@@ -765,11 +768,11 @@ async function getExtendedPublicKey(key: PrivKey) {
   const hashed = await utils.sha512(key);
   // First 32 bytes of 64b uniformingly random input are taken,
   // clears 3 bits of it to produce a random field element.
-  const head = hashed.slice(0, 32);
+  const head = adjustBytes25519(hashed.slice(0, 32));
   // Second 32 bytes is called key prefix (5.1.6)
   const prefix = hashed.slice(32, 64);
   // The actual private scalar
-  const scalar = mod(decodeScalar25519(head), CURVE.n);
+  const scalar = mod(bytesToNumberLE(head), CURVE.n);
   // Point on Edwards curve aka public key
   const point = Point.BASE.multiply(scalar);
   const pointBytes = point.toRawBytes();
