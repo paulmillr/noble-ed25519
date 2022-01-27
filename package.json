@@ -1,6 +1,6 @@
 {
   "name": "@noble/ed25519",
-  "version": "1.5.1",
+  "version": "1.5.2",
   "description": "Fastest JS implementation of ed25519 & ristretto255. Auditable, high-security, 0-dependency EDDSA, X25519 ECDH & scalarmult",
   "files": [
     "lib"
