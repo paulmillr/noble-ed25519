@@ -457,9 +457,10 @@ class Point {
    * https://blog.filippo.io/using-ed25519-keys-for-encryption
    * @returns u coordinate of curve25519 point
    */
-  toX25519() {
+  toX25519(): Uint8Array {
     const { y } = this;
-    return mod((_1n + y) * invert(_1n - y));
+    const u = mod((_1n + y) * invert(_1n - y));
+    return numberToBytesLEPadded(u, 32);
   }
 
   equals(other: Point): boolean {
@@ -823,14 +824,16 @@ export async function verify(sig: SigType, message: Hex, publicKey: PubKey): Pro
 
 /**
  * Calculates X25519 DH shared secret from ed25519 private & public keys.
+ * Curve25519 used in X25519 consumes private keys as-is, while ed25519 hashes them with sha512.
+ * Which means we will need to normalize ed25519 seeds to "hashed repr".
  * @param privateKey ed25519 private key
  * @param publicKey ed25519 public key
  * @returns X25519 shared key
  */
 export async function getSharedSecret(privateKey: PrivKey, publicKey: Hex): Promise<Uint8Array> {
-  const { scalar: p } = await getExtendedPublicKey(privateKey);
+  const { head } = await getExtendedPublicKey(privateKey);
   const u = Point.fromHex(publicKey).toX25519();
-  return montgomeryLadderChecked(p, u);
+  return curve25519.scalarMult(head, u);
 }
 
 // Enable precomputes. Slows down first publicKey computation by 20ms.

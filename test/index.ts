@@ -127,40 +127,24 @@ describe('ed25519', () => {
     });
   });
 
-  describe('Point#toX25519()', () => {
-    it('should convert base point to montgomery', async () => {
-      expect(ed.Point.BASE.toX25519()).toBe(9n);
+  describe('getSharedSecret()', () => {
+    it('should convert base point to montgomery using toX25519()', () => {
+      expect(hex(ed.Point.BASE.toX25519())).toBe(ed.curve25519.BASE_POINT_U);
     });
 
-    it('should convert TEST 1 to montgomery', async () => {
-      const priv = '4ccd089b28ff96da9db6c346ec114e0f5b8a319f35aba624da8cf6ed4fb8a6fb';
-      const pub = '3d4017c3e843895a92b70aa74d1b7ebc9c982ccf2ec4968cc0cd55f12af4660c';
-      const montgomery = '478dd307cdfb042d80d03e0f55227e4d982bedd1696ba700fc8ab894c504c725';
-
-      const point = ed.Point.fromHex(pub);
-      expect(point.toX25519().toString(16)).toBe(montgomery);
-    });
-
-    it('should convert TEST 2 to montgomery', async () => {
-      const priv = '000000000000000000000000000000000000000000000000000000000000000c';
-      const pub = '1262bc6d5408a3c4e025aa0c15e64f69197cdb38911be5ad344a949779df3da6';
-      const montgomery = '31c3ec9e22ce8ffd4fa9dfa1a698604b4de4921be0e09ca93f96c635bb8de1db';
-
-      const publicKey = await ed.getPublicKey(priv);
-      expect(hex(publicKey)).toBe(pub);
-      const point = ed.Point.fromHex(publicKey);
-      expect(point.toX25519().toString(16)).toBe(montgomery);
-    });
-
-    it('should convert TEST 3 to montgomery', async () => {
-      const priv = '0000000000000000000000000000000000000000000000000000000000000027';
-      const pub = 'd7e1ba312ceaf90c89566a9a7861316522a60edea4c2157eabf3d273169eac13';
-      const montgomery = '48d70b86a448c72a4b3960d399102d9ef401092fcbbcda8e69bc230bc73bb9d2';
-
-      const publicKey = await ed.getPublicKey(priv);
-      expect(hex(publicKey)).toBe(pub);
-      const point = ed.Point.fromHex(publicKey);
-      expect(point.toX25519().toString(16)).toBe(montgomery);
+    it('should be commutative', async () => {
+      for (let i = 0; i < 512; i++) {
+        const asec = ed.utils.randomPrivateKey();
+        const apub = await ed.getPublicKey(asec);
+        const bsec = ed.utils.randomPrivateKey();
+        const bpub = await ed.getPublicKey(bsec);
+        try {
+          expect(ed.getSharedSecret(asec, bpub)).toEqual(ed.getSharedSecret(bsec, apub));
+        } catch (error) {
+          console.error('not commutative', { asec, apub, bsec, bpub });
+          throw error;
+        }
+      }
     });
   });
 });
@@ -513,23 +497,23 @@ describe('curve25519', () => {
 
 describe('input immutability', () => {
   it('sign/verify are immutable', async () => {
-    const privateKey = ed.utils.randomPrivateKey()
-    const publicKey = await ed.getPublicKey(privateKey)
+    const privateKey = ed.utils.randomPrivateKey();
+    const publicKey = await ed.getPublicKey(privateKey);
 
     for (let i = 0; i < 100; i++) {
       let payload = ed.utils.randomBytes(100);
-      let signature = await ed.sign(payload, privateKey)
+      let signature = await ed.sign(payload, privateKey);
       if (!(await ed.verify(signature, payload, publicKey))) {
-        throw new Error('Signature verification failed')
+        throw new Error('Signature verification failed');
       }
-      const signatureCopy = Buffer.alloc(signature.byteLength)
-      signatureCopy.set(signature, 0) // <-- breaks
+      const signatureCopy = Buffer.alloc(signature.byteLength);
+      signatureCopy.set(signature, 0); // <-- breaks
       payload = payload.slice();
       signature = signature.slice();
 
       if (!(await ed.verify(signatureCopy, payload, publicKey))) {
-        throw new Error('Copied signature verification failed')
+        throw new Error('Copied signature verification failed');
       }
     }
-  })
-})
+  });
+});
