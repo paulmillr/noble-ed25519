@@ -202,7 +202,7 @@ ed25519.Point {
   constructor(x: bigint, y: bigint);
   static fromHex(hash: string);
   static fromPrivateKey(privateKey: string | Uint8Array);
-  toX25519(): bigint; // Converts to Curve25519 u coordinate
+  toX25519(): Uint8Array; // Converts to Curve25519 u coordinate in LE form
   toRawBytes(): Uint8Array;
   toHex(): string; // Compact representation of a Point
   equals(other: Point): boolean;
