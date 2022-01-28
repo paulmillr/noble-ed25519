@@ -261,8 +261,8 @@ verifyBatch x 888 ops/sec @ 1ms/op
 Point.fromHex decompression x 11,783 ops/sec @ 84μs/op
 ristretto255#fromHash x 5,482 ops/sec @ 182μs/op
 ristretto255 round x 5,621 ops/sec @ 177μs/op
-curve25519.scalarMultBase x 1,042 ops/sec @ 959μs/op
-ed25519.getSharedSecret x 801 ops/sec @ 1ms/op
+curve25519.scalarMultBase x 1,113 ops/sec @ 898μs/op
+ed25519.getSharedSecret x 844 ops/sec @ 1ms/op
 ```
 
 Compare to alternative implementations:

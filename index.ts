@@ -913,17 +913,17 @@ function montgomeryLadder(pointU: bigint, scalar: bigint): bigint {
     z_3 = sw[1];
     swap = k_t;
 
-    const A = mod(x_2 + z_2);
+    const A = x_2 + z_2;
     const AA = mod(A * A);
-    const B = mod(x_2 - z_2);
+    const B = x_2 - z_2;
     const BB = mod(B * B);
-    const E = mod(AA - BB);
-    const C = mod(x_3 + z_3);
-    const D = mod(x_3 - z_3);
+    const E = AA - BB;
+    const C = x_3 + z_3;
+    const D = x_3 - z_3;
     const DA = mod(D * A);
     const CB = mod(C * B);
-    x_3 = mod(mod(DA + CB) ** _2n);
-    z_3 = mod(x_1 * mod(DA - CB) ** _2n);
+    x_3 = mod((DA + CB) ** _2n);
+    z_3 = mod(x_1 * (DA - CB) ** _2n);
     x_2 = mod(AA * BB);
     z_2 = mod(E * (AA + mod(a24 * E)));
   }
