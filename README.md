@@ -121,7 +121,7 @@ For additional info about verification strictness, check out [It’s 255:19AM](h
 ##### `getSharedSecret(privateKey, publicKey)`
 
 ```typescript
-function getSharedSecret(privateKey: Uint8Array | string | bigint, publicKey: Hex): Promise<Uint8Array>;
+function getSharedSecret(privateKey: Uint8Array | string | bigint, publicKey: Uint8Array | string): Promise<Uint8Array>;
 ```
 
 Converts ed25519 private / public keys to Curve25519 and calculates
