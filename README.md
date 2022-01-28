@@ -116,6 +116,8 @@ function verify(
 
 Verifies signature. Compatible with [ZIP215](https://zips.z.cash/zip-0215): allows sigs/public keys bigger than curve prime, but less than 2^256.
 
+For additional info about verification strictness, check out [It’s 255:19AM](https://hdevalence.ca/blog/2020-10-04-its-25519am).
+
 ##### `getSharedSecret(privateKey, publicKey)`
 
 ```typescript
