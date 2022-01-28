@@ -12,6 +12,7 @@ const _0n = BigInt(0);
 const _1n = BigInt(1);
 const _2n = BigInt(2);
 const _255n = BigInt(255);
+const CURVE_ORDER = _2n ** BigInt(252) + BigInt('27742317777372353535851937790883648493');
 
 /**
  * ed25519 is Twisted Edwards curve with equation of
@@ -27,8 +28,9 @@ const CURVE = {
   d: BigInt('37095705934669439343138083508754565189542113879843219016388785533085940283555'),
   // Finite field 𝔽p over which we'll do calculations
   P: _2n ** _255n - BigInt(19),
-  // Subgroup order aka C
-  n: _2n ** BigInt(252) + BigInt('27742317777372353535851937790883648493'),
+  // Subgroup order: how many points ed25519 has
+  l: CURVE_ORDER,
+  n: CURVE_ORDER, // backwards compatibility
   // Cofactor
   h: BigInt(8),
   // Base point (x, y) aka generator point
