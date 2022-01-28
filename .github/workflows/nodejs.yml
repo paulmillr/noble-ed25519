@@ -5,7 +5,7 @@ env:
   FORCE_COLOR: 2
 jobs:
   test:
-    name: Node.js ${{ matrix.node }} @ ${{ matrix.os }}
+    name: v${{ matrix.node }} @ ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
