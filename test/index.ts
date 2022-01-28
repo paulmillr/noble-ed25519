@@ -3,6 +3,7 @@ import * as ed from '../';
 import { readFileSync } from 'fs';
 import { join } from 'path';
 import { createHash } from 'crypto';
+import { default as zip215 } from './zip215.json';
 
 const hex = ed.utils.bytesToHex;
 
@@ -516,4 +517,21 @@ describe('input immutability', () => {
       }
     }
   });
+});
+
+describe('ZIP-215 compliance tests', () => {
+  // https://zips.z.cash/zip-0215
+  // Vectors from https://gist.github.com/hdevalence/93ed42d17ecab8e42138b213812c8cc7
+  it('should pass all of them', async () => {
+    const str = utf8ToBytes('Zcash');
+    for (let v of zip215) {
+      let noble = false;
+      try {
+        noble = await ed.verify(v.sig_bytes, str, v.vk_bytes);
+      } catch (e) {
+        noble = false;
+      }
+      expect(noble).toBe(v.valid_zip215);
+    }
+  })
 });

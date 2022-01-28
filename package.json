@@ -53,6 +53,7 @@
     "eddsa",
     "RFC7748",
     "RFC8032",
+    "ZIP215",
     "cryptography",
     "security"
   ],

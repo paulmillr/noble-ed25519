@@ -44,6 +44,8 @@ type PrivKey = Hex | bigint | number;
 type PubKey = Hex | Point;
 type SigType = Hex | Signature;
 
+const MAX_256B = _2n ** BigInt(256);
+
 // √(-1) aka √(a) aka 2^((p-1)/4)
 const SQRT_M1 = BigInt(
   '19681161376707505956807079304988542015446066515923890162744021073123829784752'
@@ -262,7 +264,7 @@ class ExtendedPoint {
   // It's faster, but should only be used when you don't care about
   // an exposed private key e.g. sig verification.
   multiplyUnsafe(scalar: number | bigint): ExtendedPoint {
-    let n = normalizeScalar(scalar);
+    let n = normalizeScalar(scalar, CURVE.n);
     const P0 = ExtendedPoint.ZERO;
     if (this.equals(P0) || n === _1n) return this;
     let p = P0;
@@ -351,8 +353,14 @@ class ExtendedPoint {
   // Uses wNAF method. Windowed method may be 10% faster,
   // but takes 2x longer to generate and consumes 2x memory.
   multiply(scalar: number | bigint, affinePoint?: Point): ExtendedPoint {
-    const n = normalizeScalar(scalar);
+    const n = normalizeScalar(scalar, CURVE.n);
     return ExtendedPoint.normalizeZ(this.wNAF(n, affinePoint))[0];
+  }
+
+  // Allows scalar bigger than curve order, but less than 2^256
+  multiplyForVerification(scalar: bigint): ExtendedPoint {
+    const n = normalizeScalar(scalar, CURVE.n, false);
+    return ExtendedPoint.normalizeZ(this.wNAF(n))[0];
   }
 
   // Converts Extended point to default (x, y) coordinates.
@@ -392,7 +400,7 @@ class Point {
 
   // Converts hash string or Uint8Array to Point.
   // Uses algo from RFC8032 5.1.3.
-  static fromHex(hex: Hex) {
+  static fromHex(hex: Hex, strict = true) {
     const { d, P } = CURVE;
     hex = ensureBytes(hex, 32);
     // 1.  First, interpret the string as an integer in little-endian
@@ -404,7 +412,9 @@ class Point {
     normed[31] = hex[31] & ~0x80;
     const y = bytesToNumberLE(normed);
 
-    if (y >= P) throw new Error('Point.fromHex expects hex <= Fp');
+    if ((strict && y >= P) || (!strict && y >= MAX_256B)) {
+      throw new Error('Point.fromHex expects hex <= Fp');
+    }
 
     // 2.  To recover the x-coordinate, the curve equation implies
     // x² = (y² - 1) / (d y² + 1) (mod p).  The denominator is always
@@ -494,16 +504,16 @@ class Point {
  */
 class Signature {
   readonly s: bigint;
-  constructor(readonly r: Point, s: bigint) {
+  constructor(readonly r: Point, s: bigint, strict = true) {
     if (!(r instanceof Point)) throw new Error('Expected Point instance');
-    this.s = normalizeScalar(s);
+    this.s = normalizeScalar(s, CURVE.n, strict);
   }
 
-  static fromHex(hex: Hex) {
+  static fromHex(hex: Hex, strict = true) {
     const bytes = ensureBytes(hex, 64);
-    const r = Point.fromHex(bytes.slice(0, 32));
+    const r = Point.fromHex(bytes.slice(0, 32), strict);
     const s = bytesToNumberLE(bytes.slice(32, 64));
-    return new Signature(r, s);
+    return new Signature(r, s, strict);
   }
 
   toRawBytes() {
@@ -733,9 +743,22 @@ function ensureBytes(hex: Hex, expectedLength?: number): Uint8Array {
   return bytes;
 }
 
-function normalizeScalar(num: number | bigint, max = CURVE.n): bigint {
-  if (typeof num === 'bigint' && _0n < num && num < max) return num;
-  if (typeof num === 'number' && Number.isSafeInteger(num) && num > 0) return BigInt(num);
+function normalizeScalar(num: number | bigint, max: bigint, strict = true): bigint {
+  if (!max) throw new TypeError('Specify max value');
+  if (typeof num === 'bigint') {
+    if (strict) {
+      if (_0n < num && num < max) return num;
+    } else {
+      if (_0n <= num && num < MAX_256B) return num;
+    }
+  }
+  if (typeof num === 'number' && Number.isSafeInteger(num)) {
+    if (strict) {
+      if (0 < num) return BigInt(num);
+    } else {
+      if (0 <= num) return BigInt(num);
+    }
+  }
   throw new TypeError('Expected valid scalar: 0 < scalar < max');
 }
 
@@ -762,7 +785,7 @@ async function getExtendedPublicKey(key: PrivKey) {
   // Normalize bigint / number / string to Uint8Array
   key =
     typeof key === 'bigint' || typeof key === 'number'
-      ? numberToBytesBEPadded(normalizeScalar(key, _2n ** BigInt(256)), 32)
+      ? numberToBytesBEPadded(normalizeScalar(key, MAX_256B), 32)
       : ensureBytes(key);
   if (key.length !== 32) throw new Error(`Expected 32 bytes`);
   // hash to produce 64 bytes
@@ -808,13 +831,17 @@ export async function sign(message: Hex, privateKey: Hex): Promise<Uint8Array> {
 /**
  * Verifies ed25519 signature against message and public key.
  * An extended group equation is checked.
+ * Compliant with ZIP215: accepts sig and pub bigger than curve prime.
  * RFC8032 5.1.7
  */
 export async function verify(sig: SigType, message: Hex, publicKey: PubKey): Promise<boolean> {
+  // R=SIG | A=PUB | M=MSG
+  // It is not required that A and R are canonical encodings; in other words, the integer encoding the
+  // y-coordinate of the points may be unreduced modulo  2^255−19
   message = ensureBytes(message);
-  if (!(publicKey instanceof Point)) publicKey = Point.fromHex(publicKey);
-  if (!(sig instanceof Signature)) sig = Signature.fromHex(sig);
-  const SB = ExtendedPoint.BASE.multiply(sig.s);
+  if (!(publicKey instanceof Point)) publicKey = Point.fromHex(publicKey, false);
+  if (!(sig instanceof Signature)) sig = Signature.fromHex(sig, false);
+  const SB = ExtendedPoint.BASE.multiplyForVerification(sig.s);
   const k = await sha512ModnLE(sig.r.toRawBytes(), publicKey.toRawBytes(), message);
   const kA = ExtendedPoint.fromAffine(publicKey).multiplyUnsafe(k);
   const RkA = ExtendedPoint.fromAffine(sig.r).add(kA);
@@ -859,7 +886,7 @@ function cswap(swap: bigint, x_2: bigint, x_3: bigint): [bigint, bigint] {
  * @returns new Point on Montgomery curve
  */
 function montgomeryLadder(pointU: bigint, scalar: bigint): bigint {
-  const { P, n } = CURVE;
+  const { P } = CURVE;
   const u = normalizeScalar(pointU, P);
   // Section 5: Implementations MUST accept non-canonical values and process them as
   // if they had been reduced modulo the field prime.
