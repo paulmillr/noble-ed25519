@@ -749,7 +749,7 @@ function normalizeScalar(num: number | bigint, max: bigint, strict = true): bigi
   if (!max) throw new TypeError('Specify max value');
   if (typeof num === 'bigint') {
     if (strict) {
-      if (_0n < num && num < max) return num;
+      if (_0n < num && num <= max) return num;
     } else {
       if (_0n <= num && num < MAX_256B) return num;
     }
@@ -761,7 +761,7 @@ function normalizeScalar(num: number | bigint, max: bigint, strict = true): bigi
       if (0 <= num) return BigInt(num);
     }
   }
-  throw new TypeError('Expected valid scalar: 0 < scalar < max');
+  throw new TypeError('Expected valid scalar: 0 < scalar <= max');
 }
 
 function adjustBytes25519(bytes: Uint8Array): Uint8Array {
