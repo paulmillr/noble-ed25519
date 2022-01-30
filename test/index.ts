@@ -228,13 +228,7 @@ describe('rfc8032 vectors', () => {
 });
 
 describe('ristretto255', () => {
-  const { ExtendedPoint } = ed;
-  async function sha512(message: Uint8Array) {
-    const hash = createHash('sha512');
-    hash.update(message);
-    return Uint8Array.from(hash.digest());
-  }
-
+  const { RistrettoPoint } = ed;
   function arrayToHex(bytes: Uint8Array) {
     return Array.from(bytes)
       .map((a) => a.toString(16).padStart(2, '0'))
@@ -330,13 +324,11 @@ describe('ristretto255', () => {
       '46376b80f409b29dc2b5f6f0c52591990896e5716f41477cd30085ab7f10301e',
       'e0c418f7c8d9c4cdd7395b93ea124f3ad99021bb681dfc3302a9d99a2e53e64e',
     ];
-    let B = ExtendedPoint.BASE;
-    let P = ExtendedPoint.ZERO;
+    let B = RistrettoPoint.BASE;
+    let P = RistrettoPoint.ZERO;
     for (const encoded of encodingsOfSmallMultiples) {
-      expect(arrayToHex(P.toRistrettoBytes())).toBe(encoded);
-      expect(
-        arrayToHex(ExtendedPoint.fromRistrettoBytes(hexToArray(encoded)).toRistrettoBytes())
-      ).toBe(encoded);
+      expect(P.toHex()).toBe(encoded);
+      expect(RistrettoPoint.fromHex(encoded).toHex()).toBe(encoded);
       P = P.add(B);
     }
   });
@@ -378,10 +370,10 @@ describe('ristretto255', () => {
       'ecffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7f',
     ];
     for (const badBytes of badEncodings) {
-      expect(() => ExtendedPoint.fromRistrettoBytes(hexToArray(badBytes))).toThrow();
+      expect(() => RistrettoPoint.fromHex(hexToArray(badBytes))).toThrow();
     }
   });
-  it('should create right points from hash', async () => {
+  it('should create right points from uniform hash', async () => {
     const labels = [
       'Ristretto is traditionally a short shot of espresso coffee',
       'made with the normal amount of ground coffee but extracted with',
@@ -402,9 +394,9 @@ describe('ristretto255', () => {
     ];
 
     for (let i = 0; i < labels.length; i++) {
-      const hash = await sha512(utf8ToBytes(labels[i]));
-      const point = ExtendedPoint.fromRistrettoHash(hash);
-      expect(arrayToHex(point.toRistrettoBytes())).toBe(encodedHashToPoints[i]);
+      const hash = await ed.utils.sha512(utf8ToBytes(labels[i]));
+      const point = RistrettoPoint.hashToCurve(hash);
+      expect(point.toHex()).toBe(encodedHashToPoints[i]);
     }
   });
 });

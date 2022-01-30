@@ -36,12 +36,12 @@ run(async () => {
 
   const msg = toBytes('deadbeefdeadbeefdeadbeefdeadbeefdeadbeef');
   let sigHex;
-  await mark('sign', 1000, async () => {
+  await mark('sign', 2000, async () => {
     sigHex = await ed.sign(msg, priv2);
     return sigHex;
   });
 
-  await mark('verify', 1000, async () => {
+  await mark('verify', 800, async () => {
     return await ed.verify(sigHex, msg, pubHex);
   });
 
@@ -50,7 +50,7 @@ run(async () => {
   await mark('verifyBatch', 1000, async () => {
     return await ed.verify(sig, msg, pub);
   });
-  await mark('Point.fromHex decompression', 1000, () => {
+  await mark('Point.fromHex decompression', 2000, () => {
     ed.Point.fromHex(pubHex);
   });
 
@@ -95,11 +95,11 @@ run(async () => {
     0xde, 0xad, 0xbe, 0xef, 0xde, 0xad, 0xbe, 0xef,
     0xde, 0xad, 0xbe, 0xef, 0xde, 0xad, 0xbe, 0xef,
   ])
-  await mark('ristretto255#fromHash', 2000, () => {
-    ExtendedPoint.fromRistrettoHash(hash);
+  await mark('ristretto255#hashToCurve', 2000, () => {
+    ed.RistrettoPoint.hashToCurve(hash);
   });
   await mark('ristretto255 round', 2000, () => {
-    ExtendedPoint.fromRistrettoBytes(encodingsOfSmallMultiples[2]).toRistrettoBytes();
+    ed.RistrettoPoint.fromHex(encodingsOfSmallMultiples[2]).toHex();
   });
   mark('curve25519.scalarMultBase', 3000, () => {
     ed.curve25519.scalarMultBase('aeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef');

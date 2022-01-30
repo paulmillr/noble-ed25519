@@ -1,7 +1,8 @@
 /*! noble-ed25519 - MIT License (c) 2019 Paul Miller (paulmillr.com) */
 // Thanks DJB https://ed25519.cr.yp.to
 // https://tools.ietf.org/html/rfc7748 https://tools.ietf.org/html/rfc8032
-// https://ristretto.group https://en.wikipedia.org/wiki/EdDSA
+// https://en.wikipedia.org/wiki/EdDSA https://ristretto.group
+// https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-ristretto255-decaf448
 
 // Uses built-in crypto module from node.js to generate randomness / hmac-sha256.
 // In browser the line is automatically removed during build time: uses crypto.subtle instead.
@@ -21,7 +22,7 @@ const CURVE_ORDER = _2n ** BigInt(252) + BigInt('2774231777737235353585193779088
  * ```
  */
 const CURVE = {
-  // Params: a, b
+  // Param: a
   a: BigInt(-1),
   // Equal to -121665/121666 over finite field.
   // Negative number is P - number, and division is invert(number, P)
@@ -29,7 +30,8 @@ const CURVE = {
   // Finite field 𝔽p over which we'll do calculations
   P: _2n ** _255n - BigInt(19),
   // Subgroup order: how many points ed25519 has
-  l: CURVE_ORDER,
+  q: CURVE_ORDER, // sometimes it's called q
+  l: CURVE_ORDER, // in rfc8032 it's called l
   n: CURVE_ORDER, // backwards compatibility
   // Cofactor
   h: BigInt(8),
@@ -102,96 +104,6 @@ class ExtendedPoint {
     return this.toAffineBatch(points).map(this.fromAffine);
   }
 
-  // Ristretto-related methods.
-
-  // The hash-to-group operation applies Elligator twice and adds the results.
-  // https://ristretto.group/formulas/elligator.html
-  static fromRistrettoHash(hash: Uint8Array): ExtendedPoint {
-    hash = ensureBytes(hash, 64);
-    const r1 = bytes255ToNumberLE(hash.slice(0, 32));
-    const R1 = this.calcElligatorRistrettoMap(r1);
-    const r2 = bytes255ToNumberLE(hash.slice(32, 64));
-    const R2 = this.calcElligatorRistrettoMap(r2);
-    return R1.add(R2);
-  }
-
-  // Computes Elligator map for Ristretto
-  // https://ristretto.group/formulas/elligator.html
-  private static calcElligatorRistrettoMap(r0: bigint) {
-    const { d } = CURVE;
-    const r = mod(SQRT_M1 * r0 * r0); // 1
-    const Ns = mod((r + _1n) * ONE_MINUS_D_SQ); // 2
-    let c = BigInt(-1); // 3
-    const D = mod((c - d * r) * mod(r + d)); // 4
-    let { isValid: Ns_D_is_sq, value: s } = uvRatio(Ns, D); // 5
-    let s_ = mod(s * r0); // 6
-    if (!edIsNegative(s_)) s_ = mod(-s_);
-    if (!Ns_D_is_sq) s = s_; // 7
-    if (!Ns_D_is_sq) c = r; // 8
-    const Nt = mod(c * (r - _1n) * D_MINUS_ONE_SQ - D); // 9
-    const s2 = s * s;
-    const W0 = mod((s + s) * D); // 10
-    const W1 = mod(Nt * SQRT_AD_MINUS_ONE); // 11
-    const W2 = mod(_1n - s2); // 12
-    const W3 = mod(_1n + s2); // 13
-    return new ExtendedPoint(mod(W0 * W3), mod(W2 * W1), mod(W1 * W3), mod(W0 * W2));
-  }
-
-  // Ristretto: Decoding to Extended Coordinates
-  // https://ristretto.group/formulas/decoding.html
-  static fromRistrettoBytes(hex: Hex): ExtendedPoint {
-    hex = ensureBytes(hex, 32);
-    const { a, d } = CURVE;
-    const emsg = 'ExtendedPoint.fromRistrettoBytes: Cannot convert bytes to Ristretto Point';
-    const s = bytes255ToNumberLE(hex);
-    // 1. Check that s_bytes is the canonical encoding of a field element, or else abort.
-    // 3. Check that s is non-negative, or else abort
-    if (!equalBytes(numberToBytesLEPadded(s, 32), hex) || edIsNegative(s)) throw new Error(emsg);
-    const s2 = mod(s * s);
-    const u1 = mod(_1n + a * s2); // 4 (a is -1)
-    const u2 = mod(_1n - a * s2); // 5
-    const u1_2 = mod(u1 * u1);
-    const u2_2 = mod(u2 * u2);
-    const v = mod(a * d * u1_2 - u2_2); // 6
-    const { isValid, value: I } = invertSqrt(mod(v * u2_2)); // 7
-    const Dx = mod(I * u2); // 8
-    const Dy = mod(I * Dx * v); // 9
-    let x = mod((s + s) * Dx); // 10
-    if (edIsNegative(x)) x = mod(-x); // 10
-    const y = mod(u1 * Dy); // 11
-    const t = mod(x * y); // 12
-    if (!isValid || edIsNegative(t) || y === _0n) throw new Error(emsg);
-    return new ExtendedPoint(x, y, _1n, t);
-  }
-
-  // Ristretto: Encoding from Extended Coordinates
-  // https://ristretto.group/formulas/encoding.html
-  toRistrettoBytes(): Uint8Array {
-    let { x, y, z, t } = this;
-    const u1 = mod(mod(z + y) * mod(z - y)); // 1
-    const u2 = mod(x * y); // 2
-    // Square root always exists
-    const { value: invsqrt } = invertSqrt(mod(u1 * u2 ** _2n)); // 3
-    const D1 = mod(invsqrt * u1); // 4
-    const D2 = mod(invsqrt * u2); // 5
-    const zInv = mod(D1 * D2 * t); // 6
-    let D: bigint; // 7
-    if (edIsNegative(t * zInv)) {
-      let _x = mod(y * SQRT_M1);
-      let _y = mod(x * SQRT_M1);
-      x = _x;
-      y = _y;
-      D = mod(D1 * INVSQRT_A_MINUS_D);
-    } else {
-      D = D2; // 8
-    }
-    if (edIsNegative(x * zInv)) y = mod(-y); // 9
-    let s = mod((z - y) * D); // 10 (check footer's note, no sqrt(-a))
-    if (edIsNegative(s)) s = mod(-s);
-    return numberToBytesLEPadded(s, 32); // 11
-  }
-  // Ristretto methods end.
-
   // Compare one point to another.
   equals(other: ExtendedPoint): boolean {
     const a = this;
@@ -208,9 +120,7 @@ class ExtendedPoint {
   // http://hyperelliptic.org/EFD/g1p/auto-twisted-extended-1.html#doubling-dbl-2008-hwcd
   // Cost: 3M + 4S + 1*a + 7add + 1*2.
   double(): ExtendedPoint {
-    const X1 = this.x;
-    const Y1 = this.y;
-    const Z1 = this.z;
+    const X1 = this.x, Y1 = this.y, Z1 = this.z; // prettier-ignore
     const { a } = CURVE;
     const A = mod(X1 ** _2n);
     const B = mod(Y1 ** _2n);
@@ -230,22 +140,13 @@ class ExtendedPoint {
   // Fast algo for adding 2 Extended Points when curve's a=-1.
   // http://hyperelliptic.org/EFD/g1p/auto-twisted-extended-1.html#addition-add-2008-hwcd-4
   // Cost: 8M + 8add + 2*2.
-  add(other: ExtendedPoint): ExtendedPoint {
-    const X1 = this.x;
-    const Y1 = this.y;
-    const Z1 = this.z;
-    const T1 = this.t;
-    const X2 = other.x;
-    const Y2 = other.y;
-    const Z2 = other.z;
-    const T2 = other.t;
+  add(other: ExtendedPoint) {
+    const X1 = this.x, Y1 = this.y, Z1 = this.z, T1 = this.t; // prettier-ignore
+    const X2 = other.x, Y2 = other.y, Z2 = other.z, T2 = other.t; // prettier-ignore
     const A = mod((Y1 - X1) * (Y2 + X2));
     const B = mod((Y1 + X1) * (Y2 - X2));
     const F = mod(B - A);
-    if (F === _0n) {
-      // Same point.
-      return this.double();
-    }
+    if (F === _0n) return this.double(); // Same point.
     const C = mod(Z1 * _2n * T2);
     const D = mod(T1 * _2n * Z2);
     const E = mod(D + C);
@@ -260,23 +161,6 @@ class ExtendedPoint {
 
   subtract(other: ExtendedPoint): ExtendedPoint {
     return this.add(other.negate());
-  }
-
-  // Non-constant-time multiplication. Uses double-and-add algorithm.
-  // It's faster, but should only be used when you don't care about
-  // an exposed private key e.g. sig verification.
-  multiplyUnsafe(scalar: number | bigint): ExtendedPoint {
-    let n = normalizeScalar(scalar, CURVE.n);
-    const P0 = ExtendedPoint.ZERO;
-    if (this.equals(P0) || n === _1n) return this;
-    let p = P0;
-    let d: ExtendedPoint = this;
-    while (n > _0n) {
-      if (n & _1n) p = p.add(d);
-      d = d.double();
-      n >>= _1n;
-    }
-    return p;
   }
 
   private precomputeWindow(W: number): ExtendedPoint[] {
@@ -296,7 +180,7 @@ class ExtendedPoint {
     return points;
   }
 
-  private wNAF(n: bigint, affinePoint?: Point): [ExtendedPoint, ExtendedPoint] {
+  private wNAF(n: bigint, affinePoint?: Point): ExtendedPoint {
     if (!affinePoint && this.equals(ExtendedPoint.BASE)) affinePoint = Point.BASE;
     const W = (affinePoint && affinePoint._WINDOW_SIZE) || 1;
     if (256 % W) {
@@ -348,21 +232,43 @@ class ExtendedPoint {
         p = p.add(cached);
       }
     }
-    return [p, f];
+    return ExtendedPoint.normalizeZ([p, f])[0];
   }
 
   // Constant time multiplication.
   // Uses wNAF method. Windowed method may be 10% faster,
   // but takes 2x longer to generate and consumes 2x memory.
   multiply(scalar: number | bigint, affinePoint?: Point): ExtendedPoint {
-    const n = normalizeScalar(scalar, CURVE.n);
-    return ExtendedPoint.normalizeZ(this.wNAF(n, affinePoint))[0];
+    const n = normalizeScalar(scalar, CURVE.q);
+    return this.wNAF(n, affinePoint);
   }
 
+  // Non-constant-time multiplication. Uses double-and-add algorithm.
+  // It's faster, but should only be used when you don't care about
+  // an exposed private key e.g. sig verification.
   // Allows scalar bigger than curve order, but less than 2^256
-  multiplyForVerification(scalar: bigint): ExtendedPoint {
-    const n = normalizeScalar(scalar, CURVE.n, false);
-    return ExtendedPoint.normalizeZ(this.wNAF(n))[0];
+  multiplyUnsafe(scalar: number | bigint): ExtendedPoint {
+    let n = normalizeScalar(scalar, CURVE.q, false);
+    const G = ExtendedPoint.BASE;
+    const P0 = ExtendedPoint.ZERO;
+    if (this.equals(P0) || n === _1n) return this;
+    if (this.equals(G)) return this.wNAF(n);
+    let p = P0;
+    let d: ExtendedPoint = this;
+    while (n > _0n) {
+      if (n & _1n) p = p.add(d);
+      d = d.double();
+      n >>= _1n;
+    }
+    return p;
+  }
+
+  isSmallOrder(): boolean {
+    return this.multiplyUnsafe(CURVE.h).equals(ExtendedPoint.ZERO);
+  }
+
+  isTorsionFree(): boolean {
+    return this.multiplyUnsafe(CURVE.q).equals(ExtendedPoint.ZERO);
   }
 
   // Converts Extended point to default (x, y) coordinates.
@@ -371,6 +277,159 @@ class ExtendedPoint {
     const x = mod(this.x * invZ);
     const y = mod(this.y * invZ);
     return new Point(x, y);
+  }
+
+  fromRistrettoBytes() { legacyRist(); }
+  toRistrettoBytes() { legacyRist(); }
+  fromRistrettoHash() { legacyRist(); }
+}
+
+function legacyRist() {
+  throw new Error('Legacy method: switch to RistrettoPoint');
+}
+
+/**
+ * Ristretto point operates in X:Y:Z:T extended coordinates like ExtendedPoint,
+ * but it should work in its own namespace: do not combine those two.
+ * https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-ristretto255-decaf448
+ */
+class RistrettoPoint {
+  static BASE = new RistrettoPoint(ExtendedPoint.BASE);
+  static ZERO = new RistrettoPoint(ExtendedPoint.ZERO);
+
+  constructor(private readonly ep: ExtendedPoint) {}
+
+  get x() {
+    return this.ep.x;
+  }
+  get y() {
+    return this.ep.y;
+  }
+  get z() {
+    return this.ep.z;
+  }
+  get t() {
+    return this.ep.t;
+  }
+
+  // Computes Elligator map for Ristretto
+  // https://ristretto.group/formulas/elligator.html
+  private static calcElligatorRistrettoMap(r0: bigint): ExtendedPoint {
+    const { d } = CURVE;
+    const r = mod(SQRT_M1 * r0 * r0); // 1
+    const Ns = mod((r + _1n) * ONE_MINUS_D_SQ); // 2
+    let c = BigInt(-1); // 3
+    const D = mod((c - d * r) * mod(r + d)); // 4
+    let { isValid: Ns_D_is_sq, value: s } = uvRatio(Ns, D); // 5
+    let s_ = mod(s * r0); // 6
+    if (!edIsNegative(s_)) s_ = mod(-s_);
+    if (!Ns_D_is_sq) s = s_; // 7
+    if (!Ns_D_is_sq) c = r; // 8
+    const Nt = mod(c * (r - _1n) * D_MINUS_ONE_SQ - D); // 9
+    const s2 = s * s;
+    const W0 = mod((s + s) * D); // 10
+    const W1 = mod(Nt * SQRT_AD_MINUS_ONE); // 11
+    const W2 = mod(_1n - s2); // 12
+    const W3 = mod(_1n + s2); // 13
+    return new ExtendedPoint(mod(W0 * W3), mod(W2 * W1), mod(W1 * W3), mod(W0 * W2));
+  }
+
+  /**
+   * Takes uniform output of 64-bit hash function like sha512 and converts it to `RistrettoPoint`.
+   * The hash-to-group operation applies Elligator twice and adds the results.
+   * **Note:** this is one-way map, there is no conversion from point to hash.
+   * https://ristretto.group/formulas/elligator.html
+   * @param hex 64-bit output of a hash function
+   */
+  static hashToCurve(hex: Hex): RistrettoPoint {
+    hex = ensureBytes(hex, 64);
+    const r1 = bytes255ToNumberLE(hex.slice(0, 32));
+    const R1 = this.calcElligatorRistrettoMap(r1);
+    const r2 = bytes255ToNumberLE(hex.slice(32, 64));
+    const R2 = this.calcElligatorRistrettoMap(r2);
+    return new RistrettoPoint(R1.add(R2));
+  }
+
+  /**
+   * Converts ristretto-encoded string to ristretto point.
+   * https://ristretto.group/formulas/decoding.html
+   * @param hex Ristretto-encoded 32 bytes. Not every 32-byte string is valid ristretto encoding
+   */
+  static fromHex(hex: Hex): RistrettoPoint {
+    hex = ensureBytes(hex, 32);
+    const { a, d } = CURVE;
+    const emsg = 'RistrettoPoint.fromHex: the hex is not valid encoding of RistrettoPoint';
+    const s = bytes255ToNumberLE(hex);
+    // 1. Check that s_bytes is the canonical encoding of a field element, or else abort.
+    // 3. Check that s is non-negative, or else abort
+    if (!equalBytes(numberToBytesLEPadded(s, 32), hex) || edIsNegative(s)) throw new Error(emsg);
+    const s2 = mod(s * s);
+    const u1 = mod(_1n + a * s2); // 4 (a is -1)
+    const u2 = mod(_1n - a * s2); // 5
+    const u1_2 = mod(u1 * u1);
+    const u2_2 = mod(u2 * u2);
+    const v = mod(a * d * u1_2 - u2_2); // 6
+    const { isValid, value: I } = invertSqrt(mod(v * u2_2)); // 7
+    const Dx = mod(I * u2); // 8
+    const Dy = mod(I * Dx * v); // 9
+    let x = mod((s + s) * Dx); // 10
+    if (edIsNegative(x)) x = mod(-x); // 10
+    const y = mod(u1 * Dy); // 11
+    const t = mod(x * y); // 12
+    if (!isValid || edIsNegative(t) || y === _0n) throw new Error(emsg);
+    return new RistrettoPoint(new ExtendedPoint(x, y, _1n, t));
+  }
+
+  /**
+   * Encodes ristretto point to Uint8Array.
+   * https://ristretto.group/formulas/encoding.html
+   */
+  toRawBytes(): Uint8Array {
+    let { x, y, z, t } = this.ep;
+    const u1 = mod(mod(z + y) * mod(z - y)); // 1
+    const u2 = mod(x * y); // 2
+    // Square root always exists
+    const { value: invsqrt } = invertSqrt(mod(u1 * u2 ** _2n)); // 3
+    const D1 = mod(invsqrt * u1); // 4
+    const D2 = mod(invsqrt * u2); // 5
+    const zInv = mod(D1 * D2 * t); // 6
+    let D: bigint; // 7
+    if (edIsNegative(t * zInv)) {
+      let _x = mod(y * SQRT_M1);
+      let _y = mod(x * SQRT_M1);
+      x = _x;
+      y = _y;
+      D = mod(D1 * INVSQRT_A_MINUS_D);
+    } else {
+      D = D2; // 8
+    }
+    if (edIsNegative(x * zInv)) y = mod(-y); // 9
+    let s = mod((z - y) * D); // 10 (check footer's note, no sqrt(-a))
+    if (edIsNegative(s)) s = mod(-s);
+    return numberToBytesLEPadded(s, 32); // 11
+  }
+
+  toHex(): string {
+    return bytesToHex(this.toRawBytes());
+  }
+
+  // Compare one point to another.
+  equals(other: RistrettoPoint): boolean {
+    const a = this.ep;
+    const b = other.ep;
+    return mod(a.x * b.y) === mod(b.x * a.y);
+  }
+
+  add(other: RistrettoPoint): RistrettoPoint {
+    return new RistrettoPoint(this.ep.add(other.ep));
+  }
+
+  subtract(other: RistrettoPoint): RistrettoPoint {
+    return new RistrettoPoint(this.ep.subtract(other.ep));
+  }
+
+  multiply(scalar: number | bigint): RistrettoPoint {
+    return new RistrettoPoint(this.ep.multiply(scalar));
   }
 }
 
@@ -475,6 +534,10 @@ class Point {
     return numberToBytesLEPadded(u, 32);
   }
 
+  isTorsionFree(): boolean {
+    return ExtendedPoint.fromAffine(this).isTorsionFree();
+  }
+
   equals(other: Point): boolean {
     return this.x === other.x && this.y === other.y;
   }
@@ -508,7 +571,7 @@ class Signature {
   readonly s: bigint;
   constructor(readonly r: Point, s: bigint, strict = true) {
     if (!(r instanceof Point)) throw new Error('Expected Point instance');
-    this.s = normalizeScalar(s, CURVE.n, strict);
+    this.s = normalizeScalar(s, CURVE.q, strict);
   }
 
   static fromHex(hex: Hex, strict = true) {
@@ -530,7 +593,7 @@ class Signature {
   }
 }
 
-export { ExtendedPoint, Point, Signature };
+export { ExtendedPoint, RistrettoPoint, Point, Signature };
 
 function concatBytes(...arrays: Uint8Array[]): Uint8Array {
   if (!arrays.every((a) => a instanceof Uint8Array)) throw new Error('Expected Uint8Array list');
@@ -716,11 +779,10 @@ function invertSqrt(number: bigint) {
 // Math end
 
 // Little-endian SHA512 with modulo n
-async function sha512ModnLE(...args: Uint8Array[]): Promise<bigint> {
-  const messageArray = concatBytes(...args);
-  const hash = await utils.sha512(messageArray);
+async function sha512ModqLE(...args: Uint8Array[]): Promise<bigint> {
+  const hash = await utils.sha512(concatBytes(...args));
   const value = bytesToNumberLE(hash);
-  return mod(value, CURVE.n);
+  return mod(value, CURVE.q);
 }
 
 function equalBytes(b1: Uint8Array, b2: Uint8Array) {
@@ -798,7 +860,7 @@ async function getExtendedPublicKey(key: PrivKey) {
   // Second 32 bytes is called key prefix (5.1.6)
   const prefix = hashed.slice(32, 64);
   // The actual private scalar
-  const scalar = mod(bytesToNumberLE(head), CURVE.n);
+  const scalar = mod(bytesToNumberLE(head), CURVE.q);
   // Point on Edwards curve aka public key
   const point = Point.BASE.multiply(scalar);
   const pointBytes = point.toRawBytes();
@@ -823,10 +885,10 @@ export async function getPublicKey(privateKey: PrivKey): Promise<Uint8Array> {
 export async function sign(message: Hex, privateKey: Hex): Promise<Uint8Array> {
   message = ensureBytes(message);
   const { prefix, scalar, pointBytes } = await getExtendedPublicKey(privateKey);
-  const r = await sha512ModnLE(prefix, message); // r = hash(prefix + msg)
+  const r = await sha512ModqLE(prefix, message); // r = hash(prefix + msg)
   const R = Point.BASE.multiply(r); // R = rG
-  const k = await sha512ModnLE(R.toRawBytes(), pointBytes, message); // k = hash(R + P + msg)
-  const S = mod(r + k * scalar, CURVE.n); // S = r + kp
+  const k = await sha512ModqLE(R.toRawBytes(), pointBytes, message); // k = hash(R + P + msg)
+  const S = mod(r + k * scalar, CURVE.q); // S = r + kp
   return new Signature(R, S).toRawBytes();
 }
 
@@ -843,8 +905,8 @@ export async function verify(sig: SigType, message: Hex, publicKey: PubKey): Pro
   message = ensureBytes(message);
   if (!(publicKey instanceof Point)) publicKey = Point.fromHex(publicKey, false);
   if (!(sig instanceof Signature)) sig = Signature.fromHex(sig, false);
-  const SB = ExtendedPoint.BASE.multiplyForVerification(sig.s);
-  const k = await sha512ModnLE(sig.r.toRawBytes(), publicKey.toRawBytes(), message);
+  const SB = ExtendedPoint.BASE.multiplyUnsafe(sig.s);
+  const k = await sha512ModqLE(sig.r.toRawBytes(), publicKey.toRawBytes(), message);
   const kA = ExtendedPoint.fromAffine(publicKey).multiplyUnsafe(k);
   const RkA = ExtendedPoint.fromAffine(sig.r).add(kA);
   // [8][S]B = [8]R + [8][k]A'

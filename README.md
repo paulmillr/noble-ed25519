@@ -143,17 +143,39 @@ You cannot use ed25519 keys, because they are hashed with sha512. However, you c
 
 ##### Ristretto255
 
-To use Ristretto, simply use `fromRistrettoHash()` and `toRistrettoBytes()` methods.
+Ristretto255 provides a class that operates over a prime-order subgroup of ed25519.
+
+However, ristretto is not a subgroup of ed25519 and you should not mix them.
+
+A separate `RistrettoPoint` class is used, with following methods:
 
 ```typescript
-// The hash-to-group operation applies Elligator twice and adds the results.
-ExtendedPoint.fromRistrettoHash(hash: Uint8Array | string): ExtendedPoint;
-
+class RistrettoPoint {
+  static BASE: RistrettoPoint;
+  static ZERO: RistrettoPoint;
+  get x(): bigint;
+  get y(): bigint;
+  get z(): bigint;
+  get t(): bigint;
+  static hashToCurve(hex: Hex): RistrettoPoint;
+  static fromHex(hex: Hex): RistrettoPoint;
+  toRawBytes(): Uint8Array;
+  toHex(): string;
+  equals(other: RistrettoPoint): boolean;
+  add(other: RistrettoPoint): RistrettoPoint;
+  subtract(other: RistrettoPoint): RistrettoPoint;
+  multiply(scalar: number | bigint): RistrettoPoint;
+}
+```
 // Decode a byte-string s_bytes representing a compressed Ristretto point into extended coordinates.
-ExtendedPoint.fromRistrettoBytes(bytes: Uint8Array | string): ExtendedPoint;
+RistrettoPoint.fromHex(hex: Uint8Array | string): RistrettoPoint;
 
-// Encode a Ristretto point represented by the point (X:Y:Z:T) in extended coordinates to Uint8Array.
-ExtendedPoint#toRistrettoBytes(): Uint8Array
+// Encode a Ristretto point represented by the point (X:Y:Z:T) in extended coordinates to Uint8Array
+RistrettoPoint#toHex(): Uint8Array;
+
+// Takes uniform output of 64-bit hash function like sha512 and converts it to RistrettoPoint
+// **Note:** this is one-way map, there is no conversion from point to hash.
+RistrettoPoint.hashToCurve(hash: Uint8Array | string): RistrettoPoint;
 ```
 
 It extends Mike Hamburg's Decaf approach to cofactor elimination to support cofactor-8 curves such as Curve25519.
