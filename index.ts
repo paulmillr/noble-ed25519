@@ -30,7 +30,6 @@ const CURVE = {
   // Finite field 𝔽p over which we'll do calculations
   P: _2n ** _255n - BigInt(19),
   // Subgroup order: how many points ed25519 has
-  q: CURVE_ORDER, // sometimes it's called q
   l: CURVE_ORDER, // in rfc8032 it's called l
   n: CURVE_ORDER, // backwards compatibility
   // Cofactor
@@ -239,7 +238,7 @@ class ExtendedPoint {
   // Uses wNAF method. Windowed method may be 10% faster,
   // but takes 2x longer to generate and consumes 2x memory.
   multiply(scalar: number | bigint, affinePoint?: Point): ExtendedPoint {
-    const n = normalizeScalar(scalar, CURVE.q);
+    const n = normalizeScalar(scalar, CURVE.l);
     return this.wNAF(n, affinePoint);
   }
 
@@ -248,7 +247,7 @@ class ExtendedPoint {
   // an exposed private key e.g. sig verification.
   // Allows scalar bigger than curve order, but less than 2^256
   multiplyUnsafe(scalar: number | bigint): ExtendedPoint {
-    let n = normalizeScalar(scalar, CURVE.q, false);
+    let n = normalizeScalar(scalar, CURVE.l, false);
     const G = ExtendedPoint.BASE;
     const P0 = ExtendedPoint.ZERO;
     if (this.equals(P0) || n === _1n) return this;
@@ -268,7 +267,7 @@ class ExtendedPoint {
   }
 
   isTorsionFree(): boolean {
-    return this.multiplyUnsafe(CURVE.q).equals(ExtendedPoint.ZERO);
+    return this.multiplyUnsafe(CURVE.l).equals(ExtendedPoint.ZERO);
   }
 
   // Converts Extended point to default (x, y) coordinates.
@@ -279,9 +278,15 @@ class ExtendedPoint {
     return new Point(x, y);
   }
 
-  fromRistrettoBytes() { legacyRist(); }
-  toRistrettoBytes() { legacyRist(); }
-  fromRistrettoHash() { legacyRist(); }
+  fromRistrettoBytes() {
+    legacyRist();
+  }
+  toRistrettoBytes() {
+    legacyRist();
+  }
+  fromRistrettoHash() {
+    legacyRist();
+  }
 }
 
 function legacyRist() {
@@ -298,19 +303,6 @@ class RistrettoPoint {
   static ZERO = new RistrettoPoint(ExtendedPoint.ZERO);
 
   constructor(private readonly ep: ExtendedPoint) {}
-
-  get x() {
-    return this.ep.x;
-  }
-  get y() {
-    return this.ep.y;
-  }
-  get z() {
-    return this.ep.z;
-  }
-  get t() {
-    return this.ep.t;
-  }
 
   // Computes Elligator map for Ristretto
   // https://ristretto.group/formulas/elligator.html
@@ -413,19 +405,31 @@ class RistrettoPoint {
     return bytesToHex(this.toRawBytes());
   }
 
+  get x() {
+    return this.ep.x;
+  }
+  get y() {
+    return this.ep.y;
+  }
+  get z() {
+    return this.ep.z;
+  }
+  get t() {
+    return this.ep.t;
+  }
+
   // Compare one point to another.
   equals(other: RistrettoPoint): boolean {
     const a = this.ep;
     const b = other.ep;
-    return mod(a.x * b.y) === mod(b.x * a.y);
+    // (x1 * y2 == y1 * x2) | (y1 * y2 == x1 * x2)
+    const one = mod(a.x * b.y) === mod(a.y * b.x);
+    const two = mod(a.y * b.y) === mod(a.x * b.x);
+    return one || two;
   }
 
   add(other: RistrettoPoint): RistrettoPoint {
     return new RistrettoPoint(this.ep.add(other.ep));
-  }
-
-  subtract(other: RistrettoPoint): RistrettoPoint {
-    return new RistrettoPoint(this.ep.subtract(other.ep));
   }
 
   multiply(scalar: number | bigint): RistrettoPoint {
@@ -571,7 +575,7 @@ class Signature {
   readonly s: bigint;
   constructor(readonly r: Point, s: bigint, strict = true) {
     if (!(r instanceof Point)) throw new Error('Expected Point instance');
-    this.s = normalizeScalar(s, CURVE.q, strict);
+    this.s = normalizeScalar(s, CURVE.l, strict);
   }
 
   static fromHex(hex: Hex, strict = true) {
@@ -782,7 +786,7 @@ function invertSqrt(number: bigint) {
 async function sha512ModqLE(...args: Uint8Array[]): Promise<bigint> {
   const hash = await utils.sha512(concatBytes(...args));
   const value = bytesToNumberLE(hash);
-  return mod(value, CURVE.q);
+  return mod(value, CURVE.l);
 }
 
 function equalBytes(b1: Uint8Array, b2: Uint8Array) {
@@ -860,7 +864,7 @@ async function getExtendedPublicKey(key: PrivKey) {
   // Second 32 bytes is called key prefix (5.1.6)
   const prefix = hashed.slice(32, 64);
   // The actual private scalar
-  const scalar = mod(bytesToNumberLE(head), CURVE.q);
+  const scalar = mod(bytesToNumberLE(head), CURVE.l);
   // Point on Edwards curve aka public key
   const point = Point.BASE.multiply(scalar);
   const pointBytes = point.toRawBytes();
@@ -888,7 +892,7 @@ export async function sign(message: Hex, privateKey: Hex): Promise<Uint8Array> {
   const r = await sha512ModqLE(prefix, message); // r = hash(prefix + msg)
   const R = Point.BASE.multiply(r); // R = rG
   const k = await sha512ModqLE(R.toRawBytes(), pointBytes, message); // k = hash(R + P + msg)
-  const S = mod(r + k * scalar, CURVE.q); // S = r + kp
+  const S = mod(r + k * scalar, CURVE.l); // S = r + kp
   return new Signature(R, S).toRawBytes();
 }
 
@@ -1021,6 +1025,8 @@ export const curve25519 = {
     const u = decodeUCoordinate(publicKey);
     const p = decodeScalar25519(privateKey);
     const pu = montgomeryLadder(u, p);
+    // The result was not contributory
+    // https://cr.yp.to/ecdh.html#validate
     if (pu === _0n) throw new Error('Invalid private or public key received');
     return encodeUCoordinate(pu);
   },
@@ -1080,6 +1086,12 @@ export const utils = {
       throw new Error("The environment doesn't have sha512 function");
     }
   },
+  /**
+   * We're doing scalar multiplication (used in getPublicKey etc) with precomputed BASE_POINT
+   * values. This slows down first getPublicKey() by milliseconds (see Speed section),
+   * but allows to speed-up subsequent getPublicKey() calls up to 20x.
+   * @param windowSize 2, 4, 8, 16
+   */
   precompute(windowSize = 8, point = Point.BASE): Point {
     const cached = point.equals(Point.BASE) ? point : new Point(point.x, point.y);
     cached._setWindowSize(windowSize);

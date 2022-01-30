@@ -70,9 +70,9 @@ you will need [import map](https://deno.land/manual/linking_to_external_code/imp
 - [`sign(message, privateKey)`](#signmessage-privatekey)
 - [`verify(signature, message, publicKey)`](#verifysignature-message-publickey)
 - [`getSharedSecret(privateKey, publicKey)`](#getsharedsecretprivatekey-publickey)
-- [Curve25519](#curve25519)
-- [Ristretto255](#ristretto255)
-- [Helpers & Point](#helpers--point)
+- [X25519 and curve25519](#x25519-and-curve25519)
+- [ristretto255](#ristretto255)
+- [Utilities](#utilities)
 
 ##### `getPublicKey(privateKey)`
 ```typescript
@@ -128,7 +128,7 @@ Converts ed25519 private / public keys to Curve25519 and calculates
 Elliptic Curve Diffie Hellman (ECDH) with X25519.
 Conforms to [RFC7748](https://datatracker.ietf.org/doc/html/rfc7748).
 
-##### Curve25519
+##### X25519 and curve25519
 
 ```js
 const pub = ed25519.curve25519.scalarMultBase(privateKey);
@@ -143,16 +143,87 @@ You cannot use ed25519 keys, because they are hashed with sha512. However, you c
 
 ##### Ristretto255
 
-Ristretto255 provides a class that operates over a prime-order subgroup of ed25519.
+Each Point in ed25519 has 8 different equivalent points. No matter which one of these 8 equivalent points
+you give the Ristretto algorithm, it will give you exactly the same one. The other 7 points are no longer
+representable. Two caveats:
 
-However, ristretto is not a subgroup of ed25519 and you should not mix them.
+1. Always use `RistrettoPoint.fromHex()` and `RistrettoPoint#toHex()`
+2. Never mix `ExtendedPoint` & `RistrettoPoint`: ristretto is not a subgroup of ed25519 and you should not mix them.
+  `ExtendedPoint` you are mixing with, may not be the representative for the set of possible points.
 
-A separate `RistrettoPoint` class is used, with following methods:
+[(taken from the comment)](https://monero.stackexchange.com/a/12171)
 
 ```typescript
+import { RistrettoPoint } from '@noble/ed25519';
+
+// Decode a byte-string representing a compressed Ristretto point.
+RistrettoPoint.fromHex(hex: Uint8Array | string): RistrettoPoint;
+
+// Encode a Ristretto point represented by the point (X:Y:Z:T) to Uint8Array
+RistrettoPoint#toHex(): Uint8Array;
+
+// Takes uniform output of 64-bit hash function like sha512 and converts it to RistrettoPoint
+// **Note:** this is one-way map, there is no conversion from point to hash.
+RistrettoPoint.hashToCurve(hash: Uint8Array | string): RistrettoPoint;
+```
+
+It extends Mike Hamburg's Decaf approach to cofactor elimination to support cofactor-8 curves such as Curve25519.
+
+In particular, this allows an existing Curve25519 library to implement a prime-order group with only a thin abstraction layer, and makes it possible for systems using Ed25519 signatures to be safely extended with zero-knowledge protocols, with no additional cryptographic assumptions and minimal code changes.
+
+For more information on the topic, check out:
+
+- [Ristretto website](https://ristretto.group)
+- IRTF standard ([irtf-cfrg-ristretto255-decaf448](https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-ristretto255-decaf448))
+- [Exploiting Low Order Generators in One-Time Ring Signatures](https://jonasnick.github.io/blog/2017/05/23/exploiting-low-order-generators-in-one-time-ring-signatures/)
+- [Details of ristretto internals](https://monero.stackexchange.com/a/12171)
+
+##### Utilities
+
+We provide a bunch of useful utils and expose some internal classes.
+
+```typescript
+// Returns cryptographically secure random `Uint8Array` that could be used as private key
+utils.randomPrivateKey();
+
+// Native sha512 calculation
+utils.sha512(message: Uint8Array): Promise<Uint8Array>;
+
+// Modular division
+utils.mod(number: bigint, modulo = CURVE.P): bigint;
+
+// Convert Uint8Array to hex string
+utils.bytesToHex(bytes: Uint8Array): string;
+
+// returns { head, prefix, scalar, point, pointBytes }
+utils.getExtendedPublicKey(privateKey);
+
+// Call it without arguments if you want your first calculation of public key to take normal time instead of ~20ms
+utils.precompute(W = 8, point = Point.BASE)
+
+// Elliptic curve point in Affine (x, y) coordinates.
+class Point {
+  constructor(x: bigint, y: bigint);
+  static fromHex(hash: string);
+  static fromPrivateKey(privateKey: string | Uint8Array);
+  toX25519(): Uint8Array; // Converts to Curve25519 u coordinate in LE form
+  toRawBytes(): Uint8Array;
+  toHex(): string; // Compact representation of a Point
+  isTorsionFree(): boolean; // Multiplies the point by curve order
+  equals(other: Point): boolean;
+  negate(): Point;
+  add(other: Point): Point;
+  subtract(other: Point): Point;
+  multiply(scalar: bigint): Point;
+}
+// Elliptic curve point in Extended (x, y, z, t) coordinates.
+class ExtendedPoint {
+  constructor(x: bigint, y: bigint, z: bigint, t: bigint);
+  static fromAffine(point: Point): ExtendedPoint;
+  toAffine(): Point;
+}
+// Also (x, y, z, t)
 class RistrettoPoint {
-  static BASE: RistrettoPoint;
-  static ZERO: RistrettoPoint;
   get x(): bigint;
   get y(): bigint;
   get z(): bigint;
@@ -166,95 +237,21 @@ class RistrettoPoint {
   subtract(other: RistrettoPoint): RistrettoPoint;
   multiply(scalar: number | bigint): RistrettoPoint;
 }
-```
-// Decode a byte-string s_bytes representing a compressed Ristretto point into extended coordinates.
-RistrettoPoint.fromHex(hex: Uint8Array | string): RistrettoPoint;
+class Signature {
+  constructor(r: bigint, s: bigint);
+  static fromHex(hex: Hex): Signature;
+  toRawBytes(): Uint8Array;
+  toHex(): string;
+}
 
-// Encode a Ristretto point represented by the point (X:Y:Z:T) in extended coordinates to Uint8Array
-RistrettoPoint#toHex(): Uint8Array;
-
-// Takes uniform output of 64-bit hash function like sha512 and converts it to RistrettoPoint
-// **Note:** this is one-way map, there is no conversion from point to hash.
-RistrettoPoint.hashToCurve(hash: Uint8Array | string): RistrettoPoint;
-```
-
-It extends Mike Hamburg's Decaf approach to cofactor elimination to support cofactor-8 curves such as Curve25519.
-
-In particular, this allows an existing Curve25519 library to implement a prime-order group with only a thin abstraction layer, and makes it possible for systems using Ed25519 signatures to be safely extended with zero-knowledge protocols, with no additional cryptographic assumptions and minimal code changes.
-
-##### Helpers & Point
-
-`utils.randomPrivateKey()`
-
-Returns cryptographically secure random `Uint8Array` that could be used as Private Key.
-
-`utils.precompute(W = 8, point = Point.BASE)`
-
-Returns cached point which you can use to `#multiply` by it.
-
-This is done by default, no need to run it unless you want to
-disable precomputation or change window size.
-
-We're doing scalar multiplication (used in getPublicKey etc) with
-precomputed BASE_POINT values.
-
-This slows down first getPublicKey() by milliseconds (see Speed section),
-but allows to speed-up subsequent getPublicKey() calls up to 20x.
-
-You may want to precompute values for your own point.
-
-`utils.TORSION_SUBGROUP`
-
-The 8-torsion subgroup ℰ8. Those are "buggy" points, if you multiply them by 8, you'll receive Point.ZERO.
-
-Useful to check implementations for signature malleability. See [the link](https://moderncrypto.org/mail-archive/curves/2017/000866.html)
-
-`Point#toX25519`
-
-You can use the method to use ed25519 keys for curve25519 encryption.
-
-https://blog.filippo.io/using-ed25519-keys-for-encryption
-
-```typescript
+// Curve params
 ed25519.CURVE.P // 2 ** 255 - 19
 ed25519.CURVE.l // 2 ** 252 + 27742317777372353535851937790883648493
 ed25519.Point.BASE // new ed25519.Point(Gx, Gy) where
 // Gx = 15112221349535400772501151409588531511454012693041857206046113283949847762202n
 // Gy = 46316835694926478169428394003475163141307993866256225615783033603165251855960n;
 
-
-// Elliptic curve point in Affine (x, y) coordinates.
-ed25519.Point {
-  constructor(x: bigint, y: bigint);
-  static fromHex(hash: string);
-  static fromPrivateKey(privateKey: string | Uint8Array);
-  toX25519(): Uint8Array; // Converts to Curve25519 u coordinate in LE form
-  toRawBytes(): Uint8Array;
-  toHex(): string; // Compact representation of a Point
-  equals(other: Point): boolean;
-  negate(): Point;
-  add(other: Point): Point;
-  subtract(other: Point): Point;
-  multiply(scalar: bigint): Point;
-}
-// Elliptic curve point in Extended (x, y, z, t) coordinates.
-ed25519.ExtendedPoint {
-  constructor(x: bigint, y: bigint, z: bigint, t: bigint);
-  static fromAffine(point: Point): ExtendedPoint;
-  static fromRistrettoHash(hash: Uint8Array | string): ExtendedPoint;
-  static fromRistrettoBytes(bytes: Uint8Array | string): ExtendedPoint;
-  toRistrettoBytes(): Uint8Array;
-  toAffine(): Point;
-}
-ed25519.Signature {
-  constructor(r: bigint, s: bigint);
-  toHex(): string;
-}
-
-// Precomputation helper
-utils.precompute(W, point);
-// returns { head, prefix, scalar, point, pointBytes }
-utils.getExtendedPublicKey(privateKey);
+ed25519.utils.TORSION_SUBGROUP; // The 8-torsion subgroup ℰ8.
 ```
 
 ## Security
