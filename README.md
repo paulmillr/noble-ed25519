@@ -1,6 +1,6 @@
 # noble-ed25519 ![Node CI](https://github.com/paulmillr/noble-ed25519/workflows/Node%20CI/badge.svg) [![code style: prettier](https://img.shields.io/badge/code_style-prettier-ff69b4.svg?style=flat-square)](https://github.com/prettier/prettier)
 
-Fastest JS implementation of [ed25519](https://en.wikipedia.org/wiki/EdDSA),
+[Fastest](#speed) JS implementation of [ed25519](https://en.wikipedia.org/wiki/EdDSA),
 an elliptic curve that could be used for EDDSA signature scheme and X25519 ECDH key agreement.
 
 Conforms to [RFC7748](https://datatracker.ietf.org/doc/html/rfc7748), [RFC8032](https://tools.ietf.org/html/rfc8032) and [ZIP215](https://zips.z.cash/zip-0215). Includes support for [ristretto255](https://ristretto.group): a technique for constructing prime order elliptic curve groups with non-malleable encodings.
