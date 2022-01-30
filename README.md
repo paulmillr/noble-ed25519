@@ -50,8 +50,8 @@ you will need [import map](https://deno.land/manual/linking_to_external_code/imp
 - `app.ts`
 
     ```typescript
-    import * as secp from "https://deno.land/x/secp256k1/mod.ts";
-    const publicKey = ed.getPublicKey(ed.utils.randomPrivateKey());
+    import * as ed from "https://deno.land/x/ed25519/mod.ts";
+    const publicKey = await ed.getPublicKey(ed.utils.randomPrivateKey());
     console.log(publicKey);
     ```
 - `imports.json`
