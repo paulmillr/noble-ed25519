@@ -175,7 +175,7 @@ In particular, this allows an existing Curve25519 library to implement a prime-o
 For more information on the topic, check out:
 
 - [Ristretto website](https://ristretto.group)
-- IRTF standard [irtf-cfrg-ristretto255-decaf448](https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-ristretto255-decaf448)
+- [irtf-cfrg-ristretto255-decaf448](https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-ristretto255-decaf448) standard draft
 - [Exploiting Low Order Generators in One-Time Ring Signatures](https://jonasnick.github.io/blog/2017/05/23/exploiting-low-order-generators-in-one-time-ring-signatures/)
 - [Details of ristretto internals](https://monero.stackexchange.com/a/12171)
 - [Rust implementation with lots of comments](https://github.com/dalek-cryptography/curve25519-dalek/blob/967d8b6c0e67100401ad66125b7399ccf509ae22/src/ristretto.rs)
