@@ -128,7 +128,7 @@ Converts ed25519 private / public keys to Curve25519 and calculates
 Elliptic Curve Diffie Hellman (ECDH) with X25519.
 Conforms to [RFC7748](https://datatracker.ietf.org/doc/html/rfc7748).
 
-##### X25519 and curve25519
+### X25519 and curve25519
 
 ```js
 const pub = ed25519.curve25519.scalarMultBase(privateKey);
@@ -141,7 +141,7 @@ Curve25519 keys. It uses Montgomery Ladder specified in [RFC7748](https://datatr
 You cannot use ed25519 keys, because they are hashed with sha512. However, you can use
 `Point#toX25519()` method on ed25519 public keys. See implementation of `ed25519.getSharedSecret` for details.
 
-##### Ristretto255
+### Ristretto255
 
 Each Point in ed25519 has 8 different equivalent points. No matter which one of these 8 equivalent points
 you give the Ristretto algorithm, it will give you exactly the same one. The other 7 points are no longer
@@ -178,7 +178,7 @@ For more information on the topic, check out:
 - [Exploiting Low Order Generators in One-Time Ring Signatures](https://jonasnick.github.io/blog/2017/05/23/exploiting-low-order-generators-in-one-time-ring-signatures/)
 - [Details of ristretto internals](https://monero.stackexchange.com/a/12171)
 
-##### Utilities
+### Utilities
 
 We provide a bunch of useful utils and expose some internal classes.
 
