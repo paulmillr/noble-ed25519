@@ -148,7 +148,7 @@ you give the Ristretto algorithm, it will give you exactly the same one. The oth
 representable. Two caveats:
 
 1. Always use `RistrettoPoint.fromHex()` and `RistrettoPoint#toHex()`
-2. Never mix `ExtendedPoint` & `RistrettoPoint`: ristretto is not a subgroup of ed25519 and you should not mix them.
+2. Never mix `ExtendedPoint` & `RistrettoPoint`: ristretto is not a subgroup of ed25519.
   `ExtendedPoint` you are mixing with, may not be the representative for the set of possible points.
 
 [(taken from the comment)](https://monero.stackexchange.com/a/12171)
@@ -157,6 +157,7 @@ representable. Two caveats:
 import { RistrettoPoint } from '@noble/ed25519';
 
 // Decode a byte-string representing a compressed Ristretto point.
+// Not compatible with Point.toHex()
 RistrettoPoint.fromHex(hex: Uint8Array | string): RistrettoPoint;
 
 // Encode a Ristretto point represented by the point (X:Y:Z:T) to Uint8Array
