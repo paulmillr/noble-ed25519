@@ -294,6 +294,8 @@ function legacyRist() {
 }
 
 /**
+ * Each ed25519/ExtendedPoint has 8 different equivalent points. This can be
+ * a source of bugs for protocols like ring signatures. Ristretto was created to solve this.
  * Ristretto point operates in X:Y:Z:T extended coordinates like ExtendedPoint,
  * but it should work in its own namespace: do not combine those two.
  * https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-ristretto255-decaf448
@@ -403,19 +405,6 @@ class RistrettoPoint {
 
   toHex(): string {
     return bytesToHex(this.toRawBytes());
-  }
-
-  get x() {
-    return this.ep.x;
-  }
-  get y() {
-    return this.ep.y;
-  }
-  get z() {
-    return this.ep.z;
-  }
-  get t() {
-    return this.ep.t;
   }
 
   // Compare one point to another.

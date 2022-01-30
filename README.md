@@ -225,10 +225,6 @@ class ExtendedPoint {
 }
 // Also (x, y, z, t)
 class RistrettoPoint {
-  get x(): bigint;
-  get y(): bigint;
-  get z(): bigint;
-  get t(): bigint;
   static hashToCurve(hex: Hex): RistrettoPoint;
   static fromHex(hex: Hex): RistrettoPoint;
   toRawBytes(): Uint8Array;
