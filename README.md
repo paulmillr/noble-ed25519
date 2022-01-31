@@ -32,13 +32,13 @@ import * as ed from '@noble/ed25519';
 // If you're using single file, use global variable instead: `window.nobleEd25519`
 
 (async () => {
-  // keys, messages & other inputs can be Uint8Array or hex string
+  // keys, messages & other inputs can be Uint8Arrays or hex strings
   // Uint8Array.from([0xde, 0xad, 0xbe, 0xef]) === 'deadbeef'
   const privateKey = ed.utils.randomPrivateKey();
   const message = Uint8Array.from([0xab, 0xbc, 0xcd, 0xde]);
   const publicKey = await ed.getPublicKey(privateKey);
   const signature = await ed.sign(message, privateKey);
-  const isSigned = await ed.verify(signature, message, publicKey);
+  const isValid = await ed.verify(signature, message, publicKey);
 })();
 ```
 
@@ -81,7 +81,7 @@ To generate ed25519 public key:
 ```typescript
 function sign(message: Uint8Array | string, privateKey: Uint8Array | string): Promise<Uint8Array>;
 ```
-- `message: Uint8Array | string` - message which would be signed
+- `message: Uint8Array | string` - message (not message hash) which would be signed
 - `privateKey: Uint8Array | string` - private key which will sign the hash
 - Returns EdDSA signature. You can consume it with `Signature.fromHex()` method:
     - `Signature.fromHex(ed25519.sign(hash, privateKey))`
