@@ -29,11 +29,13 @@ Use NPM in node.js / browser, or include single file from
 ```js
 // Common.js and ECMAScript Modules (ESM)
 import * as ed from '@noble/ed25519';
-// If you're using single file, use global variable: nobleEd25519
+// If you're using single file, use global variable instead: `window.nobleEd25519`
 
-const privateKey = ed.utils.randomPrivateKey(); // 32-byte Uint8Array or string.
-const message = 'deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef';
 (async () => {
+  // keys, messages & other inputs can be Uint8Array or hex string
+  // Uint8Array.from([0xde, 0xad, 0xbe, 0xef]) === 'deadbeef'
+  const privateKey = ed.utils.randomPrivateKey();
+  const message = 'deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef';
   const publicKey = await ed.getPublicKey(privateKey);
   const signature = await ed.sign(message, privateKey);
   const isSigned = await ed.verify(signature, message, publicKey);
@@ -44,19 +46,8 @@ To use the module with [Deno](https://deno.land),
 you will need [import map](https://deno.land/manual/linking_to_external_code/import_maps):
 
 - `deno run --import-map=imports.json app.ts`
-
-- `app.ts`
-
-    ```typescript
-    import * as ed from "https://deno.land/x/ed25519/mod.ts";
-    const publicKey = await ed.getPublicKey(ed.utils.randomPrivateKey());
-    console.log(publicKey);
-    ```
-- `imports.json`
-
-    ```json
-    {"imports": {"crypto": "https://deno.land/std@0.119.0/node/crypto.ts"}}
-    ```
+- app.ts: `import * as ed from "https://deno.land/x/ed25519/mod.ts";`
+- imports.json: `{"imports": {"crypto": "https://deno.land/std@0.119.0/node/crypto.ts"}}`
 
 ## API
 
