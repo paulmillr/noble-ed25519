@@ -35,7 +35,7 @@ import * as ed from '@noble/ed25519';
   // keys, messages & other inputs can be Uint8Array or hex string
   // Uint8Array.from([0xde, 0xad, 0xbe, 0xef]) === 'deadbeef'
   const privateKey = ed.utils.randomPrivateKey();
-  const message = 'deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef';
+  const message = Uint8Array.from([0xab, 0xbc, 0xcd, 0xde]);
   const publicKey = await ed.getPublicKey(privateKey);
   const signature = await ed.sign(message, privateKey);
   const isSigned = await ed.verify(signature, message, publicKey);
