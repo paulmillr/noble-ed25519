@@ -304,6 +304,8 @@ class RistrettoPoint {
   static BASE = new RistrettoPoint(ExtendedPoint.BASE);
   static ZERO = new RistrettoPoint(ExtendedPoint.ZERO);
 
+  // Private property to discourage combining ExtendedPoint + RistrettoPoint
+  // Always use Ristretto encoding/decoding instead.
   constructor(private readonly ep: ExtendedPoint) {}
 
   // Computes Elligator map for Ristretto
@@ -419,6 +421,10 @@ class RistrettoPoint {
 
   add(other: RistrettoPoint): RistrettoPoint {
     return new RistrettoPoint(this.ep.add(other.ep));
+  }
+
+  subtract(other: RistrettoPoint): RistrettoPoint {
+    return new RistrettoPoint(this.ep.subtract(other.ep));
   }
 
   multiply(scalar: number | bigint): RistrettoPoint {
