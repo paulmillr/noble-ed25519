@@ -1056,6 +1056,24 @@ export const utils = {
   bytesToHex,
   getExtendedPublicKey,
   mod,
+
+  /**
+   * Can take 40 or more bytes of uniform input e.g. from CSPRNG or KDF
+   * and convert them into private key, with the modulo bias being neglible.
+   * As per FIPS 186 B.1.1.
+   * @param hash hash output from sha512, or a similar function
+   * @returns valid private key
+   */
+  hashToPrivateKey: (hash: Hex): Uint8Array => {
+    hash = ensureBytes(hash);
+    if (hash.length < 40 || hash.length > 1024)
+      throw new Error('Expected 40-1024 bytes of private key as per FIPS 186');
+    const num = mod(bytesToNumberLE(hash), CURVE.l);
+    // This should never happen
+    if (num === _0n || num === _1n) throw new Error('Invalid private key');
+    return numberToBytesLEPadded(num, 32);
+  },
+
   randomBytes: (bytesLength: number = 32): Uint8Array => {
     if (crypto.web) {
       return crypto.web.getRandomValues(new Uint8Array(bytesLength));
