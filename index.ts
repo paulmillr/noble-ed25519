@@ -421,6 +421,10 @@ class RistrettoPoint {
     return new RistrettoPoint(this.ep.add(other.ep));
   }
 
+  subtract(other: RistrettoPoint): RistrettoPoint {
+    return new RistrettoPoint(this.ep.subtract(other.ep));
+  }
+
   multiply(scalar: number | bigint): RistrettoPoint {
     return new RistrettoPoint(this.ep.multiply(scalar));
   }
