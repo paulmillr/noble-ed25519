@@ -304,7 +304,7 @@ class RistrettoPoint {
   static BASE = new RistrettoPoint(ExtendedPoint.BASE);
   static ZERO = new RistrettoPoint(ExtendedPoint.ZERO);
 
-  constructor(private readonly ep: ExtendedPoint) {}
+  constructor(readonly ep: ExtendedPoint) {}
 
   // Computes Elligator map for Ristretto
   // https://ristretto.group/formulas/elligator.html
