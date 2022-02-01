@@ -179,6 +179,9 @@ utils.sha512(message: Uint8Array): Promise<Uint8Array>;
 // Modular division
 utils.mod(number: bigint, modulo = CURVE.P): bigint;
 
+// Inverses number over modulo
+utils.invert(number: bigint, modulo = CURVE.P): bigint;
+
 // Convert Uint8Array to hex string
 utils.bytesToHex(bytes: Uint8Array): string;
 
