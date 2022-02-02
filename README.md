@@ -145,8 +145,6 @@ it will give you exactly the same one. The other 7 points are no longer represen
 2. Never mix `ExtendedPoint` & `RistrettoPoint`: ristretto is not a subgroup of ed25519.
   `ExtendedPoint` you are mixing with, may not be the representative for the set of possible points.
 
-[(taken from the comment)](https://monero.stackexchange.com/a/12171)
-
 ```typescript
 import { RistrettoPoint } from '@noble/ed25519';
 
