@@ -131,9 +131,15 @@ You cannot use ed25519 keys, because they are hashed with sha512. However, you c
 
 ### Ristretto255
 
-Each Point in ed25519 has 8 different equivalent points. No matter which one of these 8 equivalent points
-you give the Ristretto algorithm, it will give you exactly the same one. The other 7 points are no longer
-representable. Two caveats:
+Each Point in ed25519 has 8 different equivalent points. This can be a great pain for some algorithms
+e.g. ring signatures. In Tor, Ed25519 public key malleability would mean that every v3 onion service
+has eight different addresses, causing mismatches with user expectations and potential gotchas for service operators.
+Fixing this required expensive runtime checks in the v3 onion services protocol, requiring a full scalar multiplication,
+point compression, and equality check. This check must be called in several places to validate that the onion service's
+key does not contain a small torsion component.
+
+No matter which one of these 8 equivalent points you give the Ristretto algorithm,
+it will give you exactly the same one. The other 7 points are no longer representable. Two caveats:
 
 1. Always use `RistrettoPoint.fromHex()` and `RistrettoPoint#toHex()`
 2. Never mix `ExtendedPoint` & `RistrettoPoint`: ristretto is not a subgroup of ed25519.
