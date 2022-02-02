@@ -420,10 +420,12 @@ class RistrettoPoint {
   }
 
   add(other: RistrettoPoint): RistrettoPoint {
+    if (!(other instanceof RistrettoPoint)) throw new TypeError('RistrettoPoint expected');
     return new RistrettoPoint(this.ep.add(other.ep));
   }
 
   subtract(other: RistrettoPoint): RistrettoPoint {
+    if (!(other instanceof RistrettoPoint)) throw new TypeError('RistrettoPoint expected');
     return new RistrettoPoint(this.ep.subtract(other.ep));
   }
 
