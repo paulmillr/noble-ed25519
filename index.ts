@@ -238,8 +238,7 @@ class ExtendedPoint {
   // Uses wNAF method. Windowed method may be 10% faster,
   // but takes 2x longer to generate and consumes 2x memory.
   multiply(scalar: number | bigint, affinePoint?: Point): ExtendedPoint {
-    const n = normalizeScalar(scalar, CURVE.l);
-    return this.wNAF(n, affinePoint);
+    return this.wNAF(normalizeScalar(scalar, CURVE.l), affinePoint);
   }
 
   // Non-constant-time multiplication. Uses double-and-add algorithm.
@@ -250,6 +249,7 @@ class ExtendedPoint {
     let n = normalizeScalar(scalar, CURVE.l, false);
     const G = ExtendedPoint.BASE;
     const P0 = ExtendedPoint.ZERO;
+    if (n === _0n) return P0;
     if (this.equals(P0) || n === _1n) return this;
     if (this.equals(G)) return this.wNAF(n);
     let p = P0;
@@ -472,9 +472,8 @@ class Point {
     normed[31] = hex[31] & ~0x80;
     const y = bytesToNumberLE(normed);
 
-    if ((strict && y >= P) || (!strict && y >= MAX_256B)) {
-      throw new Error('Point.fromHex expects hex <= Fp');
-    }
+    if (strict && y >= P) throw new Error('Expected 0 < hex < P');
+    if (!strict && y >= MAX_256B) throw new Error('Expected 0 < hex < 2**256');
 
     // 2.  To recover the x-coordinate, the curve equation implies
     // x² = (y² - 1) / (d y² + 1) (mod p).  The denominator is always
@@ -567,17 +566,23 @@ class Point {
  * EDDSA signature.
  */
 class Signature {
-  readonly s: bigint;
-  constructor(readonly r: Point, s: bigint, strict = true) {
-    if (!(r instanceof Point)) throw new Error('Expected Point instance');
-    this.s = normalizeScalar(s, CURVE.l, strict);
+  constructor(readonly r: Point, readonly s: bigint) {
+    this.assertValidity();
   }
 
-  static fromHex(hex: Hex, strict = true) {
+  static fromHex(hex: Hex) {
     const bytes = ensureBytes(hex, 64);
-    const r = Point.fromHex(bytes.slice(0, 32), strict);
+    const r = Point.fromHex(bytes.slice(0, 32), false);
     const s = bytesToNumberLE(bytes.slice(32, 64));
-    return new Signature(r, s, strict);
+    return new Signature(r, s);
+  }
+
+  assertValidity() {
+    const { r, s } = this;
+    if (!(r instanceof Point)) throw new Error('Expected Point instance');
+    // 0 <= s < l
+    normalizeScalar(s, CURVE.l, false);
+    return this;
   }
 
   toRawBytes() {
@@ -806,20 +811,20 @@ function ensureBytes(hex: Hex, expectedLength?: number): Uint8Array {
   return bytes;
 }
 
+/**
+ * Checks for num to be in range:
+ * For strict == true:  `0 <  num < max`.
+ * For strict == false: `0 <= num < max`.
+ * Converts non-float safe numbers to bigints.
+ */
 function normalizeScalar(num: number | bigint, max: bigint, strict = true): bigint {
   if (!max) throw new TypeError('Specify max value');
-  if (typeof num === 'bigint') {
+  if (typeof num === 'number' && Number.isSafeInteger(num)) num = BigInt(num);
+  if (typeof num === 'bigint' && num < max) {
     if (strict) {
-      if (_0n < num && num < max) return num;
+      if (_0n < num) return num;
     } else {
-      if (_0n <= num && num < MAX_256B) return num;
-    }
-  }
-  if (typeof num === 'number' && Number.isSafeInteger(num)) {
-    if (strict) {
-      if (0 < num) return BigInt(num);
-    } else {
-      if (0 <= num) return BigInt(num);
+      if (_0n <= num) return num;
     }
   }
   throw new TypeError('Expected valid scalar: 0 < scalar < max');
@@ -887,27 +892,31 @@ export async function sign(message: Hex, privateKey: Hex): Promise<Uint8Array> {
   const r = await sha512ModqLE(prefix, message); // r = hash(prefix + msg)
   const R = Point.BASE.multiply(r); // R = rG
   const k = await sha512ModqLE(R.toRawBytes(), pointBytes, message); // k = hash(R + P + msg)
-  const S = mod(r + k * scalar, CURVE.l); // S = r + kp
-  return new Signature(R, S).toRawBytes();
+  const s = mod(r + k * scalar, CURVE.l); // s = r + kp
+  return new Signature(R, s).toRawBytes();
 }
 
 /**
  * Verifies ed25519 signature against message and public key.
  * An extended group equation is checked.
- * Compliant with ZIP215: accepts sig and pub bigger than curve prime.
  * RFC8032 5.1.7
+ * Compliant with ZIP215:
+ * 0 <= sig.R/publicKey < 2**256 (can be >= curve.P)
+ * 0 <= sig.s < l
  */
 export async function verify(sig: SigType, message: Hex, publicKey: PubKey): Promise<boolean> {
-  // R=SIG | A=PUB | M=MSG
-  // It is not required that A and R are canonical encodings; in other words, the integer encoding the
-  // y-coordinate of the points may be unreduced modulo  2^255−19
   message = ensureBytes(message);
+  // When hex is passed, we check public key fully.
+  // When Point instance is passed, we assume it has already been checked, for performance.
+  // If user passes Point/Sig instance, we assume it has been already verified.
+  // We don't check its equations for performance. We do check for valid bounds for s though
+  // We always check for: a) s bounds. b) hex validity
   if (!(publicKey instanceof Point)) publicKey = Point.fromHex(publicKey, false);
-  if (!(sig instanceof Signature)) sig = Signature.fromHex(sig, false);
-  const SB = ExtendedPoint.BASE.multiplyUnsafe(sig.s);
-  const k = await sha512ModqLE(sig.r.toRawBytes(), publicKey.toRawBytes(), message);
+  const { r, s } = sig instanceof Signature ? sig.assertValidity() : Signature.fromHex(sig);
+  const SB = ExtendedPoint.BASE.multiplyUnsafe(s);
+  const k = await sha512ModqLE(r.toRawBytes(), publicKey.toRawBytes(), message);
   const kA = ExtendedPoint.fromAffine(publicKey).multiplyUnsafe(k);
-  const RkA = ExtendedPoint.fromAffine(sig.r).add(kA);
+  const RkA = ExtendedPoint.fromAffine(r).add(kA);
   // [8][S]B = [8]R + [8][k]A'
   return RkA.subtract(SB).multiplyUnsafe(CURVE.h).equals(ExtendedPoint.ZERO);
 }

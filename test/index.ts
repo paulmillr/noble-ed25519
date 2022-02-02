@@ -525,5 +525,11 @@ describe('ZIP-215 compliance tests', () => {
       }
       expect(noble).toBe(v.valid_zip215);
     }
-  })
+  });
+  it('disallows sig.s >= CURVE.l', async () => {
+    const sig = new ed.Signature(ed.Point.BASE, 1n);
+    // @ts-ignore
+    sig.s = ed.CURVE.l + 1n;
+    expect(() => ed.verify(sig, 'deadbeef', ed.Point.BASE)).rejects.toThrowError();
+  });
 });

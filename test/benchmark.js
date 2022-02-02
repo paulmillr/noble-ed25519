@@ -47,7 +47,7 @@ run(async () => {
 
   const sig = ed.Signature.fromHex(sigHex);
   const pub = ed.Point.fromHex(pubHex);
-  await mark('verifyBatch', 1000, async () => {
+  await mark('verify (no decompression)', 1000, async () => {
     return await ed.verify(sig, msg, pub);
   });
   await mark('Point.fromHex decompression', 2000, () => {

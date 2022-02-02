@@ -99,7 +99,10 @@ function verify(
 - `publicKey: Uint8Array | string | Point` - e.g. that was generated from `privateKey` by `getPublicKey`
 - Returns `Promise<boolean>`
 
-Verifies signature. Compatible with [ZIP215](https://zips.z.cash/zip-0215): allows sigs/public keys bigger than curve prime, but less than 2^256.
+Verifies signature. Compatible with [ZIP215](https://zips.z.cash/zip-0215), accepts:
+
+- `0 <= sig.R/publicKey < 2**256` (can be `>= curve.P` aka non-canonical encoding)
+- `0 <= sig.s < l`
 
 For additional info about verification strictness, check out [It’s 255:19AM](https://hdevalence.ca/blog/2020-10-04-its-25519am).
 
@@ -259,7 +262,6 @@ Benchmarks done with Apple M1.
 getPublicKey(utils.randomPrivateKey()) x 6,835 ops/sec @ 146μs/op
 sign x 3,474 ops/sec @ 287μs/op
 verify x 726 ops/sec @ 1ms/op
-verifyBatch x 888 ops/sec @ 1ms/op
 Point.fromHex decompression x 11,783 ops/sec @ 84μs/op
 ristretto255#fromHash x 5,482 ops/sec @ 182μs/op
 ristretto255 round x 5,621 ops/sec @ 177μs/op
