@@ -358,7 +358,7 @@ class RistrettoPoint {
     const s = bytes255ToNumberLE(hex);
     // 1. Check that s_bytes is the canonical encoding of a field element, or else abort.
     // 3. Check that s is non-negative, or else abort
-    if (!equalBytes(numberToBytesLEPadded(s, 32), hex) || edIsNegative(s)) throw new Error(emsg);
+    if (!equalBytes(numberTo32BytesLE(s), hex) || edIsNegative(s)) throw new Error(emsg);
     const s2 = mod(s * s);
     const u1 = mod(_1n + a * s2); // 4 (a is -1)
     const u2 = mod(_1n - a * s2); // 5
@@ -402,7 +402,7 @@ class RistrettoPoint {
     if (edIsNegative(x * zInv)) y = mod(-y); // 9
     let s = mod((z - y) * D); // 10 (check footer's note, no sqrt(-a))
     if (edIsNegative(s)) s = mod(-s);
-    return numberToBytesLEPadded(s, 32); // 11
+    return numberTo32BytesLE(s); // 11
   }
 
   toHex(): string {
@@ -505,7 +505,7 @@ class Point {
   // When compressing point, it's enough to only store its y coordinate
   // and use the last byte to encode sign of x.
   toRawBytes(): Uint8Array {
-    const bytes = numberToBytesLEPadded(this.y, 32);
+    const bytes = numberTo32BytesLE(this.y);
     bytes[31] |= this.x & _1n ? 0x80 : 0;
     return bytes;
   }
@@ -531,7 +531,7 @@ class Point {
   toX25519(): Uint8Array {
     const { y } = this;
     const u = mod((_1n + y) * invert(_1n - y));
-    return numberToBytesLEPadded(u, 32);
+    return numberTo32BytesLE(u);
   }
 
   isTorsionFree(): boolean {
@@ -590,7 +590,7 @@ class Signature {
   toRawBytes() {
     const u8 = new Uint8Array(64);
     u8.set(this.r.toRawBytes());
-    u8.set(numberToBytesLEPadded(this.s, 32), 32);
+    u8.set(numberTo32BytesLE(this.s), 32);
     return u8;
   }
 
@@ -644,13 +644,14 @@ function hexToBytes(hex: string): Uint8Array {
   return array;
 }
 
-function numberToBytesBEPadded(num: bigint, length: number) {
+function numberTo32BytesBE(num: bigint) {
+  const length = 32;
   const hex = num.toString(16).padStart(length * 2, '0');
   return hexToBytes(hex);
 }
 
-function numberToBytesLEPadded(num: bigint, length: number) {
-  return numberToBytesBEPadded(num, length).reverse();
+function numberTo32BytesLE(num: bigint) {
+  return numberTo32BytesBE(num).reverse();
 }
 
 // Little-endian check for first LE bit (last BE bit);
@@ -855,7 +856,7 @@ async function getExtendedPublicKey(key: PrivKey) {
   // Normalize bigint / number / string to Uint8Array
   key =
     typeof key === 'bigint' || typeof key === 'number'
-      ? numberToBytesBEPadded(normalizeScalar(key, MAX_256B), 32)
+      ? numberTo32BytesBE(normalizeScalar(key, MAX_256B))
       : ensureBytes(key);
   if (key.length !== 32) throw new Error(`Expected 32 bytes`);
   // hash to produce 64 bytes
@@ -1012,7 +1013,7 @@ function montgomeryLadder(pointU: bigint, scalar: bigint): bigint {
 }
 
 function encodeUCoordinate(u: bigint): Uint8Array {
-  return numberToBytesLEPadded(mod(u, CURVE.P), 32);
+  return numberTo32BytesLE(mod(u, CURVE.P));
 }
 
 function decodeUCoordinate(uEnc: Hex): bigint {
