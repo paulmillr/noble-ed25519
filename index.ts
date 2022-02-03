@@ -273,6 +273,7 @@ class ExtendedPoint {
   // Converts Extended point to default (x, y) coordinates.
   // Can accept precomputed Z^-1 - for example, from invertBatch.
   toAffine(invZ: bigint = invert(this.z)): Point {
+    if (invZ <= _0n) throw new Error('Invalid inverted z');
     const x = mod(this.x * invZ);
     const y = mod(this.y * invZ);
     return new Point(x, y);
