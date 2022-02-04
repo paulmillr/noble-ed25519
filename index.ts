@@ -105,6 +105,7 @@ class ExtendedPoint {
 
   // Compare one point to another.
   equals(other: ExtendedPoint): boolean {
+    assertExtPoint(other);
     const a = this;
     const b = other;
     return mod(a.t * b.z) === mod(b.t * a.z);
@@ -140,6 +141,7 @@ class ExtendedPoint {
   // http://hyperelliptic.org/EFD/g1p/auto-twisted-extended-1.html#addition-add-2008-hwcd-4
   // Cost: 8M + 8add + 2*2.
   add(other: ExtendedPoint) {
+    assertExtPoint(other);
     const X1 = this.x, Y1 = this.y, Z1 = this.z, T1 = this.t; // prettier-ignore
     const X2 = other.x, Y2 = other.y, Z2 = other.z, T2 = other.t; // prettier-ignore
     const A = mod((Y1 - X1) * (Y2 + X2));
@@ -290,6 +292,13 @@ class ExtendedPoint {
   }
 }
 
+function assertExtPoint(other: unknown) {
+  if (!(other instanceof ExtendedPoint)) throw new TypeError('ExtendedPoint expected');
+}
+function assertRstPoint(other: unknown) {
+  if (!(other instanceof RistrettoPoint)) throw new TypeError('RistrettoPoint expected');
+}
+
 function legacyRist() {
   throw new Error('Legacy method: switch to RistrettoPoint');
 }
@@ -416,6 +425,7 @@ class RistrettoPoint {
 
   // Compare one point to another.
   equals(other: RistrettoPoint): boolean {
+    assertRstPoint(other);
     const a = this.ep;
     const b = other.ep;
     // (x1 * y2 == y1 * x2) | (y1 * y2 == x1 * x2)
@@ -425,12 +435,12 @@ class RistrettoPoint {
   }
 
   add(other: RistrettoPoint): RistrettoPoint {
-    if (!(other instanceof RistrettoPoint)) throw new TypeError('RistrettoPoint expected');
+    assertRstPoint(other);
     return new RistrettoPoint(this.ep.add(other.ep));
   }
 
   subtract(other: RistrettoPoint): RistrettoPoint {
-    if (!(other instanceof RistrettoPoint)) throw new TypeError('RistrettoPoint expected');
+    assertRstPoint(other);
     return new RistrettoPoint(this.ep.subtract(other.ep));
   }
 
