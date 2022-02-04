@@ -410,6 +410,10 @@ class RistrettoPoint {
     return bytesToHex(this.toRawBytes());
   }
 
+  toString(): string {
+    return this.toHex();
+  }
+
   // Compare one point to another.
   equals(other: RistrettoPoint): boolean {
     const a = this.ep;
