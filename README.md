@@ -47,7 +47,7 @@ you will need [import map](https://deno.land/manual/linking_to_external_code/imp
 
 - `deno run --import-map=imports.json app.ts`
 - app.ts: `import * as ed from "https://deno.land/x/ed25519/mod.ts";`
-- imports.json: `{"imports": {"crypto": "https://deno.land/std@0.119.0/node/crypto.ts"}}`
+- imports.json: `{"imports": {"crypto": "https://deno.land/std@0.125.0/node/crypto.ts"}}`
 
 ## API
 
