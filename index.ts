@@ -437,6 +437,10 @@ class RistrettoPoint {
   multiply(scalar: number | bigint): RistrettoPoint {
     return new RistrettoPoint(this.ep.multiply(scalar));
   }
+
+  multiplyUnsafe(scalar: number | bigint): RistrettoPoint {
+    return new RistrettoPoint(this.ep.multiplyUnsafe(scalar));
+  }
 }
 
 // Stores precomputed values for points.
