@@ -108,7 +108,11 @@ class ExtendedPoint {
     assertExtPoint(other);
     const a = this;
     const b = other;
-    return mod(a.t * b.z) === mod(b.t * a.z);
+    const xz1 = mod(a.x * b.z);
+    const xz2 = mod(b.x * a.z);
+    const yz1 = mod(a.y * b.z);
+    const yz2 = mod(b.y * a.z);
+    return xz1 === xz2 && yz1 === yz2;
   }
 
   // Inverses point to one corresponding to (x, -y) in Affine coordinates.
@@ -275,10 +279,12 @@ class ExtendedPoint {
   // Converts Extended point to default (x, y) coordinates.
   // Can accept precomputed Z^-1 - for example, from invertBatch.
   toAffine(invZ: bigint = invert(this.z)): Point {
-    if (invZ <= _0n) throw new Error('Invalid inverted z');
-    const x = mod(this.x * invZ);
-    const y = mod(this.y * invZ);
-    return new Point(x, y);
+    const { x, y, z } = this;
+    const ax = mod(x * invZ);
+    const ay = mod(y * invZ);
+    const zz = mod(z * invZ);
+    if (zz !== _1n) throw new Error('invZ was invalid');
+    return new Point(ax, ay);
   }
 
   fromRistrettoBytes() {
