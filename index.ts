@@ -1077,6 +1077,7 @@ export const utils = {
   bytesToHex,
   getExtendedPublicKey,
   mod,
+  invert,
 
   /**
    * Can take 40 or more bytes of uniform input e.g. from CSPRNG or KDF
