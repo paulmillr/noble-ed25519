@@ -104,6 +104,10 @@ Verifies signature. Compatible with [ZIP215](https://zips.z.cash/zip-0215), acce
 - `0 <= sig.R/publicKey < 2**256` (can be `>= curve.P` aka non-canonical encoding)
 - `0 <= sig.s < l`
 
+Not compatible with RFC8032 because rfc encorces canonical encoding of R/publicKey.
+
+There is no security risk in ZIP behavior, and there is no effect on honestly generated signatures.
+
 For additional info about verification strictness, check out [It’s 255:19AM](https://hdevalence.ca/blog/2020-10-04-its-25519am).
 
 ##### `getSharedSecret(privateKey, publicKey)`
