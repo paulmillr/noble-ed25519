@@ -106,13 +106,13 @@ class ExtendedPoint {
   // Compare one point to another.
   equals(other: ExtendedPoint): boolean {
     assertExtPoint(other);
-    const a = this;
-    const b = other;
-    const xz1 = mod(a.x * b.z);
-    const xz2 = mod(b.x * a.z);
-    const yz1 = mod(a.y * b.z);
-    const yz2 = mod(b.y * a.z);
-    return xz1 === xz2 && yz1 === yz2;
+    const { x: X1, y: Y1, z: Z1 } = this;
+    const { x: X2, y: Y2, z: Z2 } = other;
+    const X1Z2 = mod(X1 * Z2);
+    const X2Z1 = mod(X2 * Z1);
+    const Y1Z2 = mod(Y1 * Z2);
+    const Y2Z1 = mod(Y2 * Z1);
+    return X1Z2 === X2Z1 && Y1Z2 === Y2Z1;
   }
 
   // Inverses point to one corresponding to (x, -y) in Affine coordinates.
@@ -124,16 +124,16 @@ class ExtendedPoint {
   // http://hyperelliptic.org/EFD/g1p/auto-twisted-extended-1.html#doubling-dbl-2008-hwcd
   // Cost: 3M + 4S + 1*a + 7add + 1*2.
   double(): ExtendedPoint {
-    const X1 = this.x, Y1 = this.y, Z1 = this.z; // prettier-ignore
+    const { x: X1, y: Y1, z: Z1 } = this;
     const { a } = CURVE;
     const A = mod(X1 ** _2n);
     const B = mod(Y1 ** _2n);
-    const C = mod(_2n * Z1 ** _2n);
+    const C = mod(_2n * mod(Z1 ** _2n));
     const D = mod(a * A);
-    const E = mod((X1 + Y1) ** _2n - A - B);
-    const G = mod(D + B);
-    const F = mod(G - C);
-    const H = mod(D - B);
+    const E = mod(mod((X1 + Y1) ** _2n) - A - B);
+    const G = D + B;
+    const F = G - C;
+    const H = D - B;
     const X3 = mod(E * F);
     const Y3 = mod(G * H);
     const T3 = mod(E * H);
@@ -146,17 +146,17 @@ class ExtendedPoint {
   // Cost: 8M + 8add + 2*2.
   add(other: ExtendedPoint) {
     assertExtPoint(other);
-    const X1 = this.x, Y1 = this.y, Z1 = this.z, T1 = this.t; // prettier-ignore
-    const X2 = other.x, Y2 = other.y, Z2 = other.z, T2 = other.t; // prettier-ignore
+    const { x: X1, y: Y1, z: Z1, t: T1 } = this;
+    const { x: X2, y: Y2, z: Z2, t: T2 } = other;
     const A = mod((Y1 - X1) * (Y2 + X2));
     const B = mod((Y1 + X1) * (Y2 - X2));
     const F = mod(B - A);
     if (F === _0n) return this.double(); // Same point.
     const C = mod(Z1 * _2n * T2);
     const D = mod(T1 * _2n * Z2);
-    const E = mod(D + C);
-    const G = mod(B + A);
-    const H = mod(D - C);
+    const E = D + C;
+    const G = B + A;
+    const H = D - C;
     const X3 = mod(E * F);
     const Y3 = mod(G * H);
     const T3 = mod(E * H);
