@@ -169,8 +169,8 @@ class ExtendedPoint {
   }
 
   private precomputeWindow(W: number): ExtendedPoint[] {
-    const windows = 256 / W + 1;
-    let points: ExtendedPoint[] = [];
+    const windows = 1 + 256 / W;
+    const points: ExtendedPoint[] = [];
     let p: ExtendedPoint = this;
     let base = p;
     for (let window = 0; window < windows; window++) {
@@ -204,7 +204,7 @@ class ExtendedPoint {
     let p = ExtendedPoint.ZERO;
     let f = ExtendedPoint.ZERO;
 
-    const windows = 256 / W + 1;
+    const windows = 1 + 256 / W;
     const windowSize = 2 ** (W - 1);
     const mask = BigInt(2 ** W - 1); // Create mask with W ones: 0b1111 for W=4 etc.
     const maxNumber = 2 ** W;
