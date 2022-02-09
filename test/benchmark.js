@@ -1,6 +1,22 @@
 const {run, mark, logMem} = require('micro-bmark');
 let ed = require('..');
 
+function hexToBytes(hex) {
+  if (typeof hex !== 'string') {
+    throw new TypeError('hexToBytes: expected string, got ' + typeof hex);
+  }
+  if (hex.length % 2) throw new Error('hexToBytes: received invalid unpadded hex');
+  const array = new Uint8Array(hex.length / 2);
+  for (let i = 0; i < array.length; i++) {
+    const j = i * 2;
+    const hexByte = hex.slice(j, j + 2);
+    const byte = Number.parseInt(hexByte, 16);
+    if (Number.isNaN(byte) || byte < 0) throw new Error('Invalid byte sequence');
+    array[i] = byte;
+  }
+  return array;
+}
+
 run(async () => {
   // warm-up
   await mark(() => {
@@ -30,7 +46,7 @@ run(async () => {
 
   const priv2 = toBytes(0x9d61b19deffd5a60ba844af492ec2cc44449c5697b326919703bac031cae7f60n);
   let pi = 0;
-  await mark('getPublicKey(utils.randomPrivateKey())', 1000, async () => {
+  await mark('getPublicKey(utils.randomPrivateKey())', 4000, async () => {
     pubHex = await ed.getPublicKey(arr[pi++ % arr.length]);
   });
 
@@ -41,28 +57,19 @@ run(async () => {
     return sigHex;
   });
 
-  await mark('verify', 800, async () => {
+  await mark('verify', 400, async () => {
     return await ed.verify(sigHex, msg, pubHex);
   });
 
   const sig = ed.Signature.fromHex(sigHex);
   const pub = ed.Point.fromHex(pubHex);
-  await mark('verify (no decompression)', 1000, async () => {
+  await mark('verify (no decompression)', 400, async () => {
     return await ed.verify(sig, msg, pub);
   });
-  await mark('Point.fromHex decompression', 2000, () => {
+  await mark('Point.fromHex decompression', 6000, () => {
     ed.Point.fromHex(pubHex);
   });
 
-  function hexToArray(hash) {
-    hash = hash.length & 1 ? `0${hash}` : hash;
-    const len = hash.length;
-    const result = new Uint8Array(len / 2);
-    for (let i = 0, j = 0; i < len - 1; i += 2, j++) {
-      result[j] = parseInt(hash[i] + hash[i + 1], 16);
-    }
-    return result;
-  }
   const encodingsOfSmallMultiples = [
     // This is the identity point
     '0000000000000000000000000000000000000000000000000000000000000000',
@@ -83,8 +90,7 @@ run(async () => {
     'aa52e000df2e16f55fb1032fc33bc42742dad6bd5a8fc0be0167436c5948501f',
     '46376b80f409b29dc2b5f6f0c52591990896e5716f41477cd30085ab7f10301e',
     'e0c418f7c8d9c4cdd7395b93ea124f3ad99021bb681dfc3302a9d99a2e53e64e'
-  ].map(n => hexToArray(n));
-  const {ExtendedPoint} = ed;
+  ].map(n => hexToBytes(n));
   const hash = new Uint8Array([
     0xde, 0xad, 0xbe, 0xef, 0xde, 0xad, 0xbe, 0xef,
     0xde, 0xad, 0xbe, 0xef, 0xde, 0xad, 0xbe, 0xef,
@@ -95,16 +101,16 @@ run(async () => {
     0xde, 0xad, 0xbe, 0xef, 0xde, 0xad, 0xbe, 0xef,
     0xde, 0xad, 0xbe, 0xef, 0xde, 0xad, 0xbe, 0xef,
   ])
-  await mark('ristretto255#hashToCurve', 2000, () => {
+  await mark('ristretto255#hashToCurve', 2700, () => {
     ed.RistrettoPoint.hashToCurve(hash);
   });
-  await mark('ristretto255 round', 2000, () => {
+  await mark('ristretto255 round', 2700, () => {
     ed.RistrettoPoint.fromHex(encodingsOfSmallMultiples[2]).toHex();
   });
-  mark('curve25519.scalarMultBase', 3000, () => {
+  mark('curve25519.scalarMultBase', 600, () => {
     ed.curve25519.scalarMultBase('aeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef');
   })
-  await mark('ed25519.getSharedSecret', 3000, async () => {
+  await mark('ed25519.getSharedSecret', 450, async () => {
     await ed.getSharedSecret(0x12345, 'aeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef');
   })
 
