@@ -724,24 +724,32 @@ function invert(number: bigint, modulo: bigint = CURVE.P): bigint {
   return mod(x, modulo);
 }
 
-// Takes a bunch of numbers, inverses all of them
-function invertBatch(nums: bigint[], modulo: bigint = CURVE.P): bigint[] {
-  const len = nums.length;
-  const scratch = new Array(len);
-  let acc = _1n;
-  for (let i = 0; i < len; i++) {
-    if (nums[i] === _0n) continue;
+/**
+ * Takes a list of numbers, efficiently inverts all of them.
+ * @param nums list of bigints
+ * @param p modulo
+ * @returns list of inverted bigints
+ * @example
+ * invertBatch([1n, 2n, 4n], 21n);
+ * // => [1n, 11n, 16n]
+ */
+function invertBatch(nums: bigint[], p: bigint = CURVE.P): bigint[] {
+  const scratch = new Array(nums.length);
+  // Walk from first to last, multiply them by each other MOD p
+  const lastMultiplied = nums.reduce((acc, num, i) => {
+    if (num === _0n) return acc;
     scratch[i] = acc;
-    acc = mod(acc * nums[i], modulo);
-  }
-  acc = invert(acc, modulo);
-  for (let i = len - 1; i >= 0; i--) {
-    if (nums[i] === _0n) continue;
-    let tmp = mod(acc * nums[i], modulo);
-    nums[i] = mod(acc * scratch[i], modulo);
-    acc = tmp;
-  }
-  return nums;
+    return mod(acc * num, p);
+  }, _1n);
+  // Invert last element
+  const inverted = invert(lastMultiplied, p);
+  // Walk from last to first, multiply them by inverted each other MOD p
+  nums.reduceRight((acc, num, i) => {
+    if (num === _0n) return acc;
+    scratch[i] = mod(acc * scratch[i], p);
+    return mod(acc * num, p);
+  }, inverted);
+  return scratch;
 }
 
 // Does x ^ (2 ^ power) mod p. pow2(30, 4) == 30 ^ (2 ^ 4)
