@@ -734,11 +734,11 @@ function invert(number: bigint, modulo: bigint = CURVE.P): bigint {
  * // => [1n, 11n, 16n]
  */
 function invertBatch(nums: bigint[], p: bigint = CURVE.P): bigint[] {
-  const scratch = new Array(nums.length);
+  const tmp = new Array(nums.length);
   // Walk from first to last, multiply them by each other MOD p
   const lastMultiplied = nums.reduce((acc, num, i) => {
     if (num === _0n) return acc;
-    scratch[i] = acc;
+    tmp[i] = acc;
     return mod(acc * num, p);
   }, _1n);
   // Invert last element
@@ -746,10 +746,10 @@ function invertBatch(nums: bigint[], p: bigint = CURVE.P): bigint[] {
   // Walk from last to first, multiply them by inverted each other MOD p
   nums.reduceRight((acc, num, i) => {
     if (num === _0n) return acc;
-    scratch[i] = mod(acc * scratch[i], p);
+    tmp[i] = mod(acc * tmp[i], p);
     return mod(acc * num, p);
   }, inverted);
-  return scratch;
+  return tmp;
 }
 
 // Does x ^ (2 ^ power) mod p. pow2(30, 4) == 30 ^ (2 ^ 4)
