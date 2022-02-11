@@ -264,14 +264,14 @@ We however consider infrastructure attacks like rogue NPM modules very important
 
 Benchmarks done with Apple M1 on macOS 12.
 
-    getPublicKey(utils.randomPrivateKey()) x 7,434 ops/sec @ 134μs/op
-    sign x 3,779 ops/sec @ 264μs/op
+    getPublicKey(utils.randomPrivateKey()) x 7,600 ops/sec @ 131μs/op
+    sign x 3,819 ops/sec @ 261μs/op
     verify x 762 ops/sec @ 1ms/op
     Point.fromHex decompression x 12,055 ops/sec @ 82μs/op
     ristretto255#hashToCurve x 5,617 ops/sec @ 178μs/op
-    ristretto255 round x 5,713 ops/sec @ 175μs/op
-    curve25519.scalarMultBase x 1,157 ops/sec @ 864μs/op
-    ed25519.getSharedSecret x 872 ops/sec @ 1ms/op
+    ristretto255 round x 5,734 ops/sec @ 174μs/op
+    curve25519.scalarMultBase x 1,173 ops/sec @ 852μs/op
+    ed25519.getSharedSecret x 883 ops/sec @ 1ms/op
 
 Compare to alternative implementations:
 
