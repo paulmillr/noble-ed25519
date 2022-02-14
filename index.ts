@@ -144,6 +144,7 @@ class ExtendedPoint {
   // Fast algo for adding 2 Extended Points when curve's a=-1.
   // http://hyperelliptic.org/EFD/g1p/auto-twisted-extended-1.html#addition-add-2008-hwcd-4
   // Cost: 8M + 8add + 2*2.
+  // Note: It does not check whether the `other` point is valid.
   add(other: ExtendedPoint) {
     assertExtPoint(other);
     const { x: X1, y: Y1, z: Z1, t: T1 } = this;
@@ -939,6 +940,7 @@ export async function sign(message: Hex, privateKey: Hex): Promise<Uint8Array> {
  * Compliant with ZIP215:
  * 0 <= sig.R/publicKey < 2**256 (can be >= curve.P)
  * 0 <= sig.s < l
+ * Not compliant with RFC8032: it's not possible to comply to both ZIP & RFC at the same time.
  */
 export async function verify(sig: SigType, message: Hex, publicKey: PubKey): Promise<boolean> {
   message = ensureBytes(message);
