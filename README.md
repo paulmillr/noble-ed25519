@@ -3,9 +3,9 @@
 [Fastest](#speed) JS implementation of [ed25519](https://en.wikipedia.org/wiki/EdDSA),
 an elliptic curve that could be used for EDDSA signature scheme and X25519 ECDH key agreement.
 
-Conforms to [RFC7748](https://datatracker.ietf.org/doc/html/rfc7748), [RFC8032](https://tools.ietf.org/html/rfc8032) and [ZIP215](https://zips.z.cash/zip-0215). Includes support for [ristretto255](https://ristretto.group) [(spec)](https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-ristretto255-decaf448): a technique for constructing prime order elliptic curve groups with non-malleable encodings.
+Conforms to [RFC7748](https://datatracker.ietf.org/doc/html/rfc7748), [RFC8032](https://tools.ietf.org/html/rfc8032) and [ZIP215](https://zips.z.cash/zip-0215). Includes support for [ristretto255](https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-ristretto255-decaf448): a technique for constructing prime order elliptic curve groups with non-malleable encodings.
 
-[**Audited**](#security) by an independent security firm. Check out [the online demo](https://paulmillr.com/noble/).
+[**Audited**](#security) by an independent security firm: no vulnerabilities have been found. Check out [the online demo](https://paulmillr.com/noble/).
 
 ### This library belongs to *noble* crypto
 
@@ -253,7 +253,7 @@ ed25519.utils.TORSION_SUBGROUP; // The 8-torsion subgroup ℰ8.
 
 Noble is production-ready.
 
-1. The library has been audited by an independent security firm cure53: [PDF](). No vulnerabilities have been found. See [changes since audit](https://github.com/paulmillr/noble-ed25519/compare/1.6.0..main).
+1. The library has been audited by an independent security firm cure53: [PDF](https://cure53.de/pentest-report_ed25519.pdf). No vulnerabilities have been found. See [changes since audit](https://github.com/paulmillr/noble-ed25519/compare/1.6.0..main).
 2. The library has also been fuzzed by [Guido Vranken's cryptofuzz](https://github.com/guidovranken/cryptofuzz). You can run the fuzzer by yourself to check it.
 
 We're using built-in JS `BigInt`, which is "unsuitable for use in cryptography" as [per official spec](https://github.com/tc39/proposal-bigint#cryptography). This means that the lib is potentially vulnerable to [timing attacks](https://en.wikipedia.org/wiki/Timing_attack). But, *JIT-compiler* and *Garbage Collector* make "constant time" extremely hard to achieve in a scripting language. Which means *any other JS library doesn't use constant-time bigints*. Including bn.js or anything else. Even statically typed Rust, a language without GC, [makes it harder to achieve constant-time](https://www.chosenplaintext.ca/open-source/rust-timing-shield/security) for some cases. If your goal is absolute security, don't use any JS lib — including bindings to native ones. Use low-level libraries & languages. Nonetheless we've hardened implementation of ec curve multiplication to be algorithmically constant time.
@@ -287,9 +287,9 @@ Compare to alternative implementations:
 
 ## Contributing
 
-1. Clone the repository.
+1. Clone the repository
 2. `npm install` to install build dependencies like TypeScript
-3. `npm run compile` to compile TypeScript code
+3. `npm run build` to compile TypeScript code
 4. `npm run test` to run jest on `test/index.ts`
 
 ## License
