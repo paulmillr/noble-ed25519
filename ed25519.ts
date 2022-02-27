@@ -4,10 +4,6 @@
 // https://en.wikipedia.org/wiki/EdDSA https://ristretto.group
 // https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-ristretto255-decaf448
 
-// Uses built-in crypto module from node.js to generate randomness / hmac-sha256.
-// In browser the line is automatically removed during build time: uses crypto.subtle instead.
-import nodeCrypto from 'crypto';
-
 // Be friendly to bad ECMAScript parsers by not using bigint literals like 123n
 const _0n = BigInt(0);
 const _1n = BigInt(1);
@@ -1079,13 +1075,6 @@ export const curve25519 = {
   },
 };
 
-// Global symbol available in browsers only. Ensure we do not depend on @types/dom
-declare const self: Record<string, any> | undefined;
-const crypto: { node?: any; web?: any } = {
-  node: nodeCrypto,
-  web: typeof self === 'object' && 'crypto' in self ? self.crypto : undefined,
-};
-
 export const utils = {
   // The 8-torsion subgroup ℰ8.
   // Those are "buggy" points, if you multiply them by 8, you'll receive Point.ZERO.
@@ -1112,7 +1101,7 @@ export const utils = {
    * @param hash hash output from sha512, or a similar function
    * @returns valid private scalar
    */
-  hashToPrivateScalar: (hash: Hex): bigint => {
+  hashToPrivateScalar(hash: Hex): bigint {
     hash = ensureBytes(hash);
     if (hash.length < 40 || hash.length > 1024)
       throw new Error('Expected 40-1024 bytes of private key as per FIPS 186');
@@ -1122,30 +1111,16 @@ export const utils = {
     return num;
   },
 
-  randomBytes: (bytesLength: number = 32): Uint8Array => {
-    if (crypto.web) {
-      return crypto.web.getRandomValues(new Uint8Array(bytesLength));
-    } else if (crypto.node) {
-      const { randomBytes } = crypto.node;
-      return new Uint8Array(randomBytes(bytesLength).buffer);
-    } else {
-      throw new Error("The environment doesn't have randomBytes function");
-    }
+  randomBytes(bytesLength = 32): Uint8Array {
+    throw new Error("The environment doesn't have randomBytes function");
   },
   // Note: ed25519 private keys are uniform 32-bit strings. We do not need
   // to check for modulo bias like we do in noble-secp256k1 randomPrivateKey()
-  randomPrivateKey: (): Uint8Array => {
+  randomPrivateKey(): Uint8Array {
     return utils.randomBytes(32);
   },
-  sha512: async (message: Uint8Array): Promise<Uint8Array> => {
-    if (crypto.web) {
-      const buffer = await crypto.web.subtle.digest('SHA-512', message.buffer);
-      return new Uint8Array(buffer);
-    } else if (crypto.node) {
-      return Uint8Array.from(crypto.node.createHash('sha512').update(message).digest());
-    } else {
-      throw new Error("The environment doesn't have sha512 function");
-    }
+  async sha512(message: Uint8Array): Promise<Uint8Array> {
+    throw new Error("The environment doesn't have sha512 function");
   },
   /**
    * We're doing scalar multiplication (used in getPublicKey etc) with precomputed BASE_POINT

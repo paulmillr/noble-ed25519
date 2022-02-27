@@ -1,11 +1,14 @@
 // prettier-ignore
 import {
-  getPublicKey, sign, verify, utils, CURVE, Point, ExtendedPoint, RistrettoPoint
-} from './index.ts';
-import { crypto } from 'https://deno.land/std@0.125.0/crypto/mod.ts';
+  getPublicKey, sign, verify, getSharedSecret, CURVE, curve25519, utils, ExtendedPoint, RistrettoPoint, Point, Signature
+} from './ed25519.ts';
 
-utils.sha512 = async (message: Uint8Array): Promise<Uint8Array> => {
-  return new Uint8Array(await crypto.subtle.digest('SHA-512', message));
+utils.randomBytes = (bytesLength = 32) => {
+  return crypto.getRandomValues(new Uint8Array(bytesLength));
 };
 
-export { getPublicKey, sign, verify, utils, CURVE, Point, ExtendedPoint, RistrettoPoint };
+utils.sha512 = async (message: Uint8Array): Promise<Uint8Array> => {
+  return new Uint8Array(await crypto.subtle.digest("SHA-512", message.buffer));
+};
+// prettier-ignore
+export { getPublicKey, sign, verify, getSharedSecret, CURVE, curve25519, utils, ExtendedPoint, RistrettoPoint, Point, Signature };
