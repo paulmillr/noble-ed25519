@@ -59,10 +59,10 @@
   ],
   "exports": {
     ".": {
+      "types": "./lib/index.d.ts",
       "import": "./lib/esm/index.js",
       "default": "./lib/index.js"
-    },
-    "./index.d.ts": "./lib/index.d.ts"
+    }
   },
   "prettier": {
     "printWidth": 100,
