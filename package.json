@@ -64,6 +64,10 @@
     },
     "./index.d.ts": "./lib/index.d.ts"
   },
+  "prettier": {
+    "printWidth": 100,
+    "singleQuote": true
+  },
   "jest": {
     "testRegex": "/test/.*.ts",
     "transform": {
