@@ -3,7 +3,7 @@ import * as ed from '../';
 import { readFileSync } from 'fs';
 import { join } from 'path';
 import { createHash } from 'crypto';
-import { default as zip215 } from './zip215.json';
+import * as zip215 from './zip215.json';
 
 const hex = ed.utils.bytesToHex;
 
