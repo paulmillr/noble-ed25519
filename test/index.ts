@@ -42,7 +42,7 @@ describe('ed25519', () => {
   it('should verify just signed message', async () => {
     await fc.assert(
       fc.asyncProperty(
-        fc.hexaString(1, 32),
+        fc.hexaString({minLength: 2, maxLength: 32}),
         fc.bigInt(2n, ed.CURVE.n),
         async (message: string, privateKey: bigint) => {
           const publicKey = await ed.getPublicKey(toBytes(privateKey));
@@ -58,8 +58,8 @@ describe('ed25519', () => {
   it('should not verify sign with wrong message', async () => {
     await fc.assert(
       fc.asyncProperty(
-        fc.array(fc.integer(0x00, 0xff)),
-        fc.array(fc.integer(0x00, 0xff)),
+        fc.array(fc.integer({ min: 0x00, max: 0xff })),
+        fc.array(fc.integer({ min: 0x00, max: 0xff })),
         fc.bigInt(1n, ed.CURVE.n),
         async (bytes, wrongBytes, privateKey) => {
           const message = new Uint8Array(bytes);
