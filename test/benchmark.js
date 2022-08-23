@@ -40,33 +40,33 @@ run(async () => {
   const arr = new Array(8192).fill(0).map(i => ed.utils.randomPrivateKey());
   const priv1 = toBytes(2n);
   let pubHex;
-  await mark('getPublicKey 1 bit', 1000, async () => {
+  await mark('getPublicKey 1 bit', 6000, async () => {
     pubHex = await ed.getPublicKey(priv1);
   });
 
   const priv2 = toBytes(0x9d61b19deffd5a60ba844af492ec2cc44449c5697b326919703bac031cae7f60n);
   let pi = 0;
-  await mark('getPublicKey(utils.randomPrivateKey())', 4000, async () => {
+  await mark('getPublicKey(utils.randomPrivateKey())', 6000, async () => {
     pubHex = await ed.getPublicKey(arr[pi++ % arr.length]);
   });
 
   const msg = toBytes('deadbeefdeadbeefdeadbeefdeadbeefdeadbeef');
   let sigHex;
-  await mark('sign', 2000, async () => {
+  await mark('sign', 4000, async () => {
     sigHex = await ed.sign(msg, priv2);
     return sigHex;
   });
 
-  await mark('verify', 400, async () => {
+  await mark('verify', 800, async () => {
     return await ed.verify(sigHex, msg, pubHex);
   });
 
   const sig = ed.Signature.fromHex(sigHex);
   const pub = ed.Point.fromHex(pubHex);
-  await mark('verify (no decompression)', 400, async () => {
+  await mark('verify (no decompression)', 950, async () => {
     return await ed.verify(sig, msg, pub);
   });
-  await mark('Point.fromHex decompression', 6000, () => {
+  await mark('Point.fromHex decompression', 13000, () => {
     ed.Point.fromHex(pubHex);
   });
 
@@ -101,16 +101,16 @@ run(async () => {
     0xde, 0xad, 0xbe, 0xef, 0xde, 0xad, 0xbe, 0xef,
     0xde, 0xad, 0xbe, 0xef, 0xde, 0xad, 0xbe, 0xef,
   ])
-  await mark('ristretto255#hashToCurve', 2700, () => {
+  await mark('ristretto255#hashToCurve', 6000, () => {
     ed.RistrettoPoint.hashToCurve(hash);
   });
-  await mark('ristretto255 round', 2700, () => {
+  await mark('ristretto255 round', 6000, () => {
     ed.RistrettoPoint.fromHex(encodingsOfSmallMultiples[2]).toHex();
   });
-  mark('curve25519.scalarMultBase', 600, () => {
+  mark('curve25519.scalarMultBase', 1200, () => {
     ed.curve25519.scalarMultBase('aeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef');
   })
-  await mark('ed25519.getSharedSecret', 450, async () => {
+  await mark('ed25519.getSharedSecret', 1000, async () => {
     await ed.getSharedSecret(0x12345, 'aeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef');
   })
 
