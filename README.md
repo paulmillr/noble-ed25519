@@ -7,7 +7,7 @@ Conforms to [RFC7748](https://datatracker.ietf.org/doc/html/rfc7748), [RFC8032](
 
 [**Audited**](#security) by an independent security firm: no vulnerabilities have been found. Check out [the online demo](https://paulmillr.com/noble/).
 
-### This library belongs to *noble* crypto
+### This library belongs to _noble_ crypto
 
 > **noble-crypto** — high-security, easily auditable set of contained cryptographic libraries and tools.
 
@@ -33,6 +33,7 @@ Use NPM in node.js / browser, or include single file from
 import * as ed from '@noble/ed25519';
 // If you're using single file, use global variable instead: `window.nobleEd25519`
 
+// Supports both async and sync methods, see docs
 (async () => {
   // keys, messages & other inputs can be Uint8Arrays or hex strings
   // Uint8Array.from([0xde, 0xad, 0xbe, 0xef]) === 'deadbeef'
@@ -59,15 +60,18 @@ you will need [import map](https://deno.land/manual/linking_to_external_code/imp
 - [`getSharedSecret(privateKey, publicKey)`](#getsharedsecretprivatekey-publickey)
 - [X25519 and curve25519](#x25519-and-curve25519)
 - [ristretto255](#ristretto255)
+- [Synchronous methods](#synchronous-methods)
 - [Utilities](#utilities)
 
 ##### `getPublicKey(privateKey)`
+
 ```typescript
 function getPublicKey(privateKey: Uint8Array | string | bigint): Promise<Uint8Array>;
 ```
+
 - `privateKey: Uint8Array | string | bigint` will be used to generate public key. If you want to pass bigints,
   ensure they are Big-Endian.
-- Returns `Promise<Uint8Array>`. Uses **promises**, because ed25519 uses SHA internally; and we're using built-in browser `window.crypto`, which returns `Promise`.
+- Returns `Promise<Uint8Array>`. Uses **promises**, because ed25519 uses SHA internally; and we're using built-in browser `window.crypto`, which returns `Promise`. Synchronous non-promise method is available for this and others: [see below](#synchronous-methods).
 
 To generate ed25519 public key:
 
@@ -80,22 +84,26 @@ To generate ed25519 public key:
 - Use `utils.getExtendedPublicKey` if you need full SHA512 hash of seed
 
 ##### `sign(message, privateKey)`
+
 ```typescript
 function sign(message: Uint8Array | string, privateKey: Uint8Array | string): Promise<Uint8Array>;
 ```
+
 - `message: Uint8Array | string` - message (not message hash) which would be signed
 - `privateKey: Uint8Array | string` - private key which will sign the hash
 - Returns EdDSA signature. You can consume it with `Signature.fromHex()` method:
-    - `Signature.fromHex(ed25519.sign(hash, privateKey))`
+  - `Signature.fromHex(ed25519.sign(hash, privateKey))`
 
 ##### `verify(signature, message, publicKey)`
+
 ```typescript
 function verify(
   signature: Uint8Array | string | Signature,
   message: Uint8Array | string,
   publicKey: Uint8Array | string | Point
-): Promise<boolean>
+): Promise<boolean>;
 ```
+
 - `signature: Uint8Array | string | Signature` - returned by the `sign` function
 - `message: Uint8Array | string` - message that needs to be verified
 - `publicKey: Uint8Array | string | Point` - e.g. that was generated from `privateKey` by `getPublicKey`
@@ -106,12 +114,15 @@ Verifies signature. Compatible with [ZIP215](https://zips.z.cash/zip-0215), acce
 - `0 <= sig.R/publicKey < 2**256` (can be `>= curve.P` aka non-canonical encoding)
 - `0 <= sig.s < l`
 
-*Not compatible with RFC8032* because rfc encorces canonical encoding of R/publicKey. There is no security risk in ZIP behavior, and there is no effect on honestly generated signatures. For additional info about verification strictness, check out [It’s 255:19AM](https://hdevalence.ca/blog/2020-10-04-its-25519am).
+_Not compatible with RFC8032_ because rfc encorces canonical encoding of R/publicKey. There is no security risk in ZIP behavior, and there is no effect on honestly generated signatures. For additional info about verification strictness, check out [It’s 255:19AM](https://hdevalence.ca/blog/2020-10-04-its-25519am).
 
 ##### `getSharedSecret(privateKey, publicKey)`
 
 ```typescript
-function getSharedSecret(privateKey: Uint8Array | string | bigint, publicKey: Uint8Array | string): Promise<Uint8Array>;
+function getSharedSecret(
+  privateKey: Uint8Array | string | bigint,
+  publicKey: Uint8Array | string
+): Promise<Uint8Array>;
 ```
 
 Converts ed25519 private / public keys to Curve25519 and calculates
@@ -145,7 +156,7 @@ it will give you exactly the same one. The other 7 points are no longer represen
 
 1. Always use `RistrettoPoint.fromHex()` and `RistrettoPoint#toHex()`
 2. Never mix `ExtendedPoint` & `RistrettoPoint`: ristretto is not a subgroup of ed25519.
-  `ExtendedPoint` you are mixing with, may not be the representative for the set of possible points.
+   `ExtendedPoint` you are mixing with, may not be the representative for the set of possible points.
 
 ```typescript
 import { RistrettoPoint } from '@noble/ed25519';
@@ -173,6 +184,22 @@ For more information on the topic, check out:
 - [Exploiting Low Order Generators in One-Time Ring Signatures](https://jonasnick.github.io/blog/2017/05/23/exploiting-low-order-generators-in-one-time-ring-signatures/)
 - [Details of ristretto internals](https://monero.stackexchange.com/a/12171)
 - [Rust implementation with lots of comments](https://github.com/dalek-cryptography/curve25519-dalek/blob/967d8b6c0e67100401ad66125b7399ccf509ae22/src/ristretto.rs)
+
+### Synchronous methods
+
+The library is using built-in async hash functions by default in order to follow its 0-dependency approach.
+
+This means, built-in `getPublicKey`, `sync` and others are asynchronous. Some use-cases require
+sync versions of those. You can use them: all you need to do is make sure ed25519 knows
+how to hash synchronously. Redefining `ed.utils.sha512Sync` is enough:
+
+```ts
+import { sha512 } from '@noble/hashes/sha512';
+ed.utils.sha512Sync = (...m) => sha512(ed.utils.concatBytes(...m));
+const { getPublicKey, sign, verify, getExtendedPublicKey } = ed.sync;
+// Use it freely
+getPublicKey(privKey);
+```
 
 ### Utilities
 
@@ -262,7 +289,7 @@ Noble is production-ready.
 1. The library has been audited by an independent security firm cure53: [PDF](https://cure53.de/pentest-report_ed25519.pdf). No vulnerabilities have been found. See [changes since audit](https://github.com/paulmillr/noble-ed25519/compare/1.6.0..main).
 2. The library has also been fuzzed by [Guido Vranken's cryptofuzz](https://github.com/guidovranken/cryptofuzz). You can run the fuzzer by yourself to check it.
 
-We're using built-in JS `BigInt`, which is "unsuitable for use in cryptography" as [per official spec](https://github.com/tc39/proposal-bigint#cryptography). This means that the lib is potentially vulnerable to [timing attacks](https://en.wikipedia.org/wiki/Timing_attack). But, *JIT-compiler* and *Garbage Collector* make "constant time" extremely hard to achieve in a scripting language. Which means *any other JS library doesn't use constant-time bigints*. Including bn.js or anything else. Even statically typed Rust, a language without GC, [makes it harder to achieve constant-time](https://www.chosenplaintext.ca/open-source/rust-timing-shield/security) for some cases. If your goal is absolute security, don't use any JS lib — including bindings to native ones. Use low-level libraries & languages. Nonetheless we've hardened implementation of ec curve multiplication to be algorithmically constant time.
+We're using built-in JS `BigInt`, which is "unsuitable for use in cryptography" as [per official spec](https://github.com/tc39/proposal-bigint#cryptography). This means that the lib is potentially vulnerable to [timing attacks](https://en.wikipedia.org/wiki/Timing_attack). But, _JIT-compiler_ and _Garbage Collector_ make "constant time" extremely hard to achieve in a scripting language. Which means _any other JS library doesn't use constant-time bigints_. Including bn.js or anything else. Even statically typed Rust, a language without GC, [makes it harder to achieve constant-time](https://www.chosenplaintext.ca/open-source/rust-timing-shield/security) for some cases. If your goal is absolute security, don't use any JS lib — including bindings to native ones. Use low-level libraries & languages. Nonetheless we've hardened implementation of ec curve multiplication to be algorithmically constant time.
 
 We however consider infrastructure attacks like rogue NPM modules very important; that's why it's crucial to minimize the amount of 3rd-party dependencies & native bindings. If your app uses 500 dependencies, any dep could get hacked and you'll be downloading malware with every `npm install`. Our goal is to minimize this attack vector.
 
@@ -281,7 +308,7 @@ Benchmarks done with Apple M1 on macOS 12.
 
 Compare to alternative implementations:
 
-    # tweetnacl-fast@1.0.3
+    # tweetnacl@1.0.3 (fast)
     getPublicKey x 920 ops/sec @ 1ms/op # aka scalarMultBase
     sign x 519 ops/sec @ 2ms/op
 
