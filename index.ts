@@ -21,7 +21,7 @@ const CURVE_ORDER = _2n ** BigInt(252) + BigInt('2774231777737235353585193779088
  * −x² + y² = 1 − (121665/121666) * x² * y²
  * ```
  */
-const CURVE = {
+const CURVE = Object.freeze({
   // Param: a
   a: BigInt(-1),
   // Equal to -121665/121666 over finite field.
@@ -37,7 +37,7 @@ const CURVE = {
   // Base point (x, y) aka generator point
   Gx: BigInt('15112221349535400772501151409588531511454012693041857206046113283949847762202'),
   Gy: BigInt('46316835694926478169428394003475163141307993866256225615783033603165251855960'),
-};
+});
 
 // Cleaner output this way.
 export { CURVE };
@@ -820,10 +820,8 @@ function invertSqrt(number: bigint) {
 // Math end
 
 // Little-endian SHA512 with modulo n
-async function sha512ModqLE(...args: Uint8Array[]): Promise<bigint> {
-  const hash = await utils.sha512(concatBytes(...args));
-  const value = bytesToNumberLE(hash);
-  return mod(value, CURVE.l);
+function modlLE(hash: Uint8Array): bigint {
+  return mod(bytesToNumberLE(hash), CURVE.l);
 }
 
 function equalBytes(b1: Uint8Array, b2: Uint8Array) {
@@ -884,28 +882,62 @@ function decodeScalar25519(n: Hex): bigint {
   return bytesToNumberLE(adjustBytes25519(ensureBytes(n, 32)));
 }
 
-// Private convenience method
-// RFC8032 5.1.5
-async function getExtendedPublicKey(key: PrivKey) {
+function checkPrivateKey(key: PrivKey) {
   // Normalize bigint / number / string to Uint8Array
   key =
     typeof key === 'bigint' || typeof key === 'number'
       ? numberTo32BytesBE(normalizeScalar(key, MAX_256B))
       : ensureBytes(key);
   if (key.length !== 32) throw new Error(`Expected 32 bytes`);
-  // hash to produce 64 bytes
-  const hashed = await utils.sha512(key);
+  return key;
+}
+
+// Helper functions because we have async and sync methods.
+function prepareVerification(sig: SigType, message: Hex, publicKey: PubKey) {
+  message = ensureBytes(message);
+  // When hex is passed, we check public key fully.
+  // When Point instance is passed, we assume it has already been checked, for performance.
+  // If user passes Point/Sig instance, we assume it has been already verified.
+  // We don't check its equations for performance. We do check for valid bounds for s though
+  // We always check for: a) s bounds. b) hex validity
+  if (!(publicKey instanceof Point)) publicKey = Point.fromHex(publicKey, false);
+  const { r, s } = sig instanceof Signature ? sig.assertValidity() : Signature.fromHex(sig);
+  const SB = ExtendedPoint.BASE.multiplyUnsafe(s);
+  return { r, s, SB, pub: publicKey, msg: message };
+}
+
+function finishVerification(publicKey: Point, r: Point, SB: ExtendedPoint, hashed: Uint8Array) {
+  const k = modlLE(hashed);
+  const kA = ExtendedPoint.fromAffine(publicKey).multiplyUnsafe(k);
+  const RkA = ExtendedPoint.fromAffine(r).add(kA);
+  // [8][S]B = [8]R + [8][k]A'
+  return RkA.subtract(SB).multiplyUnsafe(CURVE.h).equals(ExtendedPoint.ZERO);
+}
+
+// Takes 64 bytes
+function getKeyFromHash(hashed: Uint8Array) {
   // First 32 bytes of 64b uniformingly random input are taken,
   // clears 3 bits of it to produce a random field element.
   const head = adjustBytes25519(hashed.slice(0, 32));
   // Second 32 bytes is called key prefix (5.1.6)
   const prefix = hashed.slice(32, 64);
   // The actual private scalar
-  const scalar = mod(bytesToNumberLE(head), CURVE.l);
+  const scalar = modlLE(head);
   // Point on Edwards curve aka public key
   const point = Point.BASE.multiply(scalar);
   const pointBytes = point.toRawBytes();
   return { head, prefix, scalar, point, pointBytes };
+}
+
+type Sha512FnSync = undefined | ((...messages: Uint8Array[]) => Uint8Array);
+let _sha512Sync: Sha512FnSync;
+
+// Private convenience method. RFC8032 5.1.5
+async function getExtendedPublicKey(key: PrivKey) {
+  return getKeyFromHash(await utils.sha512(checkPrivateKey(key)));
+}
+function getExtendedPublicKeySync(key: PrivKey) {
+  return getKeyFromHash(utils.sha512Sync!(checkPrivateKey(key)));
 }
 
 //
@@ -918,6 +950,9 @@ async function getExtendedPublicKey(key: PrivKey) {
 export async function getPublicKey(privateKey: PrivKey): Promise<Uint8Array> {
   return (await getExtendedPublicKey(privateKey)).pointBytes;
 }
+function getPublicKeySync(privateKey: PrivKey): Uint8Array {
+  return getExtendedPublicKeySync(privateKey).pointBytes;
+}
 
 /**
  * Signs message with privateKey.
@@ -926,9 +961,18 @@ export async function getPublicKey(privateKey: PrivKey): Promise<Uint8Array> {
 export async function sign(message: Hex, privateKey: Hex): Promise<Uint8Array> {
   message = ensureBytes(message);
   const { prefix, scalar, pointBytes } = await getExtendedPublicKey(privateKey);
-  const r = await sha512ModqLE(prefix, message); // r = hash(prefix + msg)
+  const r = modlLE(await utils.sha512(prefix, message)); // r = hash(prefix + msg)
   const R = Point.BASE.multiply(r); // R = rG
-  const k = await sha512ModqLE(R.toRawBytes(), pointBytes, message); // k = hash(R + P + msg)
+  const k = modlLE(await utils.sha512(R.toRawBytes(), pointBytes, message)); // k = hash(R + P + msg)
+  const s = mod(r + k * scalar, CURVE.l); // s = r + kp
+  return new Signature(R, s).toRawBytes();
+}
+function signSync(message: Hex, privateKey: Hex): Uint8Array {
+  message = ensureBytes(message);
+  const { prefix, scalar, pointBytes } = getExtendedPublicKeySync(privateKey);
+  const r = modlLE(utils.sha512Sync!(prefix, message)); // r = hash(prefix + msg)
+  const R = Point.BASE.multiply(r); // R = rG
+  const k = modlLE(utils.sha512Sync!(R.toRawBytes(), pointBytes, message)); // k = hash(R+P+msg)
   const s = mod(r + k * scalar, CURVE.l); // s = r + kp
   return new Signature(R, s).toRawBytes();
 }
@@ -943,21 +987,23 @@ export async function sign(message: Hex, privateKey: Hex): Promise<Uint8Array> {
  * Not compliant with RFC8032: it's not possible to comply to both ZIP & RFC at the same time.
  */
 export async function verify(sig: SigType, message: Hex, publicKey: PubKey): Promise<boolean> {
-  message = ensureBytes(message);
-  // When hex is passed, we check public key fully.
-  // When Point instance is passed, we assume it has already been checked, for performance.
-  // If user passes Point/Sig instance, we assume it has been already verified.
-  // We don't check its equations for performance. We do check for valid bounds for s though
-  // We always check for: a) s bounds. b) hex validity
-  if (!(publicKey instanceof Point)) publicKey = Point.fromHex(publicKey, false);
-  const { r, s } = sig instanceof Signature ? sig.assertValidity() : Signature.fromHex(sig);
-  const SB = ExtendedPoint.BASE.multiplyUnsafe(s);
-  const k = await sha512ModqLE(r.toRawBytes(), publicKey.toRawBytes(), message);
-  const kA = ExtendedPoint.fromAffine(publicKey).multiplyUnsafe(k);
-  const RkA = ExtendedPoint.fromAffine(r).add(kA);
-  // [8][S]B = [8]R + [8][k]A'
-  return RkA.subtract(SB).multiplyUnsafe(CURVE.h).equals(ExtendedPoint.ZERO);
+  const { r, SB, msg, pub } = prepareVerification(sig, message, publicKey);
+  const hashed = await utils.sha512(r.toRawBytes(), pub.toRawBytes(), msg);
+  return finishVerification(pub, r, SB, hashed);
 }
+function verifySync(sig: SigType, message: Hex, publicKey: PubKey): boolean {
+  const { r, SB, msg, pub } = prepareVerification(sig, message, publicKey);
+  const hashed = utils.sha512Sync!(r.toRawBytes(), pub.toRawBytes(), msg);
+  return finishVerification(pub, r, SB, hashed);
+}
+// if (typeof utils.sha512Sync !== 'function') throw new Error('Expected function')
+
+export const sync = {
+  getExtendedPublicKey: getExtendedPublicKeySync,
+  getPublicKey: getPublicKeySync,
+  sign: signSync,
+  verify: verifySync,
+};
 
 /**
  * Calculates X25519 DH shared secret from ed25519 private & public keys.
@@ -1101,6 +1147,8 @@ export const utils = {
     'c7176a703d4dd84fba3c0b760d10670f2a2053fa2c39ccc64ec7fd7792ac03fa',
   ],
   bytesToHex,
+  hexToBytes,
+  concatBytes,
   getExtendedPublicKey,
   mod,
   invert,
@@ -1108,7 +1156,7 @@ export const utils = {
   /**
    * Can take 40 or more bytes of uniform input e.g. from CSPRNG or KDF
    * and convert them into private scalar, with the modulo bias being neglible.
-   * As per FIPS 186 B.1.1.
+   * As per FIPS 186 B.4.1.
    * @param hash hash output from sha512, or a similar function
    * @returns valid private scalar
    */
@@ -1116,10 +1164,7 @@ export const utils = {
     hash = ensureBytes(hash);
     if (hash.length < 40 || hash.length > 1024)
       throw new Error('Expected 40-1024 bytes of private key as per FIPS 186');
-    const num = mod(bytesToNumberLE(hash), CURVE.l);
-    // This should never happen
-    if (num === _0n || num === _1n) throw new Error('Invalid private key');
-    return num;
+    return mod(bytesToNumberLE(hash), CURVE.l - _1n) + _1n;
   },
 
   randomBytes: (bytesLength: number = 32): Uint8Array => {
@@ -1137,7 +1182,8 @@ export const utils = {
   randomPrivateKey: (): Uint8Array => {
     return utils.randomBytes(32);
   },
-  sha512: async (message: Uint8Array): Promise<Uint8Array> => {
+  sha512: async (...messages: Uint8Array[]): Promise<Uint8Array> => {
+    const message = concatBytes(...messages);
     if (crypto.web) {
       const buffer = await crypto.web.subtle.digest('SHA-512', message.buffer);
       return new Uint8Array(buffer);
@@ -1159,4 +1205,20 @@ export const utils = {
     cached.multiply(_2n);
     return cached;
   },
+
+  sha512Sync: undefined as Sha512FnSync,
 };
+
+Object.defineProperties(utils, {
+  sha512Sync: {
+    configurable: false,
+    get() {
+      return _sha512Sync;
+    },
+    set(val) {
+      if (!_sha512Sync) _sha512Sync = val;
+    },
+  },
+});
+
+Object.freeze(utils);
