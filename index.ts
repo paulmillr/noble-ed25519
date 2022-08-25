@@ -892,28 +892,6 @@ function checkPrivateKey(key: PrivKey) {
   return key;
 }
 
-// Helper functions because we have async and sync methods.
-function prepareVerification(sig: SigType, message: Hex, publicKey: PubKey) {
-  message = ensureBytes(message);
-  // When hex is passed, we check public key fully.
-  // When Point instance is passed, we assume it has already been checked, for performance.
-  // If user passes Point/Sig instance, we assume it has been already verified.
-  // We don't check its equations for performance. We do check for valid bounds for s though
-  // We always check for: a) s bounds. b) hex validity
-  if (!(publicKey instanceof Point)) publicKey = Point.fromHex(publicKey, false);
-  const { r, s } = sig instanceof Signature ? sig.assertValidity() : Signature.fromHex(sig);
-  const SB = ExtendedPoint.BASE.multiplyUnsafe(s);
-  return { r, s, SB, pub: publicKey, msg: message };
-}
-
-function finishVerification(publicKey: Point, r: Point, SB: ExtendedPoint, hashed: Uint8Array) {
-  const k = modlLE(hashed);
-  const kA = ExtendedPoint.fromAffine(publicKey).multiplyUnsafe(k);
-  const RkA = ExtendedPoint.fromAffine(r).add(kA);
-  // [8][S]B = [8]R + [8][k]A'
-  return RkA.subtract(SB).multiplyUnsafe(CURVE.h).equals(ExtendedPoint.ZERO);
-}
-
 // Takes 64 bytes
 function getKeyFromHash(hashed: Uint8Array) {
   // First 32 bytes of 64b uniformingly random input are taken,
@@ -975,6 +953,28 @@ function signSync(message: Hex, privateKey: Hex): Uint8Array {
   const k = modlLE(utils.sha512Sync!(R.toRawBytes(), pointBytes, message)); // k = hash(R+P+msg)
   const s = mod(r + k * scalar, CURVE.l); // s = r + kp
   return new Signature(R, s).toRawBytes();
+}
+
+// Helper functions because we have async and sync methods.
+function prepareVerification(sig: SigType, message: Hex, publicKey: PubKey) {
+  message = ensureBytes(message);
+  // When hex is passed, we check public key fully.
+  // When Point instance is passed, we assume it has already been checked, for performance.
+  // If user passes Point/Sig instance, we assume it has been already verified.
+  // We don't check its equations for performance. We do check for valid bounds for s though
+  // We always check for: a) s bounds. b) hex validity
+  if (!(publicKey instanceof Point)) publicKey = Point.fromHex(publicKey, false);
+  const { r, s } = sig instanceof Signature ? sig.assertValidity() : Signature.fromHex(sig);
+  const SB = ExtendedPoint.BASE.multiplyUnsafe(s);
+  return { r, s, SB, pub: publicKey, msg: message };
+}
+
+function finishVerification(publicKey: Point, r: Point, SB: ExtendedPoint, hashed: Uint8Array) {
+  const k = modlLE(hashed);
+  const kA = ExtendedPoint.fromAffine(publicKey).multiplyUnsafe(k);
+  const RkA = ExtendedPoint.fromAffine(r).add(kA);
+  // [8][S]B = [8]R + [8][k]A'
+  return RkA.subtract(SB).multiplyUnsafe(CURVE.h).equals(ExtendedPoint.ZERO);
 }
 
 /**
