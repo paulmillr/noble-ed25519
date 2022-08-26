@@ -1233,6 +1233,3 @@ Object.defineProperties(utils, {
     },
   },
 });
-
-// Prevent modifications
-Object.freeze(utils);
