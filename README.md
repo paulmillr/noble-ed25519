@@ -33,6 +33,7 @@ Use NPM in node.js / browser, or include single file from
 import * as ed from '@noble/ed25519';
 // If you're using single file, use global variable instead: `window.nobleEd25519`
 
+// Supports both async and sync methods, see docs
 (async () => {
   // keys, messages & other inputs can be Uint8Arrays or hex strings
   // Uint8Array.from([0xde, 0xad, 0xbe, 0xef]) === 'deadbeef'
@@ -42,7 +43,6 @@ import * as ed from '@noble/ed25519';
   const signature = await ed.sign(message, privateKey);
   const isValid = await ed.verify(signature, message, publicKey);
 })();
-// Supports both async and sync methods, see docs
 ```
 
 To use the module with [Deno](https://deno.land),
