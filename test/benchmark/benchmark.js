@@ -1,6 +1,6 @@
-const {run, mark, logMem} = require('micro-bmark');
-const {sha512} = require('@noble/hashes/sha512')
-let ed = require('..');
+const { run, mark, logMem } = require('micro-bmark');
+const { sha512 } = require('@noble/hashes/sha512');
+let ed = require('../../lib');
 
 run(async () => {
   // warm-up
@@ -11,20 +11,14 @@ run(async () => {
   logMem();
   console.log();
 
-  function toBytes(numOrStr) {
+  function to64Bytes(numOrStr) {
     let hex = typeof numOrStr === 'string' ? numOrStr : numOrStr.toString(16);
-    hex = hex.padStart(64, '0');
-    const array = new Uint8Array(hex.length / 2);
-    for (let i = 0; i < array.length; i++) {
-      let j = i * 2;
-      array[i] = Number.parseInt(hex.slice(j, j + 2), 16);
-    }
-    return array;
+    return ed.utils.hexToBytes(hex.padStart(64, '0'));
   }
 
-  const priv1bit = toBytes(2n);
-  const priv = toBytes(0x9d61b19deffd5a60ba844af492ec2cc44449c5697b326919703bac031cae7f60n);
-  const msg = toBytes('deadbeefdeadbeefdeadbeefdeadbeefdeadbeef');
+  const priv1bit = to64Bytes(2n);
+  const priv = to64Bytes(0x9d61b19deffd5a60ba844af492ec2cc44449c5697b326919703bac031cae7f60n);
+  const msg = to64Bytes('deadbeefdeadbeefdeadbeefdeadbeefdeadbeef');
 
   let pubHex, sigHex;
   await mark('getPublicKey 1 bit', 6000, async () => {
@@ -71,18 +65,14 @@ run(async () => {
     'e4549ee16b9aa03099ca208c67adafcafa4c3f3e4e5303de6026e3ca8ff84460',
     'aa52e000df2e16f55fb1032fc33bc42742dad6bd5a8fc0be0167436c5948501f',
     '46376b80f409b29dc2b5f6f0c52591990896e5716f41477cd30085ab7f10301e',
-    'e0c418f7c8d9c4cdd7395b93ea124f3ad99021bb681dfc3302a9d99a2e53e64e'
-  ].map(n => ed.utils.hexToBytes(n));
+    'e0c418f7c8d9c4cdd7395b93ea124f3ad99021bb681dfc3302a9d99a2e53e64e',
+  ].map((n) => ed.utils.hexToBytes(n));
   const hash = new Uint8Array([
-    0xde, 0xad, 0xbe, 0xef, 0xde, 0xad, 0xbe, 0xef,
-    0xde, 0xad, 0xbe, 0xef, 0xde, 0xad, 0xbe, 0xef,
-    0xde, 0xad, 0xbe, 0xef, 0xde, 0xad, 0xbe, 0xef,
-    0xde, 0xad, 0xbe, 0xef, 0xde, 0xad, 0xbe, 0xef,
-    0xde, 0xad, 0xbe, 0xef, 0xde, 0xad, 0xbe, 0xef,
-    0xde, 0xad, 0xbe, 0xef, 0xde, 0xad, 0xbe, 0xef,
-    0xde, 0xad, 0xbe, 0xef, 0xde, 0xad, 0xbe, 0xef,
-    0xde, 0xad, 0xbe, 0xef, 0xde, 0xad, 0xbe, 0xef,
-  ])
+    0xde, 0xad, 0xbe, 0xef, 0xde, 0xad, 0xbe, 0xef, 0xde, 0xad, 0xbe, 0xef, 0xde, 0xad, 0xbe, 0xef,
+    0xde, 0xad, 0xbe, 0xef, 0xde, 0xad, 0xbe, 0xef, 0xde, 0xad, 0xbe, 0xef, 0xde, 0xad, 0xbe, 0xef,
+    0xde, 0xad, 0xbe, 0xef, 0xde, 0xad, 0xbe, 0xef, 0xde, 0xad, 0xbe, 0xef, 0xde, 0xad, 0xbe, 0xef,
+    0xde, 0xad, 0xbe, 0xef, 0xde, 0xad, 0xbe, 0xef, 0xde, 0xad, 0xbe, 0xef, 0xde, 0xad, 0xbe, 0xef,
+  ]);
   await mark('ristretto255#hashToCurve', 6000, () => {
     ed.RistrettoPoint.hashToCurve(hash);
   });
@@ -90,17 +80,23 @@ run(async () => {
     ed.RistrettoPoint.fromHex(encodingsOfSmallMultiples[2]).toHex();
   });
   mark('curve25519.scalarMultBase', 1200, () => {
-    ed.curve25519.scalarMultBase('aeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef');
+    ed.curve25519.scalarMultBase(
+      'aeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef'
+    );
   });
   await mark('ed25519.getSharedSecret', 1000, async () => {
-    await ed.getSharedSecret(0x12345, 'aeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef');
+    await ed.getSharedSecret(
+      0x12345,
+      'aeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef'
+    );
   });
 
   ed.utils.sha512Sync = (...m) => sha512(ed.utils.concatBytes(...m));
+  const { sync } = ed;
+  console.log();
   await mark('sync.getPublicKey()', 6000, () => sync.getPublicKey(ed.utils.randomPrivateKey()));
   await mark('sync.sign', 4000, () => sync.sign(msg, priv));
   await mark('sync.verify', 800, () => sync.verify(sigHex, msg, pubHex));
-  await mark('sync.verify (no decompression)', 950, () => sync.verify(sigInst, msg, pubInst));
 
   logMem();
 });

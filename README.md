@@ -295,28 +295,33 @@ We however consider infrastructure attacks like rogue NPM modules very important
 
 ## Speed
 
-Benchmarks done with Apple M1 on macOS 12.
+Benchmarks done with Apple M2 on macOS 12 with Node.js 18.
 
-    getPublicKey(utils.randomPrivateKey()) x 7,600 ops/sec @ 131μs/op
-    sign x 3,819 ops/sec @ 261μs/op
-    verify x 762 ops/sec @ 1ms/op
-    Point.fromHex decompression x 12,055 ops/sec @ 82μs/op
-    ristretto255#hashToCurve x 5,617 ops/sec @ 178μs/op
-    ristretto255 round x 5,734 ops/sec @ 174μs/op
-    curve25519.scalarMultBase x 1,173 ops/sec @ 852μs/op
-    ed25519.getSharedSecret x 883 ops/sec @ 1ms/op
+    getPublicKey(utils.randomPrivateKey()) x 8,627 ops/sec @ 115μs/op
+    sign x 4,355 ops/sec @ 229μs/op
+    verify x 852 ops/sec @ 1ms/op
+    verify (no decompression) x 975 ops/sec @ 1ms/op
+    Point.fromHex decompression x 13,512 ops/sec @ 74μs/op
+    ristretto255#hashToCurve x 6,419 ops/sec @ 155μs/op
+    ristretto255 round x 6,451 ops/sec @ 155μs/op
+    curve25519.scalarMultBase x 1,273 ops/sec @ 785μs/op
+    ed25519.getSharedSecret x 968 ops/sec @ 1ms/op
 
 Compare to alternative implementations:
 
+    ristretto255 x 669 ops/sec @ 1ms/op ± 1.41% (min: 1ms, max: 8ms)
+    sodium-native x 82,925 ops/sec @ 12μs/op
+
     # tweetnacl@1.0.3 (fast)
-    getPublicKey x 920 ops/sec @ 1ms/op # aka scalarMultBase
-    sign x 519 ops/sec @ 2ms/op
+    getPublicKey x 2,087 ops/sec @ 479μs/op # aka scalarMultBase
+    sign x 667 ops/sec @ 1ms/op
 
-    # ristretto255@0.1.1
-    getPublicKey x 877 ops/sec @ 1ms/op # aka scalarMultBase
+    # ristretto255@0.1.2
+    getPublicKey x 669 ops/sec @ 1ms/op ± 1.41% (min: 1ms, max: 8ms)
 
-    # sodium-native@3.2.1, native bindings to libsodium, node.js-only
-    sodium-native#sign x 58,661 ops/sec @ 17μs/op
+    # sodium-native@3.4.1
+    # native bindings to libsodium, **node.js-only**
+    sign x 82,925 ops/sec @ 12μs/op
 
 ## Contributing
 

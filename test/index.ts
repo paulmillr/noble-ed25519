@@ -2,32 +2,15 @@ import * as fc from 'fast-check';
 import * as ed from '../';
 import { readFileSync } from 'fs';
 import { join } from 'path';
-import { createHash } from 'crypto';
 import * as zip215 from './zip215.json';
+import { sha512 } from '@noble/hashes/sha512';
 
-const hex = ed.utils.bytesToHex;
+const { bytesToHex, hexToBytes } = ed.utils;
+const hex = bytesToHex;
 
-const PRIVATE_KEY = toBytes('a665a45920422f9d417e4867ef');
-// const MESSAGE = ripemd160(new Uint8Array([97, 98, 99, 100, 101, 102, 103]));
-// prettier-ignore
-const MESSAGE = new Uint8Array([
-  135, 79, 153, 96, 197, 210, 183, 169, 181, 250, 211, 131, 225, 186, 68, 113, 158, 187, 116, 58
-]);
-// const WRONG_MESSAGE = ripemd160(new Uint8Array([98, 99, 100, 101, 102, 103]));
-// prettier-ignore
-const WRONG_MESSAGE = new Uint8Array([
-  88, 157, 140, 127, 29, 160, 162, 75, 192, 123, 115, 129, 173, 72, 177, 207, 194, 17, 175, 28
-]);
-
-function toBytes(numOrStr: string | bigint | number): Uint8Array {
+function to64Bytes(numOrStr: string | bigint | number): Uint8Array {
   let hex = typeof numOrStr === 'string' ? numOrStr : numOrStr.toString(16);
-  hex = hex.padStart(64, '0');
-  const array = new Uint8Array(hex.length / 2);
-  for (let i = 0; i < array.length; i++) {
-    let j = i * 2;
-    array[i] = Number.parseInt(hex.slice(j, j + 2), 16);
-  }
-  return array;
+  return hexToBytes(hex.padStart(64, '0'));
 }
 
 describe('ed25519', () => {
@@ -39,23 +22,23 @@ describe('ed25519', () => {
       100000000000000000000000000000000000009000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000090000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000800073278156000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000n;
     expect(() => ed.getPublicKey(invalidPriv)).rejects.toThrowError();
   });
-  it('should verify just signed message', async () => {
+  it('should verify recent signature', async () => {
     await fc.assert(
       fc.asyncProperty(
-        fc.hexaString({minLength: 2, maxLength: 32}),
+        fc.hexaString({ minLength: 2, maxLength: 32 }),
         fc.bigInt(2n, ed.CURVE.n),
         async (message: string, privateKey: bigint) => {
-          const publicKey = await ed.getPublicKey(toBytes(privateKey));
-          const signature = await ed.sign(toBytes(message), toBytes(privateKey));
+          const publicKey = await ed.getPublicKey(to64Bytes(privateKey));
+          const signature = await ed.sign(to64Bytes(message), to64Bytes(privateKey));
           expect(publicKey.length).toBe(32);
           expect(signature.length).toBe(64);
-          expect(await ed.verify(signature, toBytes(message), publicKey)).toBe(true);
+          expect(await ed.verify(signature, to64Bytes(message), publicKey)).toBe(true);
         }
       ),
       { numRuns: 5 }
     );
   });
-  it('should not verify sign with wrong message', async () => {
+  it('should not verify signature with wrong message', async () => {
     await fc.assert(
       fc.asyncProperty(
         fc.array(fc.integer({ min: 0x00, max: 0xff })),
@@ -65,7 +48,7 @@ describe('ed25519', () => {
           const message = new Uint8Array(bytes);
           const wrongMessage = new Uint8Array(wrongBytes);
           const publicKey = await ed.getPublicKey(privateKey);
-          const signature = await ed.sign(message, toBytes(privateKey));
+          const signature = await ed.sign(message, to64Bytes(privateKey));
           expect(await ed.verify(signature, wrongMessage, publicKey)).toBe(
             bytes.toString() === wrongBytes.toString()
           );
@@ -74,21 +57,46 @@ describe('ed25519', () => {
       { numRuns: 5 }
     );
   });
-  describe('verify()', () => {
+  const privKey = to64Bytes('a665a45920422f9d417e4867ef');
+  const msg = hexToBytes('874f9960c5d2b7a9b5fad383e1ba44719ebb743a');
+  const wrongMsg = hexToBytes('589d8c7f1da0a24bc07b7381ad48b1cfc211af1c');
+  describe('basic methods', () => {
     it('should sign and verify', async () => {
-      const publicKey = await ed.getPublicKey(PRIVATE_KEY);
-      const signature = await ed.sign(MESSAGE, PRIVATE_KEY);
-      expect(await ed.verify(signature, MESSAGE, publicKey)).toBe(true);
+      const publicKey = await ed.getPublicKey(privKey);
+      const signature = await ed.sign(msg, privKey);
+      expect(await ed.verify(signature, msg, publicKey)).toBe(true);
     });
     it('should not verify signature with wrong public key', async () => {
       const publicKey = await ed.getPublicKey(12);
-      const signature = await ed.sign(MESSAGE, PRIVATE_KEY);
-      expect(await ed.verify(signature, MESSAGE, publicKey)).toBe(false);
+      const signature = await ed.sign(msg, privKey);
+      expect(await ed.verify(signature, msg, publicKey)).toBe(false);
     });
     it('should not verify signature with wrong hash', async () => {
-      const publicKey = await ed.getPublicKey(PRIVATE_KEY);
-      const signature = await ed.sign(MESSAGE, PRIVATE_KEY);
-      expect(await ed.verify(signature, WRONG_MESSAGE, publicKey)).toBe(false);
+      const publicKey = await ed.getPublicKey(privKey);
+      const signature = await ed.sign(msg, privKey);
+      expect(await ed.verify(signature, wrongMsg, publicKey)).toBe(false);
+    });
+  });
+  describe('sync methods', () => {
+    it('should throw when sha512 is not set', () => {
+      expect(() => ed.sync.getPublicKey(privKey)).toThrowError();
+      expect(() => ed.sync.sign(msg, privKey)).toThrowError();
+    });
+    it('should sign and verify', () => {
+      ed.utils.sha512Sync = (...m) => sha512(ed.utils.concatBytes(...m));
+      const publicKey = ed.sync.getPublicKey(privKey);
+      const signature = ed.sync.sign(msg, privKey);
+      expect(ed.sync.verify(signature, msg, publicKey)).toBe(true);
+    });
+    it('should not verify signature with wrong public key', async () => {
+      const publicKey = ed.sync.getPublicKey(12);
+      const signature = ed.sync.sign(msg, privKey);
+      expect(ed.sync.verify(signature, msg, publicKey)).toBe(false);
+    });
+    it('should not verify signature with wrong hash', async () => {
+      const publicKey = ed.sync.getPublicKey(privKey);
+      const signature = ed.sync.sign(msg, privKey);
+      expect(ed.sync.verify(signature, wrongMsg, publicKey)).toBe(false);
     });
   });
   describe('BASE_POINT.multiply()', () => {
@@ -169,7 +177,7 @@ describe('ed25519 official vectors', () => {
       const expectedSignature = vector[3].slice(0, 128);
 
       // Calculate
-      const pub = await ed.getPublicKey(toBytes(priv));
+      const pub = await ed.getPublicKey(to64Bytes(priv));
       expect(hex(pub)).toEqual(expectedPub);
       expect(pub).toEqual(ed.Point.fromHex(pub).toRawBytes());
 
@@ -229,33 +237,17 @@ describe('rfc8032 vectors', () => {
 
 describe('ristretto255', () => {
   const { RistrettoPoint } = ed;
-  function arrayToHex(bytes: Uint8Array) {
-    return Array.from(bytes)
-      .map((a) => a.toString(16).padStart(2, '0'))
-      .join('');
-  }
-
-  function hexToArray(hash: string) {
-    hash = hash.length & 1 ? `0${hash}` : hash;
-    const len = hash.length;
-    const result = new Uint8Array(len / 2);
-    for (let i = 0, j = 0; i < len - 1; i += 2, j++) {
-      result[j] = parseInt(hash[i] + hash[i + 1], 16);
-    }
-    return result;
-  }
-
-  const PRIVATE_KEY = 0xa665a45920422f9d417e4867efn;
+  // const PRIVATE_KEY = 0xa665a45920422f9d417e4867efn;
   // const MESSAGE = ripemd160(new Uint8Array([97, 98, 99, 100, 101, 102, 103]));
   // prettier-ignore
-  const MESSAGE = new Uint8Array([
-    135, 79, 153, 96, 197, 210, 183, 169, 181, 250, 211, 131, 225, 186, 68, 113, 158, 187, 116, 58,
-  ]);
+  // const MESSAGE = new Uint8Array([
+  //   135, 79, 153, 96, 197, 210, 183, 169, 181, 250, 211, 131, 225, 186, 68, 113, 158, 187, 116, 58,
+  // ]);
   // const WRONG_MESSAGE = ripemd160(new Uint8Array([98, 99, 100, 101, 102, 103]));
   // prettier-ignore
-  const WRONG_MESSAGE = new Uint8Array([
-    88, 157, 140, 127, 29, 160, 162, 75, 192, 123, 115, 129, 173, 72, 177, 207, 194, 17, 175, 28,
-  ]);
+  // const WRONG_MESSAGE = new Uint8Array([
+  //   88, 157, 140, 127, 29, 160, 162, 75, 192, 123, 115, 129, 173, 72, 177, 207, 194, 17, 175, 28,
+  // ]);
   // it("should verify just signed message", async () => {
   //   await fc.assert(fc.asyncProperty(
   //     fc.hexa(),
@@ -370,7 +362,8 @@ describe('ristretto255', () => {
       'ecffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7f',
     ];
     for (const badBytes of badEncodings) {
-      expect(() => RistrettoPoint.fromHex(hexToArray(badBytes))).toThrow();
+      const b = hexToBytes(badBytes);
+      expect(() => RistrettoPoint.fromHex(b)).toThrow();
     }
   });
   it('should create right points from uniform hash', async () => {
@@ -400,32 +393,6 @@ describe('ristretto255', () => {
     }
   });
 });
-
-const hexes = Array.from({ length: 256 }, (v, i) => i.toString(16).padStart(2, '0'));
-function bytesToHex(uint8a: Uint8Array): string {
-  // pre-caching improves the speed 6x
-  let hex = '';
-  for (let i = 0; i < uint8a.length; i++) {
-    hex += hexes[uint8a[i]];
-  }
-  return hex;
-}
-
-function hexToBytes(hex: string): Uint8Array {
-  if (typeof hex !== 'string') {
-    throw new TypeError('hexToBytes: expected string, got ' + typeof hex);
-  }
-  if (hex.length % 2) throw new Error('hexToBytes: received invalid unpadded hex');
-  const array = new Uint8Array(hex.length / 2);
-  for (let i = 0; i < array.length; i++) {
-    const j = i * 2;
-    const hexByte = hex.slice(j, j + 2);
-    const byte = Number.parseInt(hexByte, 16);
-    if (Number.isNaN(byte)) throw new Error('Invalid byte sequence');
-    array[i] = byte;
-  }
-  return array;
-}
 
 declare const TextEncoder: any;
 declare const TextDecoder: any;

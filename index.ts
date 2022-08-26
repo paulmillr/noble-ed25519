@@ -1,8 +1,10 @@
 /*! noble-ed25519 - MIT License (c) 2019 Paul Miller (paulmillr.com) */
-// Thanks DJB https://ed25519.cr.yp.to
-// https://tools.ietf.org/html/rfc7748 https://tools.ietf.org/html/rfc8032
-// https://en.wikipedia.org/wiki/EdDSA https://ristretto.group
-// https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-ristretto255-decaf448
+/**
+ * Thanks DJB https://ed25519.cr.yp.to
+ * https://tools.ietf.org/html/rfc7748 https://tools.ietf.org/html/rfc8032
+ * https://en.wikipedia.org/wiki/EdDSA https://ristretto.group
+ * https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-ristretto255-decaf448
+ */
 
 // Uses built-in crypto module from node.js to generate randomness / hmac-sha256.
 // In browser the line is automatically removed during build time: uses crypto.subtle instead.
@@ -909,21 +911,26 @@ function getKeyFromHash(hashed: Uint8Array) {
 
 type Sha512FnSync = undefined | ((...messages: Uint8Array[]) => Uint8Array);
 let _sha512Sync: Sha512FnSync;
+function sha512s(...m: Uint8Array[]) {
+  if (typeof _sha512Sync !== 'function')
+    throw new Error('utils.sha512Sync must be set to use sync methods');
+  return _sha512Sync(...m);
+}
+// function syncGuard() {
+// }
 
-// Private convenience method. RFC8032 5.1.5
+/** Convenience method that creates public key and other stuff. RFC8032 5.1.5 */
 async function getExtendedPublicKey(key: PrivKey) {
   return getKeyFromHash(await utils.sha512(checkPrivateKey(key)));
 }
 function getExtendedPublicKeySync(key: PrivKey) {
-  return getKeyFromHash(utils.sha512Sync!(checkPrivateKey(key)));
+  return getKeyFromHash(sha512s(checkPrivateKey(key)));
 }
 
-//
 /**
- * Calculates ed25519 public key.
+ * Calculates ed25519 public key. RFC8032 5.1.5
  * 1. private key is hashed with sha512, then first 32 bytes are taken from the hash
  * 2. 3 least significant bits of the first byte are cleared
- * RFC8032 5.1.5
  */
 export async function getPublicKey(privateKey: PrivKey): Promise<Uint8Array> {
   return (await getExtendedPublicKey(privateKey)).pointBytes;
@@ -932,25 +939,22 @@ function getPublicKeySync(privateKey: PrivKey): Uint8Array {
   return getExtendedPublicKeySync(privateKey).pointBytes;
 }
 
-/**
- * Signs message with privateKey.
- * RFC8032 5.1.6
- */
+/** Signs message with privateKey. RFC8032 5.1.6 */
 export async function sign(message: Hex, privateKey: Hex): Promise<Uint8Array> {
   message = ensureBytes(message);
   const { prefix, scalar, pointBytes } = await getExtendedPublicKey(privateKey);
   const r = modlLE(await utils.sha512(prefix, message)); // r = hash(prefix + msg)
   const R = Point.BASE.multiply(r); // R = rG
-  const k = modlLE(await utils.sha512(R.toRawBytes(), pointBytes, message)); // k = hash(R + P + msg)
+  const k = modlLE(await utils.sha512(R.toRawBytes(), pointBytes, message)); // k = hash(R+P+msg)
   const s = mod(r + k * scalar, CURVE.l); // s = r + kp
   return new Signature(R, s).toRawBytes();
 }
 function signSync(message: Hex, privateKey: Hex): Uint8Array {
   message = ensureBytes(message);
   const { prefix, scalar, pointBytes } = getExtendedPublicKeySync(privateKey);
-  const r = modlLE(utils.sha512Sync!(prefix, message)); // r = hash(prefix + msg)
+  const r = modlLE(sha512s(prefix, message)); // r = hash(prefix + msg)
   const R = Point.BASE.multiply(r); // R = rG
-  const k = modlLE(utils.sha512Sync!(R.toRawBytes(), pointBytes, message)); // k = hash(R+P+msg)
+  const k = modlLE(sha512s(R.toRawBytes(), pointBytes, message)); // k = hash(R+P+msg)
   const s = mod(r + k * scalar, CURVE.l); // s = r + kp
   return new Signature(R, s).toRawBytes();
 }
@@ -991,17 +995,21 @@ export async function verify(sig: SigType, message: Hex, publicKey: PubKey): Pro
   const hashed = await utils.sha512(r.toRawBytes(), pub.toRawBytes(), msg);
   return finishVerification(pub, r, SB, hashed);
 }
+
 function verifySync(sig: SigType, message: Hex, publicKey: PubKey): boolean {
   const { r, SB, msg, pub } = prepareVerification(sig, message, publicKey);
-  const hashed = utils.sha512Sync!(r.toRawBytes(), pub.toRawBytes(), msg);
+  const hashed = sha512s(r.toRawBytes(), pub.toRawBytes(), msg);
   return finishVerification(pub, r, SB, hashed);
 }
-// if (typeof utils.sha512Sync !== 'function') throw new Error('Expected function')
 
 export const sync = {
+  /** Convenience method that creates public key and other stuff. RFC8032 5.1.5 */
   getExtendedPublicKey: getExtendedPublicKeySync,
+  /** Calculates ed25519 public key. RFC8032 5.1.5 */
   getPublicKey: getPublicKeySync,
+  /** Signs message with privateKey. RFC8032 5.1.6 */
   sign: signSync,
+  /** Verifies ed25519 signature against message and public key. */
   verify: verifySync,
 };
 
@@ -1108,7 +1116,7 @@ function decodeUCoordinate(uEnc: Hex): bigint {
 export const curve25519 = {
   BASE_POINT_U: '0900000000000000000000000000000000000000000000000000000000000000',
 
-  // crypto_scalarmult aka getSharedSecret
+  /** crypto_scalarmult aka getSharedSecret */
   scalarMult(privateKey: Hex, publicKey: Hex): Uint8Array {
     const u = decodeUCoordinate(publicKey);
     const p = decodeScalar25519(privateKey);
@@ -1119,7 +1127,7 @@ export const curve25519 = {
     return encodeUCoordinate(pu);
   },
 
-  // crypto_scalarmult_base aka getPublicKey
+  /** crypto_scalarmult_base aka getPublicKey */
   scalarMultBase(privateKey: Hex): Uint8Array {
     return curve25519.scalarMult(privateKey, curve25519.BASE_POINT_U);
   },
@@ -1157,6 +1165,7 @@ export const utils = {
    * Can take 40 or more bytes of uniform input e.g. from CSPRNG or KDF
    * and convert them into private scalar, with the modulo bias being neglible.
    * As per FIPS 186 B.4.1.
+   * Not needed for ed25519 private keys. Needed if you use scalars directly (rare).
    * @param hash hash output from sha512, or a similar function
    * @returns valid private scalar
    */
@@ -1177,11 +1186,14 @@ export const utils = {
       throw new Error("The environment doesn't have randomBytes function");
     }
   },
-  // Note: ed25519 private keys are uniform 32-bit strings. We do not need
-  // to check for modulo bias like we do in noble-secp256k1 randomPrivateKey()
+  /**
+   * ed25519 private keys are uniform 32-bit strings. We do not need to check for
+   * modulo bias like we do in noble-secp256k1 randomPrivateKey()
+   */
   randomPrivateKey: (): Uint8Array => {
     return utils.randomBytes(32);
   },
+  /** Shortcut method that calls native async implementation of sha512 */
   sha512: async (...messages: Uint8Array[]): Promise<Uint8Array> => {
     const message = concatBytes(...messages);
     if (crypto.web) {
@@ -1209,6 +1221,7 @@ export const utils = {
   sha512Sync: undefined as Sha512FnSync,
 };
 
+// Make sure sha512Sync could only be set once.
 Object.defineProperties(utils, {
   sha512Sync: {
     configurable: false,
@@ -1221,4 +1234,5 @@ Object.defineProperties(utils, {
   },
 });
 
+// Prevent modifications
 Object.freeze(utils);
