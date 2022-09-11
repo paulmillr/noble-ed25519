@@ -14,8 +14,8 @@ import * as nodeCrypto from 'crypto';
 const _0n = BigInt(0);
 const _1n = BigInt(1);
 const _2n = BigInt(2);
-const _255n = BigInt(255);
-const CURVE_ORDER = _2n ** BigInt(252) + BigInt('27742317777372353535851937790883648493');
+// 2n ** 252n + 27742317777372353535851937790883648493n;
+const CU_O = BigInt('7237005577332262213973186563042994240857116359379907606001950938285454250989');
 
 /**
  * ed25519 is Twisted Edwards curve with equation of
@@ -29,11 +29,11 @@ const CURVE = Object.freeze({
   // Equal to -121665/121666 over finite field.
   // Negative number is P - number, and division is invert(number, P)
   d: BigInt('37095705934669439343138083508754565189542113879843219016388785533085940283555'),
-  // Finite field 𝔽p over which we'll do calculations
-  P: _2n ** _255n - BigInt(19),
+  // Finite field 𝔽p over which we'll do calculations; 2n ** 255n - 19n
+  P: BigInt('57896044618658097711785492504343953926634992332820282019728792003956564819949'),
   // Subgroup order: how many points ed25519 has
-  l: CURVE_ORDER, // in rfc8032 it's called l
-  n: CURVE_ORDER, // backwards compatibility
+  l: CU_O, // in rfc8032 it's called l
+  n: CU_O, // backwards compatibility
   // Cofactor
   h: BigInt(8),
   // Base point (x, y) aka generator point
@@ -49,7 +49,8 @@ type PrivKey = Hex | bigint | number;
 type PubKey = Hex | Point;
 type SigType = Hex | Signature;
 
-const MAX_256B = _2n ** BigInt(256);
+// (2n ** 256n).toString(16);
+const POW_2_256 = BigInt('0x10000000000000000000000000000000000000000000000000000000000000000');
 
 // √(-1) aka √(a) aka 2^((p-1)/4)
 const SQRT_M1 = BigInt(
@@ -128,11 +129,12 @@ class ExtendedPoint {
   double(): ExtendedPoint {
     const { x: X1, y: Y1, z: Z1 } = this;
     const { a } = CURVE;
-    const A = mod(X1 ** _2n);
-    const B = mod(Y1 ** _2n);
-    const C = mod(_2n * mod(Z1 ** _2n));
+    const A = mod(X1 * X1);
+    const B = mod(Y1 * Y1);
+    const C = mod(_2n * mod(Z1 * Z1));
     const D = mod(a * A);
-    const E = mod(mod((X1 + Y1) ** _2n) - A - B);
+    const x1y1 = X1 + Y1;
+    const E = mod(mod(x1y1 * x1y1) - A - B);
     const G = D + B;
     const F = G - C;
     const H = D - B;
@@ -404,7 +406,8 @@ class RistrettoPoint {
     const u1 = mod(mod(z + y) * mod(z - y)); // 1
     const u2 = mod(x * y); // 2
     // Square root always exists
-    const { value: invsqrt } = invertSqrt(mod(u1 * u2 ** _2n)); // 3
+    const u2sq = mod(u2 * u2);
+    const { value: invsqrt } = invertSqrt(mod(u1 * u2sq)); // 3
     const D1 = mod(invsqrt * u1); // 4
     const D2 = mod(invsqrt * u2); // 5
     const zInv = mod(D1 * D2 * t); // 6
@@ -503,7 +506,7 @@ class Point {
     const y = bytesToNumberLE(normed);
 
     if (strict && y >= P) throw new Error('Expected 0 < hex < P');
-    if (!strict && y >= MAX_256B) throw new Error('Expected 0 < hex < 2**256');
+    if (!strict && y >= POW_2_256) throw new Error('Expected 0 < hex < 2**256');
 
     // 2.  To recover the x-coordinate, the curve equation implies
     // x² = (y² - 1) / (d y² + 1) (mod p).  The denominator is always
@@ -693,8 +696,10 @@ function bytesToNumberLE(uint8a: Uint8Array): bigint {
   return BigInt('0x' + bytesToHex(Uint8Array.from(uint8a).reverse()));
 }
 
+// (2n ** 255n - 1n).toString(16)
+const MAX_255B = BigInt('0x7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff');
 function bytes255ToNumberLE(bytes: Uint8Array): bigint {
-  return mod(bytesToNumberLE(bytes) & (_2n ** _255n - _1n));
+  return mod(bytesToNumberLE(bytes) & MAX_255B);
 }
 // -------------------------
 
@@ -888,7 +893,7 @@ function checkPrivateKey(key: PrivKey) {
   // Normalize bigint / number / string to Uint8Array
   key =
     typeof key === 'bigint' || typeof key === 'number'
-      ? numberTo32BytesBE(normalizeScalar(key, MAX_256B))
+      ? numberTo32BytesBE(normalizeScalar(key, POW_2_256))
       : ensureBytes(key);
   if (key.length !== 32) throw new Error(`Expected 32 bytes`);
   return key;
@@ -1084,8 +1089,10 @@ function montgomeryLadder(pointU: bigint, scalar: bigint): bigint {
     const D = x_3 - z_3;
     const DA = mod(D * A);
     const CB = mod(C * B);
-    x_3 = mod((DA + CB) ** _2n);
-    z_3 = mod(x_1 * (DA - CB) ** _2n);
+    const dacb = DA + CB;
+    const da_cb = DA - CB;
+    x_3 = mod(dacb * dacb);
+    z_3 = mod(x_1 * mod(da_cb * da_cb));
     x_2 = mod(AA * BB);
     z_2 = mod(E * (AA + mod(a24 * E)));
   }
@@ -1141,6 +1148,13 @@ const crypto: { node?: any; web?: any } = {
 };
 
 export const utils = {
+  bytesToHex,
+  hexToBytes,
+  concatBytes,
+  getExtendedPublicKey,
+  mod,
+  invert,
+
   // The 8-torsion subgroup ℰ8.
   // Those are "buggy" points, if you multiply them by 8, you'll receive Point.ZERO.
   // Ported from curve25519-dalek.
@@ -1154,12 +1168,6 @@ export const utils = {
     '0000000000000000000000000000000000000000000000000000000000000000',
     'c7176a703d4dd84fba3c0b760d10670f2a2053fa2c39ccc64ec7fd7792ac03fa',
   ],
-  bytesToHex,
-  hexToBytes,
-  concatBytes,
-  getExtendedPublicKey,
-  mod,
-  invert,
 
   /**
    * Can take 40 or more bytes of uniform input e.g. from CSPRNG or KDF
