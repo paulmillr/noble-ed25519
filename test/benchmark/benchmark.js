@@ -16,13 +16,14 @@ run(async () => {
     return ed.utils.hexToBytes(hex.padStart(64, '0'));
   }
 
-  const priv1bit = to64Bytes(2n);
+  // const priv1bit = to64Bytes(2n);
+  const smallPrivs = [2n, 3n, 4n, 5n, 6n, 7n, 8n, 9n, 10n, 11n, 12n, 13n, 14n, 15n];
   const priv = to64Bytes(0x9d61b19deffd5a60ba844af492ec2cc44449c5697b326919703bac031cae7f60n);
   const msg = to64Bytes('deadbeefdeadbeefdeadbeefdeadbeefdeadbeef');
 
-  let pubHex, sigHex;
+  let pubHex, sigHex, i = 0;
   await mark('getPublicKey 1 bit', 6000, async () => {
-    pubHex = await ed.getPublicKey(priv1bit);
+    pubHex = await ed.getPublicKey(smallPrivs[i++ % smallPrivs.length]);
   });
 
   await mark('getPublicKey(utils.randomPrivateKey())', 6000, async () => {

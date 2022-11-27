@@ -14,6 +14,7 @@ import * as nodeCrypto from 'crypto';
 const _0n = BigInt(0);
 const _1n = BigInt(1);
 const _2n = BigInt(2);
+const _8n = BigInt(8);
 // 2n ** 252n + 27742317777372353535851937790883648493n;
 const CU_O = BigInt('7237005577332262213973186563042994240857116359379907606001950938285454250989');
 
@@ -207,7 +208,7 @@ class ExtendedPoint {
     }
 
     let p = ExtendedPoint.ZERO;
-    let f = ExtendedPoint.ZERO;
+    let f = ExtendedPoint.BASE;
 
     const windows = 1 + 256 / W;
     const windowSize = 2 ** (W - 1);
@@ -232,14 +233,15 @@ class ExtendedPoint {
 
       // Check if we're onto Zero point.
       // Add random point inside current window to f.
+      const offset1 = offset;
+      const offset2 = offset + Math.abs(wbits) - 1;
+      const cond1 = window % 2 !== 0;
+      const cond2 = wbits < 0;
       if (wbits === 0) {
-        let pr = precomputes[offset];
-        if (window % 2) pr = pr.negate();
-        f = f.add(pr);
+        // The most important part for const-time getPublicKey
+        f = f.add(constTimeNegate(cond1, precomputes[offset1]));
       } else {
-        let cached = precomputes[offset + Math.abs(wbits) - 1];
-        if (wbits < 0) cached = cached.negate();
-        p = p.add(cached);
+        p = p.add(constTimeNegate(cond2, precomputes[offset2]));
       }
     }
     return ExtendedPoint.normalizeZ([p, f])[0];
@@ -283,11 +285,14 @@ class ExtendedPoint {
 
   // Converts Extended point to default (x, y) coordinates.
   // Can accept precomputed Z^-1 - for example, from invertBatch.
-  toAffine(invZ: bigint = invert(this.z)): Point {
+  toAffine(invZ?: bigint): Point {
     const { x, y, z } = this;
+    const is0 = this.equals(ExtendedPoint.ZERO);
+    if (invZ == null) invZ = is0 ? _8n : invert(z); // 8 was chosen arbitrarily
     const ax = mod(x * invZ);
     const ay = mod(y * invZ);
     const zz = mod(z * invZ);
+    if (is0) return Point.ZERO;
     if (zz !== _1n) throw new Error('invZ was invalid');
     return new Point(ax, ay);
   }
@@ -301,6 +306,12 @@ class ExtendedPoint {
   fromRistrettoHash() {
     legacyRist();
   }
+}
+
+// Const-time utility for wNAF
+function constTimeNegate(condition: boolean, item: ExtendedPoint) {
+  const neg = item.negate();
+  return condition ? neg : item;
 }
 
 function assertExtPoint(other: unknown) {
