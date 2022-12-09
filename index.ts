@@ -124,9 +124,9 @@ class ExtendedPoint {
     return new ExtendedPoint(mod(-this.x), this.y, this.z, mod(-this.t));
   }
 
-  // Fast algo for doubling Extended Point when curve's a=-1.
-  // http://hyperelliptic.org/EFD/g1p/auto-twisted-extended-1.html#doubling-dbl-2008-hwcd
-  // Cost: 3M + 4S + 1*a + 7add + 1*2.
+  // Fast algo for doubling Extended Point
+  // https://hyperelliptic.org/EFD/g1p/auto-twisted-extended.html#doubling-dbl-2008-hwcd
+  // Cost: 4M + 4S + 1*a + 6add + 1*2.
   double(): ExtendedPoint {
     const { x: X1, y: Y1, z: Z1 } = this;
     const { a } = CURVE;
