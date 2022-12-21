@@ -7,21 +7,27 @@ import { randomBytes } from '@noble/hashes/utils';
 import * as mod from '@noble/curves/modular';
 
 const { getPublicKey, sign, verify, Point, Signature, utils: edUtils, CURVE } = ed25519;
-export { getPublicKey, sign, verify, Point, Signature, CURVE , RistrettoPoint };
+export { getPublicKey, sign, verify, Point, Signature, CURVE, RistrettoPoint };
 
-export const utils = Object.assign({
-  sha512(data: Uint8Array) {
-    return ed25519.CURVE.hash(data);
+export const utils = Object.assign(
+  {
+    sha512(data: Uint8Array) {
+      return ed25519.CURVE.hash(data);
+    },
+    sha512Sync: (data: Uint8Array) => {
+      return ed25519.CURVE.hash(data);
+    },
+    precompute(a: number) {},
+    randomBytes,
   },
-  sha512Sync: (data: Uint8Array) => {
-    return ed25519.CURVE.hash(data);
-  },
-  precompute(a: number) {},
-  randomBytes,
-}, edUtils, genUtils);
+  edUtils,
+  genUtils
+);
 
 export const sync = {
-  getPublicKey, sign, verify
+  getPublicKey,
+  sign,
+  verify,
 };
 
 export function pointToX25519(point: PointType): Uint8Array {
@@ -41,5 +47,5 @@ export const curve25519 = {
   getPublicKey: x25519.scalarMultBase,
   scalarMult: (a: any, b: any) => x25519.scalarMult(b, a),
   scalarMultBase: x25519.scalarMultBase,
-  BASE_POINT_U: x25519.Gu
-}
+  BASE_POINT_U: x25519.Gu,
+};
