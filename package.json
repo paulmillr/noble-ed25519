@@ -82,5 +82,9 @@
       "type": "individual",
       "url": "https://paulmillr.com/funding/"
     }
-  ]
+  ],
+  "dependencies": {
+    "@noble/curves": "^0.2.1",
+    "micro-curve-definitions": "^0.2.1"
+  }
 }
