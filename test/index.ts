@@ -43,7 +43,7 @@ describe('ed25519', () => {
       fc.asyncProperty(
         fc.array(fc.integer({ min: 0x00, max: 0xff })),
         fc.array(fc.integer({ min: 0x00, max: 0xff })),
-        fc.bigInt(1n, ed.CURVE.n),
+        fc.bigInt(1n, ed.CURVE.n-1n),
         async (bytes, wrongBytes, privateKey) => {
           const message = new Uint8Array(bytes);
           const wrongMessage = new Uint8Array(wrongBytes);
@@ -83,7 +83,7 @@ describe('ed25519', () => {
       expect(() => ed.sync.sign(msg, privKey)).toThrowError();
     });
     it('should sign and verify', () => {
-      ed.utils.sha512Sync = (...m) => sha512(ed.utils.concatBytes(...m));
+      ed.utils.sha512Sync = (...m: Uint8Array[]) => sha512(ed.utils.concatBytes(...m));
       const publicKey = ed.sync.getPublicKey(privKey);
       const signature = ed.sync.sign(msg, privKey);
       expect(ed.sync.verify(signature, msg, publicKey)).toBe(true);

@@ -26,7 +26,8 @@
     "crypto": false
   },
   "devDependencies": {
-    "@noble/hashes": "1.1.2",
+    "@noble/curves": "~0.5.0",
+    "@noble/hashes": "~1.1.2",
     "@rollup/plugin-node-resolve": "13.3.0",
     "@types/jest": "28.1.1",
     "@types/node": "17.0.18",
@@ -82,9 +83,5 @@
       "type": "individual",
       "url": "https://paulmillr.com/funding/"
     }
-  ],
-  "dependencies": {
-    "@noble/curves": "^0.2.1",
-    "micro-curve-definitions": "^0.2.1"
-  }
+  ]
 }

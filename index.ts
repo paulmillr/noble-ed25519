@@ -1,10 +1,9 @@
 /*! noble-ed25519 - MIT License (c) 2019 Paul Miller (paulmillr.com) */
 
-import { ed25519, RistrettoPoint, x25519 } from 'micro-curve-definitions/lib/ed25519';
-import * as genUtils from '@noble/curves/utils';
-import { PointType } from '@noble/curves/edwards';
+import { ed25519, RistrettoPoint, x25519 } from '@noble/curves/ed25519';
+import * as genUtils from '@noble/curves/abstract/utils';
+import { PointType } from '@noble/curves/abstract/edwards';
 import { randomBytes } from '@noble/hashes/utils';
-import * as mod from '@noble/curves/modular';
 
 const { getPublicKey, sign, verify, Point, Signature, utils: edUtils, CURVE } = ed25519;
 export { getPublicKey, sign, verify, Point, Signature, CURVE, RistrettoPoint };
@@ -18,10 +17,10 @@ export const utils = Object.assign(
       return ed25519.CURVE.hash(data);
     },
     precompute(a: number) {},
-    randomBytes,
   },
   edUtils,
-  genUtils
+  genUtils,
+  { randomBytes }
 );
 
 export const sync = {
@@ -32,7 +31,7 @@ export const sync = {
 
 export function pointToX25519(point: PointType): Uint8Array {
   const { y } = point;
-  const u = mod.div(1n + y, 1n - y, CURVE.P);
+  const u = CURVE.Fp.div(1n + y, 1n - y);
   return utils.numberToBytesLE(u, 32);
 }
 
@@ -45,7 +44,7 @@ export function getSharedSecret(privateKey: Hex, publicKey: Hex): Uint8Array {
 
 export const curve25519 = {
   getPublicKey: x25519.scalarMultBase,
-  scalarMult: (a: any, b: any) => x25519.scalarMult(b, a),
+  scalarMult: x25519.scalarMult,
   scalarMultBase: x25519.scalarMultBase,
   BASE_POINT_U: x25519.Gu,
 };
