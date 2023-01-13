@@ -280,7 +280,9 @@ class ExtendedPoint {
   }
 
   isTorsionFree(): boolean {
-    return this.multiplyUnsafe(CURVE.l).equals(ExtendedPoint.ZERO);
+    let p = this.multiplyUnsafe(CURVE.l / 2n).double();
+    if (CURVE.l % 2n) p = p.add(this);
+    return p.equals(ExtendedPoint.ZERO);
   }
 
   // Converts Extended point to default (x, y) coordinates.
