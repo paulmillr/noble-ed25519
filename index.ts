@@ -1029,6 +1029,8 @@ export const sync = {
   sign: signSync,
   /** Verifies ed25519 signature against message and public key. */
   verify: verifySync,
+  /** Calculates X25519 DH shared secret from ed25519 private & public keys. */
+  getSharedSecret: getSharedSecretSync,
 };
 
 /**
@@ -1041,6 +1043,12 @@ export const sync = {
  */
 export async function getSharedSecret(privateKey: PrivKey, publicKey: Hex): Promise<Uint8Array> {
   const { head } = await getExtendedPublicKey(privateKey);
+  const u = Point.fromHex(publicKey).toX25519();
+  return curve25519.scalarMult(head, u);
+}
+
+function getSharedSecretSync(privateKey: PrivKey, publicKey: Hex): Uint8Array {
+  const { head } = getExtendedPublicKeySync(privateKey);
   const u = Point.fromHex(publicKey).toX25519();
   return curve25519.scalarMult(head, u);
 }
