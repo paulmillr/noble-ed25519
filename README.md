@@ -5,7 +5,7 @@ an elliptic curve that could be used for EDDSA signature scheme and X25519 ECDH 
 
 Conforms to [RFC7748](https://datatracker.ietf.org/doc/html/rfc7748), [RFC8032](https://tools.ietf.org/html/rfc8032) and [ZIP215](https://zips.z.cash/zip-0215). Includes support for [ristretto255](https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-ristretto255-decaf448): a technique for constructing prime order elliptic curve groups with non-malleable encodings.
 
-[**Audited**](#security) by an independent security firm: no vulnerabilities have been found. Check out [the online demo](https://paulmillr.com/noble/). See [ed25519-keygen](https://github.com/paulmillr/ed25519-keygen) if you need SSH/PGP/TOR/HD keys for the curve.
+[**Audited**](#security) by an independent security firm. Check out [the online demo](https://paulmillr.com/noble/). See [ed25519-keygen](https://github.com/paulmillr/ed25519-keygen) if you need SSH/PGP/TOR/HD keys for the curve.
 
 ### This library belongs to _noble_ crypto
 
