@@ -280,8 +280,8 @@ class ExtendedPoint {
   }
 
   isTorsionFree(): boolean {
-    let p = this.multiplyUnsafe(CURVE.l / 2n).double();
-    if (CURVE.l % 2n) p = p.add(this);
+    let p = this.multiplyUnsafe(CURVE.l / _2n).double();
+    if (CURVE.l % _2n) p = p.add(this);
     return p.equals(ExtendedPoint.ZERO);
   }
 
