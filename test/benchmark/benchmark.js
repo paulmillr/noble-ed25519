@@ -7,6 +7,7 @@ run(async () => {
   await mark(() => {
     ed.utils.precompute();
   });
+  ed.utils.sha512Sync = (...m) => sha512(ed.utils.concatBytes(...m));
 
   logMem();
   console.log();
@@ -17,87 +18,34 @@ run(async () => {
   }
 
   // const priv1bit = to64Bytes(2n);
-  const smallPrivs = [2n, 3n, 4n, 5n, 6n, 7n, 8n, 9n, 10n, 11n, 12n, 13n, 14n, 15n];
+  const smallPrivs = [2n, 3n, 4n, 5n, 6n, 7n, 8n, 9n, 10n, 11n, 12n, 13n, 14n, 15n].map(a => to64Bytes(a));
   const priv = to64Bytes(0x9d61b19deffd5a60ba844af492ec2cc44449c5697b326919703bac031cae7f60n);
   const msg = to64Bytes('deadbeefdeadbeefdeadbeefdeadbeefdeadbeef');
 
   let pubHex, sigHex, i = 0;
   await mark('getPublicKey 1 bit', 6000, async () => {
-    pubHex = await ed.getPublicKey(smallPrivs[i++ % smallPrivs.length]);
+    pubHex = await ed.getPublicKeyAsync(smallPrivs[i++ % smallPrivs.length]);
   });
 
   await mark('getPublicKey(utils.randomPrivateKey())', 6000, async () => {
-    pubHex = await ed.getPublicKey(ed.utils.randomPrivateKey());
+    pubHex = await ed.getPublicKeyAsync(ed.utils.randomPrivateKey());
   });
 
   await mark('sign', 4000, async () => {
-    sigHex = await ed.sign(msg, priv);
+    sigHex = await ed.signAsync(msg, priv);
   });
-  const sigInst = ed.Signature.fromHex(sigHex);
-  const pubInst = ed.Point.fromHex(pubHex);
-
   await mark('verify', 800, async () => {
-    return await ed.verify(sigHex, msg, pubHex);
-  });
-
-  await mark('verify (no decompression)', 950, async () => {
-    return await ed.verify(sigInst, msg, pubInst);
+    return await ed.verifyAsync(sigHex, msg, pubHex);
   });
   await mark('Point.fromHex decompression', 13000, () => {
-    ed.Point.fromHex(pubHex);
+    ed.ExtendedPoint.fromHex(pubHex);
   });
 
-  const encodingsOfSmallMultiples = [
-    // This is the identity point
-    '0000000000000000000000000000000000000000000000000000000000000000',
-    // This is the basepoint
-    'e2f2ae0a6abc4e71a884a961c500515f58e30b6aa582dd8db6a65945e08d2d76',
-    // These are small multiples of the basepoint
-    '6a493210f7499cd17fecb510ae0cea23a110e8d5b901f8acadd3095c73a3b919',
-    '94741f5d5d52755ece4f23f044ee27d5d1ea1e2bd196b462166b16152a9d0259',
-    'da80862773358b466ffadfe0b3293ab3d9fd53c5ea6c955358f568322daf6a57',
-    'e882b131016b52c1d3337080187cf768423efccbb517bb495ab812c4160ff44e',
-    'f64746d3c92b13050ed8d80236a7f0007c3b3f962f5ba793d19a601ebb1df403',
-    '44f53520926ec81fbd5a387845beb7df85a96a24ece18738bdcfa6a7822a176d',
-    '903293d8f2287ebe10e2374dc1a53e0bc887e592699f02d077d5263cdd55601c',
-    '02622ace8f7303a31cafc63f8fc48fdc16e1c8c8d234b2f0d6685282a9076031',
-    '20706fd788b2720a1ed2a5dad4952b01f413bcf0e7564de8cdc816689e2db95f',
-    'bce83f8ba5dd2fa572864c24ba1810f9522bc6004afe95877ac73241cafdab42',
-    'e4549ee16b9aa03099ca208c67adafcafa4c3f3e4e5303de6026e3ca8ff84460',
-    'aa52e000df2e16f55fb1032fc33bc42742dad6bd5a8fc0be0167436c5948501f',
-    '46376b80f409b29dc2b5f6f0c52591990896e5716f41477cd30085ab7f10301e',
-    'e0c418f7c8d9c4cdd7395b93ea124f3ad99021bb681dfc3302a9d99a2e53e64e',
-  ].map((n) => ed.utils.hexToBytes(n));
-  const hash = new Uint8Array([
-    0xde, 0xad, 0xbe, 0xef, 0xde, 0xad, 0xbe, 0xef, 0xde, 0xad, 0xbe, 0xef, 0xde, 0xad, 0xbe, 0xef,
-    0xde, 0xad, 0xbe, 0xef, 0xde, 0xad, 0xbe, 0xef, 0xde, 0xad, 0xbe, 0xef, 0xde, 0xad, 0xbe, 0xef,
-    0xde, 0xad, 0xbe, 0xef, 0xde, 0xad, 0xbe, 0xef, 0xde, 0xad, 0xbe, 0xef, 0xde, 0xad, 0xbe, 0xef,
-    0xde, 0xad, 0xbe, 0xef, 0xde, 0xad, 0xbe, 0xef, 0xde, 0xad, 0xbe, 0xef, 0xde, 0xad, 0xbe, 0xef,
-  ]);
-  await mark('ristretto255#hashToCurve', 6000, () => {
-    ed.RistrettoPoint.hashToCurve(hash);
-  });
-  await mark('ristretto255 round', 6000, () => {
-    ed.RistrettoPoint.fromHex(encodingsOfSmallMultiples[2]).toHex();
-  });
-  mark('curve25519.scalarMultBase', 1200, () => {
-    ed.curve25519.scalarMultBase(
-      'aeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef'
-    );
-  });
-  await mark('ed25519.getSharedSecret', 1000, async () => {
-    await ed.getSharedSecret(
-      0x12345,
-      'aeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef'
-    );
-  });
 
-  ed.utils.sha512Sync = (...m) => sha512(ed.utils.concatBytes(...m));
-  const { sync } = ed;
   console.log();
-  await mark('sync.getPublicKey()', 6000, () => sync.getPublicKey(ed.utils.randomPrivateKey()));
-  await mark('sync.sign', 4000, () => sync.sign(msg, priv));
-  await mark('sync.verify', 800, () => sync.verify(sigHex, msg, pubHex));
+  await mark('sync.getPublicKey()', 6000, () => ed.getPublicKey(ed.utils.randomPrivateKey()));
+  await mark('sync.sign', 4000, () => ed.sign(msg, priv));
+  await mark('sync.verify', 800, () => ed.verify(sigHex, msg, pubHex));
 
   logMem();
 });
