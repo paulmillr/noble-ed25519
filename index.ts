@@ -5,35 +5,36 @@
  * - verify if add()/dbl() are rfc8032 algo
  * - Point#ok()
  */
-const B256 = 2n ** 256n; // ed25519 is twisted edwards curve with formula −x² + y² = 1 + dx²y²
+const B256 = 2n ** 256n;
 const P = 2n ** 255n - 19n;                                     // curve's prime field
 const N = 2n ** 252n + 27742317777372353535851937790883648493n; // curve's (group) order
-const _a = -1n; // curve's params: a = -1; d = -(121665/121666) == -(121665*inv(121666)) mod P
-const _d = 37095705934669439343138083508754565189542113879843219016388785533085940283555n;
-const h = 8;                                                    // cofactor
-const Gx = 15112221349535400772501151409588531511454012693041857206046113283949847762202n; // gen X
-const Gy = 46316835694926478169428394003475163141307993866256225615783033603165251855960n; // gen Y
-const CURVE = { a: _a, d: _d, P, l: N, n: N, h, Gx, Gy };
+const CURVE = { // ed25519 is twisted edwards curve with formula −x² + y² = 1 + dx²y²
+  a: -1n,       // equation a
+                // d = -(121665/121666) == -(121665*inv(121666)) mod P
+  d: 37095705934669439343138083508754565189542113879843219016388785533085940283555n,
+  P, l: N, n: N,
+  h: 8,         // cofactor
+                // generator (base) point coordinates
+  Gx: 15112221349535400772501151409588531511454012693041857206046113283949847762202n,
+  Gy: 46316835694926478169428394003475163141307993866256225615783033603165251855960n
+};
 type Bytes = Uint8Array; type Hex = Bytes | string; type PubKey = Hex | Point;
-const RM1 = 19681161376707505956807079304988542015446066515923890162744021073123829784752n; // √-1
 const err = (m = ''): never => { throw new Error(m); };
-const big = (n: any): n is bigint => typeof n === 'bigint'; // is big integer
-const str = (s: any): s is string => typeof s === 'string'; // is string
-const ge = (n: bigint) => big(n) && 0n < n && n < N;    // is group element
-const u8 = (a: any, l?: number): Bytes =>               // is Uint8Array (of specific length)
+const str = (s: unknown): s is string => typeof s === 'string'; // is string
+const au8 = (a: unknown, l?: number): Bytes =>               // is Uint8Array (of specific length)
   !(a instanceof Uint8Array) || (typeof l === 'number' && l > 0 && a.length !== l) ?
   err('Uint8Array expected') : a;
 const u8n = (data?: any) => new Uint8Array(data);       // creates Uint8Array
 const u8fr = (arr: any) => Uint8Array.from(arr);        // another shortcut
-const toU8 = (a: any, len?: number) => u8(str(a) ? h2b(a) : u8fr(a), len);  // normalize (hex/u8a) to u8a
+const toU8 = (a: any, len?: number) => au8(str(a) ? h2b(a) : u8fr(a), len);  // normalize (hex/u8a) to u8a
 const isPoint = (p: any) => (p instanceof Point ? p : err('Point expected')); // is 3d point
 const mod = (a: bigint, b = P) => { let r = a % b; return r >= 0n ? r : b + r; }; // mod division
 let Gpows: Point[] | undefined = undefined;             // precomputes for base point G
 interface AffinePoint { x: bigint, y: bigint }          // Point in 2d xy affine coords
 class Point {                                           // Point in xyzt extended coords
   constructor(readonly ex: bigint, readonly ey: bigint, readonly ez: bigint, readonly et: bigint) {}
-  static BASE = new Point(Gx, Gy, 1n, mod(Gx * Gy));    // Generator / base point
-  static ZERO = new Point(0n, 1n, 1n, 0n);              // Identity / zero point
+  static readonly BASE = new Point(CURVE.Gx, CURVE.Gy, 1n, mod(CURVE.Gx * CURVE.Gy)); // Base point
+  static readonly ZERO = new Point(0n, 1n, 1n, 0n);     // Identity / zero point
   get x() { return this.aff().x; }
   get y() { return this.aff().y; }
   eql(other: Point): boolean {                          // equality check: compare points
@@ -88,7 +89,7 @@ class Point {                                           // Point in xyzt extende
   mul(scalar: bigint, safe = true): Point {
     let n = scalar;
     if (n === 0n) return safe === true ? err('cannot multiply by 0') : I;
-    if (!ge(n)) err('invalid scalar, must be < L');
+    if (!(typeof n === 'bigint' && 0n < n && n < N)) err('invalid scalar, must be < L');
     if (!safe && this.eql(I) || n === 1n) return this;
     if (this.eql(G)) return wNAF(n).p;
     let p = I, f = G;                                   // init result point & fake point
@@ -99,7 +100,7 @@ class Point {                                           // Point in xyzt extende
     return p;
   }
   multiply(scalar: bigint) { return this.mul(scalar); }
-  clearCofactor(): Point { return this.mul(BigInt(h), false); }
+  clearCofactor(): Point { return this.mul(BigInt(CURVE.h), false); }
   isSmallOrder(): boolean { return this.clearCofactor().eql(I); }
   isTorsionFree(): boolean {
     let p = this.mul(N / 2n, false).dbl();
@@ -107,11 +108,11 @@ class Point {                                           // Point in xyzt extende
     return p.eql(I);
   }
   aff(): AffinePoint {                                  // converts point to 2d xy affine point
-    const { ex: x, ey: y, ez: z } = this;                           // (x, y, z, t) ∋ (x=x/z, y=y/z, t=xy)
-    if (this.eql(I)) return { x: 0n, y: 0n };
-    const iz = inv(z);
-    if (mod(z * iz) !== 1n) err('invalid inverse');
-    return { x: mod(x * iz), y: mod(y * iz) }
+    const { ex: x, ey: y, ez: z } = this;               // (x, y, z, t) ∋ (x=x/z, y=y/z, t=xy)
+    if (this.eql(I)) return { x: 0n, y: 0n };           // fast-path for zero point
+    const iz = inv(z);                                  // z^-1: invert z
+    if (mod(z * iz) !== 1n) err('invalid inverse');     // (z * z^-1) must be 1, otherwise bad math
+    return { x: mod(x * iz), y: mod(y * iz) }           // x = x*z^-1; y = y*z^-1
   }
   static fromHex(hex: Hex, strict = true) { // RFC8032 5.1.3: convert hex / Uint8Array to Point.
     const { d } = CURVE;
@@ -134,21 +135,19 @@ class Point {                                           // Point in xyzt extende
     if (isHeadOdd !== isXOdd) x = mod(-x);
     return new Point(x, y, 1n, mod(x * y));
   }
-  toRawBytes(): Bytes {
+  toRawBytes(): Bytes {                                 // encode to Uint8Array
     const { x, y } = this.aff();
     const b = n2b_32LE(y);
-    b[31] |= this.x & 1n ? 0x80 : 0;
+    b[31] |= x & 1n ? 0x80 : 0;
     return b;
   }
-  toHex(): string {
-    return b2h(this.toRawBytes());
-  }
+  toHex(): string { return b2h(this.toRawBytes()); }    // encode to hex string
 }
-const { BASE: G, ZERO: I } = Point;                                 // Generator, identity points
+const { BASE: G, ZERO: I } = Point;                     // Generator, identity points
 const concatB = (...arrs: Bytes[]) => {                 // concatenate Uint8Array-s
   const r = u8n(arrs.reduce((sum, a) => sum + a.length, 0)); // create u8a of summed length
   let pad = 0;                                               // walk through each array, ensure
-  arrs.forEach(a => { r.set(u8(a), pad); pad += a.length }); // they have proper type
+  arrs.forEach(a => { r.set(au8(a), pad); pad += a.length }); // they have proper type
   return r;
 };
 const padh = (num: number | bigint, pad: number) => num.toString(16).padStart(pad, '0')
@@ -168,7 +167,7 @@ const h2b = (hex: string): Bytes => {                   // hex to bytes
 };
 const n2b_32BE = (num: bigint) => h2b(num.toString(16).padStart(32 * 2, '0')); // number to bytes BE
 const n2b_32LE = (num: bigint) => n2b_32BE(num).reverse();                     // number to bytes LE
-const b2n_LE = (b: Bytes): bigint => BigInt('0x' + b2h(u8fr(u8(b)).reverse())) // bytes LE to number
+const b2n_LE = (b: Bytes): bigint => BigInt('0x' + b2h(u8fr(au8(b)).reverse())) // bytes LE to number
 const inv = (num: bigint, md = P): bigint => {          // modular inversion
   if (num === 0n || md <= 0n) err(`no invert n=${num} mod=${md}`); // no negative exponents
   let a = mod(num, md), b = md, x = 0n, y = 1n, u = 1n, v = 0n;
@@ -199,6 +198,7 @@ const pow_2_252_3 = (x: bigint) => {
   const pow_p_5_8 = (pow2(b250, 2n) * x) % P; // < To pow to (p+3)/8, multiply it by x.
   return { pow_p_5_8, b2 };
 }
+const RM1 = 19681161376707505956807079304988542015446066515923890162744021073123829784752n; // √-1
 const uvRatio = (u: bigint, v: bigint): { isValid: boolean, value: bigint } => {
   const v3 = mod(v * v * v);                            // v³
   const v7 = mod(v3 * v3 * v);                          // v⁷
@@ -215,7 +215,7 @@ const uvRatio = (u: bigint, v: bigint): { isValid: boolean, value: bigint } => {
   if ((mod(x) & 1n) === 1n) x = mod(-x);                // edIsNegative
   return { isValid: useRoot1 || useRoot2, value: x };
 }
-const modL_LE = (hash: Bytes): bigint => mod(b2n_LE(hash), N); // Little-endian modulo n
+const modL_LE = (hash: Bytes): bigint => mod(b2n_LE(hash), N); // modulo L; but little-endian
 type ExtK = { head: Bytes, prefix: Bytes, scalar: bigint, point: Point, pointBytes: Bytes };
 const adj25519 = (bytes: Bytes) => {                    // curve25519 bit clamping
   bytes[0] &= 248;                                      // 0b1111_1000
@@ -251,7 +251,7 @@ const rksSign = (s: bigint, P: Bytes, rBytes: Bytes, msg: Bytes): Finishable<Byt
   const hashable = concatB(R, P, msg);                  // dom2(F, C) || R || A || PH(M)
   const finish = (hashed: Bytes): Bytes => {            // k = SHA512(dom2(F, C) || R || A || PH(M))
     const S = mod(r + modL_LE(hashed) * s, N);          // S = (r + k * s) mod L; 0 <= s < l
-    return u8(concatB(R, n2b_32LE(S)), 64)              // 64-byte sig: 32b R.x + 32b LE(S)
+    return au8(concatB(R, n2b_32LE(S)), 64)             // 64-byte sig: 32b R.x + 32b LE(S)
   }
   return { hashable, finish }
 };
@@ -267,7 +267,7 @@ const signSync = (msg: Hex, privKey: Hex): Bytes => {
   const rBytes = sha512s(prefix, m);                    // r = SHA512(dom2(F, C) || prefix || PH(M))
   return hashFinishS(rksSign(s, P, rBytes, m));         // Generate R, k, S, then 64-byte signature
 };
-const verif = (sig: Hex, msg: Hex, pub: PubKey): Finishable<boolean> => {
+const verify = (sig: Hex, msg: Hex, pub: PubKey): Finishable<boolean> => {
   msg = toU8(msg);                                      // Message hex str/Bytes
   sig = toU8(sig, 64);                                  // Signature hex str/Bytes, must be 64 bytes
   const A = pub instanceof Point ? pub : Point.fromHex(pub, false); // public key A decoded
@@ -283,9 +283,9 @@ const verif = (sig: Hex, msg: Hex, pub: PubKey): Finishable<boolean> => {
   return { hashable, finish };
 };
 const verifyAsync = async (sig: Hex, msg: Hex, pubKey: PubKey): Promise<boolean> =>
-  await hashFinishA(verif(sig, msg, pubKey))            // RFC8032 5.1.7: verification async
+  await hashFinishA(verify(sig, msg, pubKey))           // RFC8032 5.1.7: verification async
 const verifySync = (sig: Hex, msg: Hex, pubKey: PubKey): boolean =>
-  hashFinishS(verif(sig, msg, pubKey))                  // RFC8032 5.1.7: verification sync
+  hashFinishS(verify(sig, msg, pubKey))                 // RFC8032 5.1.7: verification sync
 
 declare const globalThis: Record<string, any> | undefined;
 const cr: { node?: any; web?: any } = {
@@ -295,7 +295,6 @@ const cr: { node?: any; web?: any } = {
 const utils = {
   getExtendedPublicKeyAsync: extendedPubAsync,
   getExtendedPublicKey: extendedPubSync,
-
   bytesToHex: b2h, hexToBytes: h2b,
   concatBytes: concatB, mod, invert: inv,
   randomBytes: (len: number): Bytes => {                // CSPRNG (random number generator)

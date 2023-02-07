@@ -23,19 +23,19 @@ run(async () => {
   const msg = to64Bytes('deadbeefdeadbeefdeadbeefdeadbeefdeadbeef');
 
   let pubHex, sigHex, i = 0;
-  await mark('getPublicKey 1 bit', 6000, async () => {
-    pubHex = await ed.getPublicKeyAsync(smallPrivs[i++ % smallPrivs.length]);
+  await mark('getPublicKey 1 bit', 6000, () => {
+    pubHex = ed.getPublicKey(smallPrivs[i++ % smallPrivs.length]);
   });
 
-  await mark('getPublicKey(utils.randomPrivateKey())', 6000, async () => {
-    pubHex = await ed.getPublicKeyAsync(ed.utils.randomPrivateKey());
+  await mark('getPublicKey(utils.randomPrivateKey())', 6000, () => {
+    pubHex = ed.getPublicKey(ed.utils.randomPrivateKey());
   });
 
-  await mark('sign', 4000, async () => {
-    sigHex = await ed.signAsync(msg, priv);
+  await mark('sign', 4000, () => {
+    sigHex = ed.sign(msg, priv);
   });
-  await mark('verify', 800, async () => {
-    return await ed.verifyAsync(sigHex, msg, pubHex);
+  await mark('verify', 800, () => {
+    return ed.verify(sigHex, msg, pubHex);
   });
   await mark('Point.fromHex decompression', 13000, () => {
     ed.ExtendedPoint.fromHex(pubHex);
@@ -43,9 +43,9 @@ run(async () => {
 
 
   console.log();
-  await mark('sync.getPublicKey()', 6000, () => ed.getPublicKey(ed.utils.randomPrivateKey()));
-  await mark('sync.sign', 4000, () => ed.sign(msg, priv));
-  await mark('sync.verify', 800, () => ed.verify(sigHex, msg, pubHex));
+  await mark('getPublicKeyAsync', 6000, () => ed.getPublicKeyAsync(ed.utils.randomPrivateKey()));
+  await mark('signAsync', 4000, () => ed.signAsync(msg, priv));
+  await mark('verifyAsync', 800, () => ed.verifyAsync(sigHex, msg, pubHex));
 
   utils.logMem();
 });

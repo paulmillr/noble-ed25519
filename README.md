@@ -4,7 +4,7 @@
 [RFC8032](https://tools.ietf.org/html/rfc8032) and [ZIP215](https://zips.z.cash/zip-0215)
 compliant EdDSA signature scheme.
 
-The library does not use dependencies and is as minimal as possible. [noble-curves](https://github.com/paulmillr/noble-curves) is even faster drop-in replacement for noble-ed25519 with more features such as [ristretto255](https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-ristretto255-decaf448), X25519 and curve25519.
+The library does not use dependencies and is as minimal as possible. [noble-curves](https://github.com/paulmillr/noble-curves) is even faster drop-in replacement for noble-ed25519 with more features such as [ristretto255](https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-ristretto255-decaf448), X25519/curve25519, ed25519ph and ed25519ctx.
 
 Check out [the online demo](https://paulmillr.com/noble/). See [micro-ed25519-hdkey](https://github.com/paulmillr/ed25519-hdkey) if you need SLIP-0010/BIP32 HDKey implementation using the library.
 
@@ -129,10 +129,10 @@ We however consider infrastructure attacks like rogue NPM modules very important
 
 Benchmarks done with Apple M2 on macOS 13 with Node.js 19.
 
-    getPublicKey(utils.randomPrivateKey()) x 6,645 ops/sec @ 150μs/op
-    sign x 3,262 ops/sec @ 306μs/op
-    verify x 928 ops/sec @ 1ms/op
-    Point.fromHex decompression x 14,613 ops/sec @ 68μs/op
+    getPublicKey(utils.randomPrivateKey()) x 9,354 ops/sec @ 106μs/op
+    sign x 4,724 ops/sec @ 211μs/op
+    verify x 960 ops/sec @ 1ms/op
+    Point.fromHex decompression x 14,841 ops/sec @ 67μs/op
 
 Compare to alternative implementations:
 
@@ -148,6 +148,7 @@ Compare to alternative implementations:
 
 Upgrading from @noble/ed25519 1.7 to 2.0:
 
+- Import maps are no longer required in Deno. Just import as-is.
 - Swapped async and sync method names:
     - `ed.sync.getPublicKey`, `sync.sign`, `sign.verify` is now just `getPublicKey`, `sign`, `verify`
     - Async methods are now `getPublicKeyAsync`, `signAsync`, `verifyAsync`
