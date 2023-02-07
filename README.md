@@ -1,15 +1,12 @@
 # noble-ed25519 ![Node CI](https://github.com/paulmillr/noble-ed25519/workflows/Node%20CI/badge.svg) [![code style: prettier](https://img.shields.io/badge/code_style-prettier-ff69b4.svg?style=flat-square)](https://github.com/prettier/prettier)
 
-[Fastest](#speed) JS implementation of [ed25519](https://en.wikipedia.org/wiki/EdDSA),
-an elliptic curve that could be used for EDDSA signature scheme and X25519 ECDH key agreement.
+[Fastest](#speed) 8KB JS implementation of [ed25519](https://en.wikipedia.org/wiki/EdDSA),
+[RFC8032](https://tools.ietf.org/html/rfc8032) and [ZIP215](https://zips.z.cash/zip-0215)
+compliant EdDSA signature scheme.
 
-Conforms to [RFC8032](https://tools.ietf.org/html/rfc8032) and [ZIP215](https://zips.z.cash/zip-0215).
+The library does not use dependencies and is as minimal as possible. [noble-curves](https://github.com/paulmillr/noble-curves) is even faster drop-in replacement for noble-ed25519 with more features such as [ristretto255](https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-ristretto255-decaf448), X25519 and curve25519.
 
-[**Audited**](#security) by an independent security firm: no vulnerabilities have been found. Check out [the online demo](https://paulmillr.com/noble/).
-
-The library is as minimal as possible. If you're looking for additional features such as [ristretto255](https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-ristretto255-decaf448), X25519 or curve25519, use [noble-curves](https://github.com/paulmillr/noble-curves) instead. noble-curves is drop-in replacement for noble-ed25519 with more features and improved speed.
-
-See [micro-ed25519-hdkey](https://github.com/paulmillr/ed25519-hdkey) if you need SLIP-0010/BIP32 HDKey implementation using the library.
+Check out [the online demo](https://paulmillr.com/noble/). See [micro-ed25519-hdkey](https://github.com/paulmillr/ed25519-hdkey) if you need SLIP-0010/BIP32 HDKey implementation using the library.
 
 ### This library belongs to _noble_ crypto
 
@@ -36,7 +33,7 @@ Use bundlers if you need Common.js.
 import * as ed from '@noble/ed25519';
 const privateKey = ed.utils.randomPrivateKey();
 const message = Uint8Array.from([0xab, 0xbc, 0xcd, 0xde]);
-const publicKey = ed.getPublicKey(privateKey);
+const publicKey = ed.getPublicKey(privateKey); // to enable sync methods, see below
 const signature = ed.sign(message, privateKey);
 const isValid = ed.verify(signature, message, publicKey);
 ```
@@ -121,7 +118,7 @@ ed25519.utils.TORSION_SUBGROUP; // The 8-torsion subgroup ℰ8.
 
 Noble is production-ready.
 
-1. The library has been audited by an independent security firm cure53: [PDF](https://cure53.de/pentest-report_ed25519.pdf). No vulnerabilities have been found. See [changes since audit](https://github.com/paulmillr/noble-ed25519/compare/1.6.0..main).
+1. Version 1 of the library has been audited by an independent security firm cure53: [PDF](https://cure53.de/pentest-report_ed25519.pdf). No vulnerabilities have been found. The current version is a full rewrite of v1, use at your own risk.
 2. The library has also been fuzzed by [Guido Vranken's cryptofuzz](https://github.com/guidovranken/cryptofuzz). You can run the fuzzer by yourself to check it.
 
 We're using built-in JS `BigInt`, which is potentially vulnerable to [timing attacks](https://en.wikipedia.org/wiki/Timing_attack) as [per official spec](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/BigInt#cryptography). But, _JIT-compiler_ and _Garbage Collector_ make "constant time" extremely hard to achieve in a scripting language. Which means _any other JS library doesn't use constant-time bigints_. Including bn.js or anything else. Even statically typed Rust, a language without GC, [makes it harder to achieve constant-time](https://www.chosenplaintext.ca/open-source/rust-timing-shield/security) for some cases. If your goal is absolute security, don't use any JS lib — including bindings to native ones. Use low-level libraries & languages. Nonetheless we've hardened implementation of ec curve multiplication to be algorithmically constant time.
