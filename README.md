@@ -127,13 +127,12 @@ We however consider infrastructure attacks like rogue NPM modules very important
 
 ## Speed
 
-Benchmarks done with Apple M2 on macOS 12 with Node.js 18.
+Benchmarks done with Apple M2 on macOS 13 with Node.js 19.
 
-    getPublicKey(utils.randomPrivateKey()) x 8,627 ops/sec @ 115μs/op
-    sign x 4,355 ops/sec @ 229μs/op
-    verify x 852 ops/sec @ 1ms/op
-    verify (no decompression) x 975 ops/sec @ 1ms/op
-    Point.fromHex decompression x 13,512 ops/sec @ 74μs/op
+    getPublicKey(utils.randomPrivateKey()) x 6,645 ops/sec @ 150μs/op
+    sign x 3,262 ops/sec @ 306μs/op
+    verify x 928 ops/sec @ 1ms/op
+    Point.fromHex decompression x 14,613 ops/sec @ 68μs/op
 
 Compare to alternative implementations:
 
@@ -144,6 +143,18 @@ Compare to alternative implementations:
     # sodium-native@3.4.1
     # native bindings to libsodium, **node.js-only**
     sign x 82,925 ops/sec @ 12μs/op
+
+## Upgrading
+
+Upgrading from @noble/ed25519 1.7 to 2.0:
+
+- Swapped async and sync method names:
+    - `ed.sync.getPublicKey`, `sync.sign`, `sign.verify` is now just `getPublicKey`, `sign`, `verify`
+    - Async methods are now `getPublicKeyAsync`, `signAsync`, `verifyAsync`
+- `Point` was removed: use `ExtendedPoint` in xyzt coordinates
+- `Signature` was removed
+- `getSharedSecret` and Ristretto functionality had been moved to noble-curves
+- `bigint` is no longer allowed in `getPublicKey`, `sign`, `verify`. Reason: ed25519 is LE, can lead to bugs
 
 ## Contributing
 

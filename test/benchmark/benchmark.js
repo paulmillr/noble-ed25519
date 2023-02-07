@@ -1,4 +1,4 @@
-const { run, mark, logMem } = require('micro-bmark');
+const { run, mark, utils } = require('micro-bmark');
 const { sha512 } = require('@noble/hashes/sha512');
 let ed = require('../../lib');
 
@@ -9,7 +9,7 @@ run(async () => {
   });
   ed.utils.sha512Sync = (...m) => sha512(ed.utils.concatBytes(...m));
 
-  logMem();
+  utils.logMem();
   console.log();
 
   function to64Bytes(numOrStr) {
@@ -47,5 +47,5 @@ run(async () => {
   await mark('sync.sign', 4000, () => ed.sign(msg, priv));
   await mark('sync.verify', 800, () => ed.verify(sigHex, msg, pubHex));
 
-  logMem();
+  utils.logMem();
 });
