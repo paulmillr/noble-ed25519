@@ -29,6 +29,9 @@ class Point {                                           // Point in xyzt extende
   constructor(readonly ex: bigint, readonly ey: bigint, readonly ez: bigint, readonly et: bigint) {}
   static readonly BASE = new Point(CURVE.Gx, CURVE.Gy, 1n, mod(CURVE.Gx * CURVE.Gy)); // Base point
   static readonly ZERO = new Point(0n, 1n, 1n, 0n);     // Identity / zero point
+  static fromAffine(p: AffinePoint) {
+    return new Point(p.x, p.y, 1n, mod(p.x * p.y));
+  }
   get x() { return this.aff().x; }                      // .x, .y will call expensive toAffine.
   get y() { return this.aff().y; }                      // Should be used with care.
   eql(other: Point): boolean {                          // equality check: compare points
