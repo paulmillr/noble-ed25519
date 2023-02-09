@@ -1,7 +1,7 @@
 {
   "name": "@noble/ed25519",
   "version": "2.0.0-pre",
-  "description": "Fastest JS implementation of ed25519. Independently audited, high-security, 0-dependency EDDSA, X25519 ECDH & ristretto255",
+  "description": "Fastest 8KB JS implementation of ed25519. Auditable, high-security, 0-dependency EDDSA signatures compliant with RFC8032 & ZIP215",
   "files": [
     "lib"
   ],
@@ -31,7 +31,7 @@
     "@types/node": "17.0.18",
     "fast-check": "3.0.0",
     "micro-bmark": "0.3.0",
-    "micro-should": "^0.4.0",
+    "micro-should": "0.4.0",
     "terser": "5.16.1",
     "typescript": "4.7.3"
   },
@@ -61,10 +61,6 @@
       "import": "./lib/esm/index.js",
       "default": "./lib/index.js"
     }
-  },
-  "prettier": {
-    "printWidth": 100,
-    "singleQuote": true
   },
   "funding": [
     {
