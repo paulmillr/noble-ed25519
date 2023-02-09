@@ -21,14 +21,14 @@ const CURVE = { // ed25519 is twisted edwards curve with formula −x² + y² = 
 type Bytes = Uint8Array; type Hex = Bytes | string; type PubKey = Hex | Point;
 const err = (m = ''): never => { throw new Error(m); };
 const str = (s: unknown): s is string => typeof s === 'string'; // is string
-const au8 = (a: unknown, l?: number): Bytes =>               // is Uint8Array (of specific length)
+const au8 = (a: unknown, l?: number): Bytes =>          // is Uint8Array (of specific length)
   !(a instanceof Uint8Array) || (typeof l === 'number' && l > 0 && a.length !== l) ?
   err('Uint8Array expected') : a;
 const u8n = (data?: any) => new Uint8Array(data);       // creates Uint8Array
 const u8fr = (arr: any) => Uint8Array.from(arr);        // another shortcut
-const toU8 = (a: any, len?: number) => au8(str(a) ? h2b(a) : u8fr(a), len);  // normalize (hex/u8a) to u8a
-const isPoint = (p: any) => (p instanceof Point ? p : err('Point expected')); // is 3d point
+const toU8 = (a: any, len?: number) => au8(str(a) ? h2b(a) : u8fr(a), len);  // norm(hex/u8a) to u8a
 const mod = (a: bigint, b = P) => { let r = a % b; return r >= 0n ? r : b + r; }; // mod division
+const isPoint = (p: any) => (p instanceof Point ? p : err('Point expected')); // is 3d point
 let Gpows: Point[] | undefined = undefined;             // precomputes for base point G
 interface AffinePoint { x: bigint, y: bigint }          // Point in 2d xy affine coords
 class Point {                                           // Point in xyzt extended coords
@@ -68,17 +68,17 @@ class Point {                                           // Point in xyzt extende
   }
   add(other: Point) { // Fast algo for adding 2 Extended Points when curve's a=-1.
     isPoint(other);   // Note: It does not check whether the `other` point is valid.
-    const { ex: X1, ey: Y1, ez: Z1, et: T1 } = this; // http://hyperelliptic.org/EFD/g1p/auto-twisted-extended-1.html#addition-add-2008-hwcd-4
-    const { ex: X2, ey: Y2, ez: Z2, et: T2 } = other; // Cost: 8M + 8add + 2*2.
-    const A = mod((Y1 - X1) * (Y2 + X2));
-    const B = mod((Y1 + X1) * (Y2 - X2));
-    const F = mod(B - A);
-    if (F === 0n) return this.dbl(); // Same point.
-    const C = mod(Z1 * 2n * T2);
-    const D = mod(T1 * 2n * Z2);
-    const E = D + C;
-    const G = B + A;
-    const H = D - C;
+    const { ex: X1, ey: Y1, ez: Z1, et: T1 } = this; // http://hyperelliptic.org/EFD/g1p/auto-twisted-extended-1.html#addition-add-2008-hwcd-3
+    const { ex: X2, ey: Y2, ez: Z2, et: T2 } = other; // Cost: 8M + 1*k + 8add + 1*2.
+    const { a, d } = CURVE;
+    const A = mod(X1 * X2);
+    const B = mod(Y1 * Y2);
+    const C = mod(T1 * d * T2);
+    const D = mod(Z1 * Z2);
+    const E = mod((X1 + Y1) * (X2 + Y2) - A - B);
+    const F = mod(D - C);
+    const G = mod(D + C);
+    const H = mod(B - a * A);
     const X3 = mod(E * F);
     const Y3 = mod(G * H);
     const T3 = mod(E * H);
@@ -267,7 +267,7 @@ const signSync = (msg: Hex, privKey: Hex): Bytes => {
   const rBytes = sha512s(prefix, m);                    // r = SHA512(dom2(F, C) || prefix || PH(M))
   return hashFinishS(rksSign(s, P, rBytes, m));         // Generate R, k, S, then 64-byte signature
 };
-const verify = (sig: Hex, msg: Hex, pub: PubKey): Finishable<boolean> => {
+const verify = (sig: Hex, msg: Hex, pub: PubKey): Finishable<boolean> => { // sig verification
   msg = toU8(msg);                                      // Message hex str/Bytes
   sig = toU8(sig, 64);                                  // Signature hex str/Bytes, must be 64 bytes
   const A = pub instanceof Point ? pub : Point.fromHex(pub, false); // public key A decoded
