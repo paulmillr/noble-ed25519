@@ -27,7 +27,7 @@
     "crypto": false
   },
   "devDependencies": {
-    "@noble/hashes": "1.1.2",
+    "@noble/hashes": "1.2.0",
     "@types/node": "17.0.18",
     "fast-check": "3.0.0",
     "micro-bmark": "0.3.0",
