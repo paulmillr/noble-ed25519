@@ -287,7 +287,7 @@ const verifySync = (sig: Hex, msg: Hex, pubKey: PubKey): boolean =>
 
 declare const globalThis: Record<string, any> | undefined;  // aka window, self, global
 const cr: { node?: any; web?: any } = {
-  node: typeof require === 'function' && require('crypto'), // node.js require('crypto')
+  node: typeof require === 'function' && require('node:crypto'), // node.js require('crypto')
   web: typeof globalThis === 'object' && 'crypto' in globalThis ? globalThis.crypto : undefined,
 };
 const utils = {
@@ -300,7 +300,7 @@ const utils = {
       cr.node ? u8fr(cr.node.randomBytes(len)) : err('CSPRNG not present');// throw when unavailable
   },
   randomPrivateKey: (): Bytes => utils.randomBytes(32),
-  precompute() {},
+  precompute(p: any) {return p;},
   sha512Async: async (...messages: Bytes[]): Promise<Bytes> => {
     const m = concatB(...messages);
     return cr.web ? u8n(await cr.web.subtle.digest('SHA-512', m.buffer)) :

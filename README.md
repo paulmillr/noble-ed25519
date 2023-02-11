@@ -6,7 +6,7 @@ compliant EdDSA signature scheme.
 
 The library does not use dependencies and is as minimal as possible. [noble-curves](https://github.com/paulmillr/noble-curves) is even faster drop-in replacement for noble-ed25519 with more features such as [ristretto255](https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-ristretto255-decaf448), X25519/curve25519, ed25519ph and ed25519ctx.
 
-Check out [the online demo](https://paulmillr.com/noble/). See [micro-ed25519-hdkey](https://github.com/paulmillr/ed25519-hdkey) if you need SLIP-0010/BIP32 HDKey implementation using the library.
+Check out [the online demo](https://paulmillr.com/noble/). See [micro-ed25519-hdkey](https://github.com/paulmillr/ed25519-hdkey) if you need SLIP-0010/BIP32 HDKey implementation using the library. See [Upgrading](#upgrading) section if you've been using v1.
 
 ### This library belongs to _noble_ crypto
 
