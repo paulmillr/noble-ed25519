@@ -1,7 +1,10 @@
-export * as ed25519 from '../lib/esm/index.js';
-import * as ed from '../lib/esm/index.js';
+import { webcrypto } from 'node:crypto';
+// @ts-ignore
+if (!globalThis.crypto) globalThis.crypto = webcrypto; // @ts-ignore
+import * as ed from '../index.js';
+export * as ed25519 from '../index.js';
 import { sha512 } from '@noble/hashes/sha512';
-ed.utils.sha512Sync = (...m) => sha512(ed.utils.concatBytes(...m));
+ed.etc.sha512Sync = (...m) => sha512(ed.etc.concatBytes(...m));
 
 export const ED25519_TORSION_SUBGROUP = [
   '0100000000000000000000000000000000000000000000000000000000000000',

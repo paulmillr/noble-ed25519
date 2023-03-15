@@ -2,11 +2,11 @@
 const B256 = 2n ** 256n;
 const P = 2n ** 255n - 19n;                                     // curve's field prime
 const N = 2n ** 252n + 27742317777372353535851937790883648493n; // curve's (group) order
-const CURVE = { // ed25519 is twisted edwards curve with formula −x² + y² = 1 + dx²y²
+export const CURVE = { // ed25519 is twisted edwards curve with formula −x² + y² = 1 + dx²y²
   a: -1n,       // equation a
                 // d = -(121665/121666) == -(121665*inv(121666)) mod P
   d: 37095705934669439343138083508754565189542113879843219016388785533085940283555n,
-  P, l: N, n: N,
+  P, l: N, n: N, // prime, group order
   h: 8,         // cofactor
                 // generator (base) point coordinates
   Gx: 15112221349535400772501151409588531511454012693041857206046113283949847762202n,
@@ -47,37 +47,20 @@ class Point {                                           // Point in xyzt extende
   dbl(): Point {                                        // point doubling
     const { ex: X1, ey: Y1, ez: Z1 } = this;            // Cost: 4M + 4S + 1*a + 6add + 1*2
     const { a } = CURVE; // https://hyperelliptic.org/EFD/g1p/auto-twisted-extended.html#doubling-dbl-2008-hwcd
-    const A = mod(X1 * X1);
-    const B = mod(Y1 * Y1);
-    const C = mod(2n * mod(Z1 * Z1));
-    const D = mod(a * A);
-    const x1y1 = X1 + Y1;
-    const E = mod(mod(x1y1 * x1y1) - A - B);
-    const G = D + B;
-    const F = G - C;
-    const H = D - B;
-    const X3 = mod(E * F);
-    const Y3 = mod(G * H);
-    const T3 = mod(E * H);
-    const Z3 = mod(F * G);
+    const A = mod(X1 * X1); const B = mod(Y1 * Y1); const C = mod(2n * mod(Z1 * Z1));
+    const D = mod(a * A); const x1y1 = X1 + Y1; const E = mod(mod(x1y1 * x1y1) - A - B);
+    const G = D + B; const F = G - C; const H = D - B;
+    const X3 = mod(E * F); const Y3 = mod(G * H); const T3 = mod(E * H); const Z3 = mod(F * G);
     return new Point(X3, Y3, Z3, T3);
   }
   add(other: Point) {                                   // point addition
     const { ex: X1, ey: Y1, ez: Z1, et: T1 } = this;    // Cost: 8M + 1*k + 8add + 1*2.
     const { ex: X2, ey: Y2, ez: Z2, et: T2 } = isPoint(other); // doesn't check if other on-curve
     const { a, d } = CURVE; // http://hyperelliptic.org/EFD/g1p/auto-twisted-extended-1.html#addition-add-2008-hwcd-3
-    const A = mod(X1 * X2);
-    const B = mod(Y1 * Y2);
-    const C = mod(T1 * d * T2);
-    const D = mod(Z1 * Z2);
-    const E = mod((X1 + Y1) * (X2 + Y2) - A - B);
-    const F = mod(D - C);
-    const G = mod(D + C);
-    const H = mod(B - a * A);
-    const X3 = mod(E * F);
-    const Y3 = mod(G * H);
-    const T3 = mod(E * H);
-    const Z3 = mod(F * G);
+    const A = mod(X1 * X2); const B = mod(Y1 * Y2); const C = mod(T1 * d * T2);
+    const D = mod(Z1 * Z2); const E = mod((X1 + Y1) * (X2 + Y2) - A - B);
+    const F = mod(D - C); const G = mod(D + C); const H = mod(B - a * A);
+    const X3 = mod(E * F); const Y3 = mod(G * H); const T3 = mod(E * H); const Z3 = mod(F * G);
     return new Point(X3, Y3, Z3, T3);
   }
   sub(p: Point): Point { return this.add(p.neg()); }    // point subtraction
@@ -138,6 +121,7 @@ class Point {                                           // Point in xyzt extende
   toHex(): string { return b2h(this.toRawBytes()); }    // encode to hex string
 }
 const { BASE: G, ZERO: I } = Point;                     // Generator, identity points
+export const ExtendedPoint = Point;
 const concatB = (...arrs: Bytes[]) => {                 // concatenate Uint8Array-s
   const r = u8n(arrs.reduce((sum, a) => sum + a.length, 0)); // create u8a of summed length
   let pad = 0;                                               // walk through each array, ensure
@@ -212,9 +196,9 @@ const uvRatio = (u: bigint, v: bigint): { isValid: boolean, value: bigint } => {
 const modL_LE = (hash: Bytes): bigint => mod(b2n_LE(hash), N); // modulo L; but little-endian
 type Sha512FnSync = undefined | ((...messages: Bytes[]) => Bytes);
 let _shaS: Sha512FnSync;
-const sha512a = (...m: Bytes[]) => utils.sha512Async(...m);  // Async SHA512
+const sha512a = (...m: Bytes[]) => etc.sha512Async(...m);  // Async SHA512
 const sha512s = (...m: Bytes[]) => // Sync SHA512, not set by default
-  typeof _shaS === 'function' ? _shaS(...m) : err('utils.sha512Sync not set');
+  typeof _shaS === 'function' ? _shaS(...m) : err('etc.sha512Sync not set');
 type ExtK = { head: Bytes, prefix: Bytes, scalar: bigint, point: Point, pointBytes: Bytes };
 const adj25519 = (bytes: Bytes) => {                    // curve25519 bit clamping
   bytes[0] &= 248;                                      // 0b1111_1000
@@ -230,20 +214,20 @@ const hash2extK = (hashed: Bytes): ExtK => {            // RFC8032 5.1.5
   const pointBytes = point.toRawBytes();                // point serialized to Uint8Array
   return { head, prefix, scalar, point, pointBytes };
 }
-const extendedPubAsync = async (priv: Hex) =>           // RFC8032 5.1.5; getPublicKey async
+const getExtendedPublicKeyAsync = async (priv: Hex) =>       // RFC8032 5.1.5; getPublicKey async
   hash2extK(await sha512a(toU8(priv, 32)));
-const extendedPubSync        = (priv: Hex) =>           // RFC8032 5.1.5; getPublicKey sync
+const getExtendedPublicKey        = (priv: Hex) =>           // RFC8032 5.1.5; getPublicKey sync
   hash2extK(sha512s(toU8(priv, 32)));
-const pubAsync = async (priv: Hex): Promise<Bytes> =>   // getPublicKey async
-  (await extendedPubAsync(priv)).pointBytes;
-const pubSync        = (priv: Hex): Bytes =>            // getPublicKey sync
-  extendedPubSync(priv).pointBytes;
+export const getPublicKeyAsync = async (priv: Hex): Promise<Bytes> =>
+  (await getExtendedPublicKeyAsync(priv)).pointBytes;
+export const getPublicKey = (priv: Hex): Bytes =>           
+  getExtendedPublicKey(priv).pointBytes;
 type Finishable<T> = {                                  // Helps to reduce logic duplication between
   hashable: Bytes, finish: (hashed: Bytes) => T         // sync & async versions of sign(), verify()
 }                                                       // hashable=start(); finish(hash(hashable));
 const hashFinishA = async <T>(res: Finishable<T>) => res.finish(await sha512a(res.hashable));
 const hashFinishS = <T>(res: Finishable<T>) => res.finish(sha512s(res.hashable));
-const sign = (s: bigint, P: Bytes, rBytes: Bytes, msg: Bytes): Finishable<Bytes> => { // for sign
+const _sign = (s: bigint, P: Bytes, rBytes: Bytes, msg: Bytes): Finishable<Bytes> => { // for sign
   const r = modL_LE(rBytes);                            // r was created outside, reduce it modulo L
   const R = G.mul(r).toRawBytes();                      // R = [r]B
   const hashable = concatB(R, P, msg);                  // dom2(F, C) || R || A || PH(M)
@@ -253,19 +237,19 @@ const sign = (s: bigint, P: Bytes, rBytes: Bytes, msg: Bytes): Finishable<Bytes>
   }
   return { hashable, finish }
 };
-const signAsync = async (msg: Hex, privKey: Hex): Promise<Bytes> => {
+export const signAsync = async (msg: Hex, privKey: Hex): Promise<Bytes> => {
   const m = toU8(msg);                                  // RFC8032 5.1.6: sign msg with key async
-  const { prefix, scalar: s, pointBytes: P } = await extendedPubAsync(privKey); // calc pub, prefix
+  const { prefix, scalar: s, pointBytes: P } = await getExtendedPublicKeyAsync(privKey); // pub,prfx
   const rBytes = await sha512a(prefix, m);              // r = SHA512(dom2(F, C) || prefix || PH(M))
-  return await hashFinishA(sign(s, P, rBytes, m));      // Generate R, k, S, then 64-byte signature
+  return await hashFinishA(_sign(s, P, rBytes, m));      // Generate R, k, S, then 64-byte signature
 };
-const signSync = (msg: Hex, privKey: Hex): Bytes => {
+export const sign = (msg: Hex, privKey: Hex): Bytes => {
   const m = toU8(msg);                                  // RFC8032 5.1.6: sign msg with key sync
-  const { prefix, scalar: s, pointBytes: P } = extendedPubSync(privKey); // calc pub, prefix
+  const { prefix, scalar: s, pointBytes: P } = getExtendedPublicKey(privKey); // calc pub, prefix
   const rBytes = sha512s(prefix, m);                    // r = SHA512(dom2(F, C) || prefix || PH(M))
-  return hashFinishS(sign(s, P, rBytes, m));            // Generate R, k, S, then 64-byte signature
+  return hashFinishS(_sign(s, P, rBytes, m));            // Generate R, k, S, then 64-byte signature
 };
-const verify = (sig: Hex, msg: Hex, pub: PubKey): Finishable<boolean> => { // sig verification
+const _verify = (sig: Hex, msg: Hex, pub: PubKey): Finishable<boolean> => { // sig verification
   msg = toU8(msg);                                      // Message hex str/Bytes
   sig = toU8(sig, 64);                                  // Signature hex str/Bytes, must be 64 bytes
   const A = pub instanceof Point ? pub : Point.fromHex(pub, false); // public key A decoded
@@ -280,38 +264,39 @@ const verify = (sig: Hex, msg: Hex, pub: PubKey): Finishable<boolean> => { // si
   }
   return { hashable, finish };
 };
-const verifyAsync = async (sig: Hex, msg: Hex, pubKey: PubKey): Promise<boolean> =>
-  await hashFinishA(verify(sig, msg, pubKey))           // RFC8032 5.1.7: verification async
-const verifySync = (sig: Hex, msg: Hex, pubKey: PubKey): boolean =>
-  hashFinishS(verify(sig, msg, pubKey))                 // RFC8032 5.1.7: verification sync
+export const verifyAsync = async (sig: Hex, msg: Hex, pubKey: PubKey): Promise<boolean> =>
+  await hashFinishA(_verify(sig, msg, pubKey))           // RFC8032 5.1.7: verification async
+export const verify = (sig: Hex, msg: Hex, pubKey: PubKey): boolean =>
+  hashFinishS(_verify(sig, msg, pubKey))                 // RFC8032 5.1.7: verification sync
 
-declare const globalThis: Record<string, any> | undefined;  // aka window, self, global
-const cr: { node?: any; web?: any } = {
-  node: typeof require === 'function' && require('node:crypto'), // node.js require('crypto')
-  web: typeof globalThis === 'object' && 'crypto' in globalThis ? globalThis.crypto : undefined,
-};
-const utils = {
-  getExtendedPublicKeyAsync: extendedPubAsync,
-  getExtendedPublicKey: extendedPubSync,
+declare const globalThis: Record<string, any> | undefined; // Typescript symbol present in browsers
+const cr = () => // We support: 1) browsers 2) node.js 19+
+  typeof globalThis === 'object' && 'crypto' in globalThis ? globalThis.crypto : undefined;
+export const etc = {
   bytesToHex: b2h, hexToBytes: h2b,
   concatBytes: concatB, mod, invert: inv,
   randomBytes: (len: number): Bytes => {                // CSPRNG (random number generator)
-    return cr.web ? cr.web.getRandomValues(u8n(len)) :
-      cr.node ? u8fr(cr.node.randomBytes(len)) : err('CSPRNG not present');// throw when unavailable
+    const crypto = cr(); // Can be shimmed in node.js <= 18 to prevent error:
+    // import { webcrypto } from 'node:crypto';
+    // if (!globalThis.crypto) globalThis.crypto = webcrypto;
+    if (!crypto) err('crypto.getRandomValues must be defined');
+    return crypto.getRandomValues(u8n(len));
   },
-  randomPrivateKey: (): Bytes => utils.randomBytes(32),
-  precompute(p: any) {return p;},
   sha512Async: async (...messages: Bytes[]): Promise<Bytes> => {
+    const crypto = cr();
+    if (!crypto) err('crypto.subtle or etc.sha512Async must be defined');
     const m = concatB(...messages);
-    return cr.web ? u8n(await cr.web.subtle.digest('SHA-512', m.buffer)) :
-      cr.node ? u8fr(cr.node.createHash('sha512').update(m).digest()) :
-      err('utils.sha512 not set');
+    return u8n(await crypto.subtle.digest('SHA-512', m.buffer));
   },
   sha512Sync: undefined as Sha512FnSync,                // Actual logic below
 };
-Object.defineProperties(utils, { sha512Sync: {  // Allow setting it once. Next sets will be ignored
+Object.defineProperties(etc, { sha512Sync: {  // Allow setting it once. Next sets will be ignored
   configurable: false, get() { return _shaS; }, set(f) { if (!_shaS) _shaS = f; },
 } });
+export const utils = {
+  getExtendedPublicKeyAsync, getExtendedPublicKey, precompute(p: Point, w=8) { return p; }, // no-op
+  randomPrivateKey: (): Bytes => etc.randomBytes(32),
+}
 const W = 8;                                            // Precomputes-related code. W = window size
 const precompute = () => {                              // They give 12x faster getPublicKey(),
   const points: Point[] = [];                           // 10x sign(), 2x verify(). To achieve this,
@@ -350,8 +335,3 @@ const wNAF = (n: bigint): { p: Point; f: Point } => {   // w-ary non-adjacent fo
   }
   return { p, f }                                       // return both real and fake points for JIT
 };        // !! you can disable precomputes by commenting-out call of the wNAF() inside Point#mul()
-export {
-  pubSync as getPublicKey, signSync as sign, verifySync as verify, // sync
-  pubAsync as getPublicKeyAsync, signAsync, verifyAsync, // async
-  CURVE, utils, Point as ExtendedPoint
-}
