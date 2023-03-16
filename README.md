@@ -4,9 +4,17 @@
 [RFC8032](https://tools.ietf.org/html/rfc8032) and [ZIP215](https://zips.z.cash/zip-0215)
 compliant EdDSA signature scheme.
 
-The library does not use dependencies and is as minimal as possible. [noble-curves](https://github.com/paulmillr/noble-curves) is advanced drop-in replacement for noble-ed25519 with more features such as [ristretto255](https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-ristretto255-decaf448), X25519/curve25519, ed25519ph and ed25519ctx.
+The library does not use dependencies and is as minimal as possible.
+[noble-curves](https://github.com/paulmillr/noble-curves) is advanced drop-in
+replacement for noble-ed25519 with more features such as
+[ristretto255](https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-ristretto255-decaf448),
+X25519/curve25519, ed25519ph and ed25519ctx.
 
-Check out: [Upgrading](#upgrading) section if you've been using v1, [the online demo](https://paulmillr.com/noble/) and [micro-ed25519-hdkey](https://github.com/paulmillr/ed25519-hdkey) if you need SLIP-0010/BIP32 HDKey implementation using the library.
+Check out:
+[Upgrading](#upgrading) section if you've been using v1,
+[the online demo](https://paulmillr.com/noble/) and
+[micro-ed25519-hdkey](https://github.com/paulmillr/ed25519-hdkey) if you need
+SLIP-0010/BIP32 HDKey implementation using the library.
 
 ### This library belongs to _noble_ crypto
 
@@ -28,7 +36,8 @@ Use NPM in browser and node.js:
 
 > npm install @noble/ed25519
 
-For [Deno](https://deno.land), the module is available at `x/ed25519`; or you can use [npm specifier](https://deno.land/manual@v1.28.0/node/npm_specifiers).
+For [Deno](https://deno.land), the module is available at `x/ed25519`;
+or you can use [npm specifier](https://deno.land/manual@v1.28.0/node/npm_specifiers).
 
 ```js
 import * as ed from '@noble/ed25519'; // ESM-only. Use bundler for common.js
@@ -148,14 +157,30 @@ ed25519.ExtendedPoint.BASE // new ed25519.Point(Gx, Gy) where
 
 ## Security
 
-The module is production-ready. Use [noble-curves](https://github.com/paulmillr/noble-curves) if you need advanced security.
+The module is production-ready. Use
+[noble-curves](https://github.com/paulmillr/noble-curves) if you need advanced security.
 
-1. The current version is rewrite of v1, which has been audited by cure53: [PDF](https://cure53.de/pentest-report_ed25519.pdf). 
-2. It's being fuzzed by [Guido Vranken's cryptofuzz](https://github.com/guidovranken/cryptofuzz): run the fuzzer by yourself to check.
+1. The current version is rewrite of v1, which has been audited by cure53:
+[PDF](https://cure53.de/pentest-report_ed25519.pdf). 
+2. It's being fuzzed by [Guido Vranken's cryptofuzz](https://github.com/guidovranken/cryptofuzz):
+run the fuzzer by yourself to check.
 
-Our EC multiplication is hardened to be algorithmically constant time. We're using built-in JS `BigInt`, which is potentially vulnerable to [timing attacks](https://en.wikipedia.org/wiki/Timing_attack) as [per official spec](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/BigInt#cryptography). But, _JIT-compiler_ and _Garbage Collector_ make "constant time" extremely hard to achieve in a scripting language. Which means _any other JS library doesn't use constant-time bigints_. Including bn.js or anything else. Even statically typed Rust, a language without GC, [makes it harder to achieve constant-time](https://www.chosenplaintext.ca/open-source/rust-timing-shield/security) for some cases. If your goal is absolute security, don't use any JS lib — including bindings to native ones. Use low-level libraries & languages.
+Our EC multiplication is hardened to be algorithmically constant time.
+We're using built-in JS `BigInt`, which is potentially vulnerable to
+[timing attacks](https://en.wikipedia.org/wiki/Timing_attack) as
+[per MDN](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/BigInt#cryptography).
+But, _JIT-compiler_ and _Garbage Collector_ make "constant time" extremely hard
+to achieve in a scripting language. Which means _any other JS library doesn't
+use constant-time bigints_. Including bn.js or anything else.
+Even statically typed Rust, a language without GC,
+[makes it harder to achieve constant-time](https://www.chosenplaintext.ca/open-source/rust-timing-shield/security)
+for some cases. If your goal is absolute security, don't use any JS lib —
+including bindings to native ones. Use low-level libraries & languages.
 
-We consider infrastructure attacks like rogue NPM modules very important; that's why it's crucial to minimize the amount of 3rd-party dependencies & native bindings. If your app uses 500 dependencies, any dep could get hacked and you'll be downloading malware with every `npm install`. Our goal is to minimize this attack vector.
+We consider infrastructure attacks like rogue NPM modules very important;
+that's why it's crucial to minimize the amount of 3rd-party dependencies & native
+bindings. If your app uses 500 dependencies, any dep could get hacked and you'll
+be downloading malware with every `npm install`. Our goal is to minimize this attack vector.
 
 ## Speed
 
