@@ -1,5 +1,7 @@
 {
   "name": "benchmark",
+  "private": true,
+  "type": "module",
   "version": "1.0.0",
   "description": "",
   "main": "index.js",
@@ -8,7 +10,7 @@
   },
   "keywords": [],
   "author": "",
-  "license": "ISC",
+  "license": "MIT",
   "dependencies": {
     "ristretto255": "0.1.2",
     "sodium-native": "3.4.1",

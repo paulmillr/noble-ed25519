@@ -186,20 +186,19 @@ be downloading malware with every `npm install`. Our goal is to minimize this at
 
 Benchmarks done with Apple M2 on macOS 13 with Node.js 19.
 
-    getPublicKey(utils.randomPrivateKey()) x 9,354 ops/sec @ 106μs/op
-    sign x 4,724 ops/sec @ 211μs/op
-    verify x 960 ops/sec @ 1ms/op
-    Point.fromHex decompression x 14,841 ops/sec @ 67μs/op
+    getPublicKey 1 bit x 8,260 ops/sec @ 121μs/op
+    getPublicKey(utils.randomPrivateKey()) x 8,096 ops/sec @ 123μs/op
+    sign x 4,084 ops/sec @ 244μs/op
+    verify x 872 ops/sec @ 1ms/op
+    Point.fromHex decompression x 14,523 ops/sec @ 68μs/op
 
 Compare to alternative implementations:
 
-    # tweetnacl@1.0.3 (fast)
-    getPublicKey x 2,087 ops/sec @ 479μs/op # aka scalarMultBase
-    sign x 667 ops/sec @ 1ms/op
+    tweetnacl@1.0.3 getPublicKey x 1,808 ops/sec @ 552μs/op ± 1.64%
+    tweetnacl@1.0.3 sign x 651 ops/sec @ 1ms/op
+    ristretto255@0.1.2 getPublicKey x 640 ops/sec @ 1ms/op ± 1.59%
+    sodium-native#sign x 83,654 ops/sec @ 11μs/op
 
-    # sodium-native@3.4.1
-    # native bindings to libsodium, **node.js-only**
-    sign x 82,925 ops/sec @ 12μs/op
 
 ## Upgrading
 

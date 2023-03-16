@@ -1,20 +1,21 @@
-const { run, mark, utils } = require('micro-bmark');
-const { sha512 } = require('@noble/hashes/sha512');
-let ed = require('../../lib');
+import { run, mark, utils } from 'micro-bmark';
+import { sha512 } from '@noble/hashes/sha512';
+import * as ed from '../../index.js';
 
 run(async () => {
   // warm-up
-  await mark(() => {
+  await mark(async () => {
     ed.utils.precompute();
+    await ed.getPublicKeyAsync(ed.utils.randomPrivateKey())
   });
-  ed.utils.sha512Sync = (...m) => sha512(ed.utils.concatBytes(...m));
+  ed.etc.sha512Sync = (...m) => sha512(ed.etc.concatBytes(...m));
 
   utils.logMem();
   console.log();
 
   function to64Bytes(numOrStr) {
     let hex = typeof numOrStr === 'string' ? numOrStr : numOrStr.toString(16);
-    return ed.utils.hexToBytes(hex.padStart(64, '0'));
+    return ed.etc.hexToBytes(hex.padStart(64, '0'));
   }
 
   // const priv1bit = to64Bytes(2n);
