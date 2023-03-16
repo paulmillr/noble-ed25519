@@ -10,8 +10,7 @@ replacement for noble-ed25519 with more features such as
 [ristretto255](https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-ristretto255-decaf448),
 X25519/curve25519, ed25519ph and ed25519ctx.
 
-Check out:
-[Upgrading](#upgrading) section if you've been using v1,
+Check out: [Upgrading](#upgrading) section for v1 to v2 transition instructions,
 [the online demo](https://paulmillr.com/noble/) and
 [ed25519-keygen](https://github.com/paulmillr/ed25519-keygen) if you need
 SSH/PGP/HDKey implementation using the library.
@@ -32,15 +31,14 @@ SSH/PGP/HDKey implementation using the library.
 
 ## Usage
 
-Use NPM in browser and node.js:
+Browser, deno, node.js and unpkg are supported:
 
 > npm install @noble/ed25519
 
-For [Deno](https://deno.land), the module is available at `x/ed25519`;
-or you can use [npm specifier](https://deno.land/manual@v1.28.0/node/npm_specifiers).
-
 ```js
 import * as ed from '@noble/ed25519'; // ESM-only. Use bundler for common.js
+// import * as ed from "https://deno.land/x/ed25519/mod.ts"; // Deno
+// import * as ed from "https://unpkg.com/@noble/ed25519"; // Unpkg
 (async () => {
   // keys, messages & other inputs can be Uint8Arrays or hex strings
   // Uint8Array.from([0xde, 0xad, 0xbe, 0xef]) === 'deadbeef'
