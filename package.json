@@ -1,19 +1,21 @@
 {
   "name": "@noble/ed25519",
-  "version": "1.7.3",
-  "description": "Fastest JS implementation of ed25519. Independently audited, high-security, 0-dependency EDDSA, X25519 ECDH & ristretto255",
+  "version": "2.0.0-pre",
+  "description": "Fastest 8KB JS implementation of ed25519. Auditable, high-security, 0-dependency EDDSA signatures compliant with RFC8032 & ZIP215",
   "files": [
     "lib"
   ],
-  "main": "lib/index.js",
-  "module": "lib/esm/index.js",
-  "types": "lib/index.d.ts",
+  "type": "module",
+  "main": "index.js",
+  "module": "index.js",
+  "types": "index.d.ts",
   "scripts": {
-    "build": "tsc -d && tsc -p tsconfig.esm.json",
+    "build": "tsc",
     "build:release": "rollup -c rollup.config.js",
-    "lint": "prettier --print-width 100 --single-quote --check index.ts",
-    "test": "jest",
-    "bench": "node test/benchmark/benchmark.js"
+    "test": "node test/ed25519.test.mjs",
+    "bench": "node test/benchmark/benchmark.js",
+    "min": "cd build; npm install; npm run terser",
+    "loc": "echo \"`npm run --silent min | wc -c` symbols `wc -l < index.ts`LOC\""
   },
   "author": "Paul Miller (https://paulmillr.com)",
   "homepage": "https://paulmillr.com/noble/",
@@ -22,20 +24,11 @@
     "url": "https://github.com/paulmillr/noble-ed25519.git"
   },
   "license": "MIT",
-  "browser": {
-    "crypto": false
-  },
   "devDependencies": {
-    "@noble/hashes": "1.1.2",
-    "@rollup/plugin-node-resolve": "13.3.0",
-    "@types/jest": "28.1.1",
-    "@types/node": "17.0.18",
+    "@noble/hashes": "1.2.0",
     "fast-check": "3.0.0",
-    "jest": "28.1.0",
-    "micro-bmark": "0.2.0",
-    "prettier": "2.6.2",
-    "rollup": "2.75.5",
-    "ts-jest": "28.0.4",
+    "micro-bmark": "0.3.0",
+    "micro-should": "0.4.0",
     "typescript": "4.7.3"
   },
   "keywords": [
@@ -64,18 +57,6 @@
       "import": "./lib/esm/index.js",
       "default": "./lib/index.js"
     }
-  },
-  "prettier": {
-    "printWidth": 100,
-    "singleQuote": true
-  },
-  "jest": {
-    "testRegex": "/test/.*.ts",
-    "transform": {
-      "^.+\\.ts$": "ts-jest"
-    },
-    "useStderr": true,
-    "bail": 2
   },
   "funding": [
     {
