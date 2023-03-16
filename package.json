@@ -3,7 +3,9 @@
   "version": "2.0.0-pre",
   "description": "Fastest 8KB JS implementation of ed25519. Auditable, high-security, 0-dependency EDDSA signatures compliant with RFC8032 & ZIP215",
   "files": [
-    "lib"
+    "index.js",
+    "index.d.ts",
+    "index.ts"
   ],
   "type": "module",
   "main": "index.js",
@@ -14,7 +16,7 @@
     "build:release": "rollup -c rollup.config.js",
     "test": "node test/ed25519.test.mjs",
     "bench": "node test/benchmark/benchmark.js",
-    "min": "cd build; npm install; npm run terser",
+    "min": "cd test/build; npm install; npm run terser",
     "loc": "echo \"`npm run --silent min | wc -c` symbols `wc -l < index.ts`LOC\""
   },
   "author": "Paul Miller (https://paulmillr.com)",
@@ -53,9 +55,8 @@
   ],
   "exports": {
     ".": {
-      "types": "./lib/index.d.ts",
-      "import": "./lib/esm/index.js",
-      "default": "./lib/index.js"
+      "types": "./index.d.ts",
+      "default": "./index.js"
     }
   },
   "funding": [
