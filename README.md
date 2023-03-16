@@ -13,8 +13,8 @@ X25519/curve25519, ed25519ph and ed25519ctx.
 Check out:
 [Upgrading](#upgrading) section if you've been using v1,
 [the online demo](https://paulmillr.com/noble/) and
-[micro-ed25519-hdkey](https://github.com/paulmillr/ed25519-hdkey) if you need
-SLIP-0010/BIP32 HDKey implementation using the library.
+[ed25519-keygen](https://github.com/paulmillr/ed25519-keygen) if you need
+SSH/PGP/HDKey implementation using the library.
 
 ### This library belongs to _noble_ crypto
 
