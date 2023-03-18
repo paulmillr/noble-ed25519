@@ -7,7 +7,7 @@ const Gy = 463168356949264781694283940034751631413079938662562256157830336031652
 export const CURVE = {        // ed25519 is twisted edwards curve with formula −x² + y² = 1 + dx²y²
   a: -1n,                     // equation a=-1, d = -(121665/121666) == -(121665*inv(121666)) mod P
   d: 37095705934669439343138083508754565189542113879843219016388785533085940283555n,
-  P, n: N, l: N, h: 8, Gx, Gy // field prime, curve (group) order, cofactor
+  p: P, n: N, l: N, h: 8, Gx, Gy // field prime, curve (group) order, cofactor
 };
 type Bytes = Uint8Array; type Hex = Bytes | string; type PubKey = Hex | Point; // types
 const err = (m = ''): never => { throw new Error(m); }; // error helper, messes-up stack trace

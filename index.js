@@ -7,7 +7,7 @@ const Gy = 463168356949264781694283940034751631413079938662562256157830336031652
 export const CURVE = {
     a: -1n,
     d: 37095705934669439343138083508754565189542113879843219016388785533085940283555n,
-    P, n: N, l: N, h: 8, Gx, Gy // field prime, curve (group) order, cofactor
+    p: P, n: N, l: N, h: 8, Gx, Gy // field prime, curve (group) order, cofactor
 };
 const err = (m = '') => { throw new Error(m); }; // error helper, messes-up stack trace
 const str = (s) => typeof s === 'string'; // is string

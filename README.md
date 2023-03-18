@@ -144,7 +144,7 @@ export class ExtendedPoint { // Elliptic curve point in Extended (x, y, z, t) co
   multiply(scalar: bigint): ExtendedPoint;
 }
 // Curve params
-ed25519.CURVE.P // 2 ** 255 - 19
+ed25519.CURVE.p // 2 ** 255 - 19
 ed25519.CURVE.n // 2 ** 252 + 27742317777372353535851937790883648493
 ed25519.ExtendedPoint.BASE // new ed25519.Point(Gx, Gy) where
 // Gx=15112221349535400772501151409588531511454012693041857206046113283949847762202n

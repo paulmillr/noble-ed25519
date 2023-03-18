@@ -1,7 +1,7 @@
 export declare const CURVE: {
     a: bigint;
     d: bigint;
-    P: bigint;
+    p: bigint;
     n: bigint;
     l: bigint;
     h: number;
