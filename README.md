@@ -71,8 +71,8 @@ if (!globalThis.crypto) globalThis.crypto = webcrypto;
 
 ## API
 
-There are 3 main methods: `getPublicKey(privateKey)`, `sign(message, privateKey)` and `verify(signature, message, publicKey)`.
-
+There are 3 main methods: `getPublicKey(privateKey)`, `sign(message, privateKey)`
+and `verify(signature, message, publicKey)`.
 
 ```typescript
 type Hex = Uint8Array | string;
@@ -112,7 +112,7 @@ function verifyAsync(signature: Hex, message: Hex, publicKey: Hex): Promise<bool
 A bunch of useful **utilities** are also exposed:
 
 ```typescript
-export declare const etc: {
+export const etc: {
     bytesToHex: (b: Bytes) => string;
     hexToBytes: (hex: string) => Bytes;
     concatBytes: (...arrs: Bytes[]) => Uint8Array;
@@ -122,18 +122,17 @@ export declare const etc: {
     sha512Async: (...messages: Bytes[]) => Promise<Bytes>;
     sha512Sync: Sha512FnSync;
 };
-export declare const utils: {
+export const utils: {
     getExtendedPublicKeyAsync: (priv: Hex) => Promise<ExtK>;
     getExtendedPublicKey: (priv: Hex) => ExtK;
     precompute(p: Point, w?: number): Point;
     randomPrivateKey: () => Bytes;
 };
 
-class ExtendedPoint { // Elliptic curve point in Extended (x, y, z, t) coordinates.
+export class ExtendedPoint { // Elliptic curve point in Extended (x, y, z, t) coordinates.
   constructor(x: bigint, y: bigint, z: bigint, t: bigint);
-  static fromAffine(point: Point): ExtendedPoint;
+  static fromAffine(point: AffinePoint): ExtendedPoint;
   static fromHex(hash: string);
-  static fromPrivateKey(privateKey: string | Uint8Array);
   toRawBytes(): Uint8Array;
   toHex(): string; // Compact representation of a Point
   isTorsionFree(): boolean; // Multiplies the point by curve order
@@ -143,7 +142,6 @@ class ExtendedPoint { // Elliptic curve point in Extended (x, y, z, t) coordinat
   add(other: ExtendedPoint): ExtendedPoint;
   subtract(other: ExtendedPoint): ExtendedPoint;
   multiply(scalar: bigint): ExtendedPoint;
-  multiplyUnsafe(scalar: bigint): ExtendedPoint;
 }
 // Curve params
 ed25519.CURVE.P // 2 ** 255 - 19

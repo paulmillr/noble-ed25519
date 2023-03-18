@@ -2,15 +2,12 @@
 const B256 = 2n ** 256n;
 const P = 2n ** 255n - 19n;                                     // curve's field prime
 const N = 2n ** 252n + 27742317777372353535851937790883648493n; // curve's (group) order
-export const CURVE = { // ed25519 is twisted edwards curve with formula −x² + y² = 1 + dx²y²
-  a: -1n,       // equation a
-                // d = -(121665/121666) == -(121665*inv(121666)) mod P
+const Gx = 15112221349535400772501151409588531511454012693041857206046113283949847762202n;
+const Gy = 46316835694926478169428394003475163141307993866256225615783033603165251855960n;
+export const CURVE = {        // ed25519 is twisted edwards curve with formula −x² + y² = 1 + dx²y²
+  a: -1n,                     // equation a=-1, d = -(121665/121666) == -(121665*inv(121666)) mod P
   d: 37095705934669439343138083508754565189542113879843219016388785533085940283555n,
-  P, l: N, n: N, // prime, group order
-  h: 8,         // cofactor
-                // generator (base) point coordinates
-  Gx: 15112221349535400772501151409588531511454012693041857206046113283949847762202n,
-  Gy: 46316835694926478169428394003475163141307993866256225615783033603165251855960n
+  P, n: N, l: N, h: 8, Gx, Gy // field prime, curve (group) order, cofactor
 };
 type Bytes = Uint8Array; type Hex = Bytes | string; type PubKey = Hex | Point; // types
 const err = (m = ''): never => { throw new Error(m); }; // error helper, messes-up stack trace
@@ -22,76 +19,15 @@ const u8n = (data?: any) => new Uint8Array(data);       // creates Uint8Array
 const u8fr = (arr: any) => Uint8Array.from(arr);        // another shortcut
 const toU8 = (a: any, len?: number) => au8(str(a) ? h2b(a) : u8fr(a), len);  // norm(hex/u8a) to u8a
 const mod = (a: bigint, b = P) => { let r = a % b; return r >= 0n ? r : b + r; }; // mod division
-const isPoint = (p: any) => (p instanceof Point ? p : err('Point expected')); // is 3d point
+const isPoint = (p: any) => (p instanceof Point ? p : err('Point expected')); // is xyzt point
 let Gpows: Point[] | undefined = undefined;             // precomputes for base point G
 interface AffinePoint { x: bigint, y: bigint }          // Point in 2d xy affine coords
 class Point {                                           // Point in xyzt extended coords
   constructor(readonly ex: bigint, readonly ey: bigint, readonly ez: bigint, readonly et: bigint) {}
-  static readonly BASE = new Point(CURVE.Gx, CURVE.Gy, 1n, mod(CURVE.Gx * CURVE.Gy)); // Base point
+  static readonly BASE = new Point(Gx, Gy, 1n, mod(Gx * Gy)); // Base point
   static readonly ZERO = new Point(0n, 1n, 1n, 0n);     // Identity / zero point
-  static fromAffine(p: AffinePoint) {
-    return new Point(p.x, p.y, 1n, mod(p.x * p.y));
-  }
-  get x() { return this.aff().x; }                      // .x, .y will call expensive toAffine.
-  get y() { return this.aff().y; }                      // Should be used with care.
-  eql(other: Point): boolean {                          // equality check: compare points
-    const { ex: X1, ey: Y1, ez: Z1 } = this;
-    const { ex: X2, ey: Y2, ez: Z2 } = isPoint(other);  // isPoint() checks class equality
-    const X1Z2 = mod(X1 * Z2), X2Z1 = mod(X2 * Z1);
-    const Y1Z2 = mod(Y1 * Z2), Y2Z1 = mod(Y2 * Z1);
-    return X1Z2 === X2Z1 && Y1Z2 === Y2Z1;
-  }
-  neg(): Point {                                        // negate: flip over the affine x coordinate
-    return new Point(mod(-this.ex), this.ey, this.ez, mod(-this.et));
-  }
-  dbl(): Point {                                        // point doubling
-    const { ex: X1, ey: Y1, ez: Z1 } = this;            // Cost: 4M + 4S + 1*a + 6add + 1*2
-    const { a } = CURVE; // https://hyperelliptic.org/EFD/g1p/auto-twisted-extended.html#doubling-dbl-2008-hwcd
-    const A = mod(X1 * X1); const B = mod(Y1 * Y1); const C = mod(2n * mod(Z1 * Z1));
-    const D = mod(a * A); const x1y1 = X1 + Y1; const E = mod(mod(x1y1 * x1y1) - A - B);
-    const G = D + B; const F = G - C; const H = D - B;
-    const X3 = mod(E * F); const Y3 = mod(G * H); const T3 = mod(E * H); const Z3 = mod(F * G);
-    return new Point(X3, Y3, Z3, T3);
-  }
-  add(other: Point) {                                   // point addition
-    const { ex: X1, ey: Y1, ez: Z1, et: T1 } = this;    // Cost: 8M + 1*k + 8add + 1*2.
-    const { ex: X2, ey: Y2, ez: Z2, et: T2 } = isPoint(other); // doesn't check if other on-curve
-    const { a, d } = CURVE; // http://hyperelliptic.org/EFD/g1p/auto-twisted-extended-1.html#addition-add-2008-hwcd-3
-    const A = mod(X1 * X2); const B = mod(Y1 * Y2); const C = mod(T1 * d * T2);
-    const D = mod(Z1 * Z2); const E = mod((X1 + Y1) * (X2 + Y2) - A - B);
-    const F = mod(D - C); const G = mod(D + C); const H = mod(B - a * A);
-    const X3 = mod(E * F); const Y3 = mod(G * H); const T3 = mod(E * H); const Z3 = mod(F * G);
-    return new Point(X3, Y3, Z3, T3);
-  }
-  sub(p: Point): Point { return this.add(p.neg()); }    // point subtraction
-  mul(n: bigint, safe = true): Point {                  // Multiply point by scalar n
-    if (n === 0n) return safe === true ? err('cannot multiply by 0') : I;
-    if (!(typeof n === 'bigint' && 0n < n && n < N)) err('invalid scalar, must be < L');
-    if (!safe && this.eql(I) || n === 1n) return this;  // safe=true bans 0. safe=false allows 0.
-    if (this.eql(G)) return wNAF(n).p;                  // use wNAF precomputes for base points
-    let p = I, f = G;                                   // init result point & fake point
-    for (let d: Point = this; n > 0n; d = d.dbl(), n >>= 1n) { // double-and-add ladder
-      if (n & 1n) p = p.add(d);                         // if bit is present, add to point
-      else if (safe) f = f.add(d);                      // if not, add to fake for timing safety
-    }
-    return p;
-  }
-  multiply(scalar: bigint) { return this.mul(scalar); } // Aliases for compatibilty
-  clearCofactor(): Point { return this.mul(BigInt(CURVE.h), false); } // multiply by cofactor
-  isSmallOrder(): boolean { return this.clearCofactor().eql(I); } // check if P is small order
-  isTorsionFree(): boolean {                            // multiply by big number CURVE.n
-    let p = this.mul(N / 2n, false).dbl();              // ensures the point is not "bad".
-    if (N % 2n) p = p.add(this); // P^(N+1)             // P*N == (P*(N/2))*2+P
-    return p.eql(I);
-  }
-  aff(): AffinePoint {                                  // converts point to 2d xy affine point
-    const { ex: x, ey: y, ez: z } = this;               // (x, y, z, t) ∋ (x=x/z, y=y/z, t=xy)
-    if (this.eql(I)) return { x: 0n, y: 0n };           // fast-path for zero point
-    const iz = inv(z);                                  // z^-1: invert z
-    if (mod(z * iz) !== 1n) err('invalid inverse');     // (z * z^-1) must be 1, otherwise bad math
-    return { x: mod(x * iz), y: mod(y * iz) }           // x = x*z^-1; y = y*z^-1
-  }
-  static fromHex(hex: Hex, strict = true) { // RFC8032 5.1.3: convert hex / Uint8Array to Point.
+  static fromAffine(p: AffinePoint) { return new Point(p.x, p.y, 1n, mod(p.x * p.y)); }
+  static fromHex(hex: Hex, strict = true) {             // RFC8032 5.1.3: hex / Uint8Array to Point.
     const { d } = CURVE;
     hex = toU8(hex, 32);
     const normed = hex.slice();                         // copy the array to not mess it up
@@ -112,13 +48,74 @@ class Point {                                           // Point in xyzt extende
     if (isHeadOdd !== isXOdd) x = mod(-x);
     return new Point(x, y, 1n, mod(x * y));             // Z=1, T=xy
   }
-  toRawBytes(): Bytes {                                 // encode to Uint8Array
-    const { x, y } = this.aff();                        // convert to affine 2d point
+  get x() { return this.toAffine().x; }                 // .x, .y will call expensive toAffine.
+  get y() { return this.toAffine().y; }                 // Should be used with care.
+  equals(other: Point): boolean {                       // equality check: compare points
+    const { ex: X1, ey: Y1, ez: Z1 } = this;
+    const { ex: X2, ey: Y2, ez: Z2 } = isPoint(other);  // isPoint() checks class equality
+    const X1Z2 = mod(X1 * Z2), X2Z1 = mod(X2 * Z1);
+    const Y1Z2 = mod(Y1 * Z2), Y2Z1 = mod(Y2 * Z1);
+    return X1Z2 === X2Z1 && Y1Z2 === Y2Z1;
+  }
+  is0(): boolean { return this.equals(I); }
+  negate(): Point {                                     // negate: flip over the affine x coordinate
+    return new Point(mod(-this.ex), this.ey, this.ez, mod(-this.et));
+  }
+  double(): Point {                                     // Point doubling. Complete formula.
+    const { ex: X1, ey: Y1, ez: Z1 } = this;            // Cost: 4M + 4S + 1*a + 6add + 1*2
+    const { a } = CURVE; // https://hyperelliptic.org/EFD/g1p/auto-twisted-extended.html#doubling-dbl-2008-hwcd
+    const A = mod(X1 * X1); const B = mod(Y1 * Y1); const C = mod(2n * mod(Z1 * Z1));
+    const D = mod(a * A); const x1y1 = X1 + Y1; const E = mod(mod(x1y1 * x1y1) - A - B);
+    const G = D + B; const F = G - C; const H = D - B;
+    const X3 = mod(E * F); const Y3 = mod(G * H); const T3 = mod(E * H); const Z3 = mod(F * G);
+    return new Point(X3, Y3, Z3, T3);
+  }
+  add(other: Point) {                                   // Point addition. Complete formula.
+    const { ex: X1, ey: Y1, ez: Z1, et: T1 } = this;    // Cost: 8M + 1*k + 8add + 1*2.
+    const { ex: X2, ey: Y2, ez: Z2, et: T2 } = isPoint(other); // doesn't check if other on-curve
+    const { a, d } = CURVE; // http://hyperelliptic.org/EFD/g1p/auto-twisted-extended-1.html#addition-add-2008-hwcd-3
+    const A = mod(X1 * X2); const B = mod(Y1 * Y2); const C = mod(T1 * d * T2);
+    const D = mod(Z1 * Z2); const E = mod((X1 + Y1) * (X2 + Y2) - A - B);
+    const F = mod(D - C); const G = mod(D + C); const H = mod(B - a * A);
+    const X3 = mod(E * F); const Y3 = mod(G * H); const T3 = mod(E * H); const Z3 = mod(F * G);
+    return new Point(X3, Y3, Z3, T3);
+  }
+  subtract(p: Point): Point { return this.add(p.negate()); } // point subtraction
+  mul(n: bigint, safe = true): Point {                  // Multiply point by scalar n
+    if (n === 0n) return safe === true ? err('cannot multiply by 0') : I;
+    if (!(typeof n === 'bigint' && 0n < n && n < N)) err('invalid scalar, must be < L');
+    if (!safe && this.is0() || n === 1n) return this;   // safe=true bans 0. safe=false allows 0.
+    if (this.equals(G)) return wNAF(n).p;               // use wNAF precomputes for base points
+    let p = I, f = G;                                   // init result point & fake point
+    for (let d: Point = this; n > 0n; d = d.double(), n >>= 1n) { // double-and-add ladder
+      if (n & 1n) p = p.add(d);                         // if bit is present, add to point
+      else if (safe) f = f.add(d);                      // if not, add to fake for timing safety
+    }
+    return p;
+  }
+  multiply(scalar: bigint) { return this.mul(scalar); } // Aliases for compatibilty
+  clearCofactor(): Point { return this.mul(BigInt(CURVE.h), false); } // multiply by cofactor
+  isSmallOrder(): boolean { return this.clearCofactor().is0(); } // check if P is small order
+  isTorsionFree(): boolean {                            // multiply by big number CURVE.n
+    let p = this.mul(N / 2n, false).double();           // ensures the point is not "bad".
+    if (N % 2n) p = p.add(this); // P^(N+1)             // P*N == (P*(N/2))*2+P
+    return p.is0();
+  }
+  toAffine(): AffinePoint {                             // converts point to 2d xy affine point
+    const { ex: x, ey: y, ez: z } = this;               // (x, y, z, t) ∋ (x=x/z, y=y/z, t=xy)
+    if (this.is0()) return { x: 0n, y: 0n };            // fast-path for zero point
+    const iz = invert(z);                               // z^-1: invert z
+    if (mod(z * iz) !== 1n) err('invalid inverse');     // (z * z^-1) must be 1, otherwise bad math
+    return { x: mod(x * iz), y: mod(y * iz) }           // x = x*z^-1; y = y*z^-1
+  }
+  toRawBytes(): Bytes {                                 // Encode to Uint8Array
+    const { x, y } = this.toAffine();                   // convert to affine 2d point
     const b = n2b_32LE(y);                              // encode number to 32 bytes
     b[31] |= x & 1n ? 0x80 : 0;                         // store sign in first LE byte
     return b;
   }
   toHex(): string { return b2h(this.toRawBytes()); }    // encode to hex string
+  
 }
 const { BASE: G, ZERO: I } = Point;                     // Generator, identity points
 export const ExtendedPoint = Point;
@@ -143,10 +140,9 @@ const h2b = (hex: string): Bytes => {                   // hex to bytes
   }
   return arr;
 };
-const n2b_32BE = (num: bigint) => h2b(num.toString(16).padStart(32 * 2, '0')); // number to bytes BE
-const n2b_32LE = (num: bigint) => n2b_32BE(num).reverse();                     // number to bytes LE
+const n2b_32LE = (num: bigint) => h2b(padh(num, 32 * 2)).reverse(); // number to bytes LE
 const b2n_LE = (b: Bytes): bigint => BigInt('0x' + b2h(u8fr(au8(b)).reverse())); // bytes LE to num
-const inv = (num: bigint, md = P): bigint => {          // modular inversion
+const invert = (num: bigint, md = P): bigint => {       // modular inversion
   if (num === 0n || md <= 0n) err(`no invert n=${num} mod=${md}`); // no negative exponents
   let a = mod(num, md), b = md, x = 0n, y = 1n, u = 1n, v = 0n;
   while (a !== 0n) {                                    // uses euclidean gcd algorithm
@@ -197,62 +193,62 @@ const modL_LE = (hash: Bytes): bigint => mod(b2n_LE(hash), N); // modulo L; but 
 type Sha512FnSync = undefined | ((...messages: Bytes[]) => Bytes);
 let _shaS: Sha512FnSync;
 const sha512a = (...m: Bytes[]) => etc.sha512Async(...m);  // Async SHA512
-const sha512s = (...m: Bytes[]) => // Sync SHA512, not set by default
+const sha512s = (...m: Bytes[]) =>                      // Sync SHA512, not set by default
   typeof _shaS === 'function' ? _shaS(...m) : err('etc.sha512Sync not set');
 type ExtK = { head: Bytes, prefix: Bytes, scalar: bigint, point: Point, pointBytes: Bytes };
-const adj25519 = (bytes: Bytes) => {                    // curve25519 bit clamping
-  bytes[0] &= 248;                                      // 0b1111_1000
-  bytes[31] &= 127;                                     // 0b0111_1111
-  bytes[31] |= 64;                                      // 0b0100_0000
-}
 const hash2extK = (hashed: Bytes): ExtK => {            // RFC8032 5.1.5
   const head = hashed.slice(0, 32);                     // slice creates a copy, unlike subarray
-  adj25519(head);                                       // Clamp bits
+  head[0] &= 248;                                       // Clamp bits: 0b1111_1000,
+  head[31] &= 127;                                      // 0b0111_1111,
+  head[31] |= 64;                                       // 0b0100_0000
   const prefix = hashed.slice(32, 64);                  // private key "prefix"
   const scalar = modL_LE(head);                         // modular division over curve order
   const point = G.mul(scalar);                          // public key point
   const pointBytes = point.toRawBytes();                // point serialized to Uint8Array
   return { head, prefix, scalar, point, pointBytes };
 }
-const getExtendedPublicKeyAsync = async (priv: Hex) =>       // RFC8032 5.1.5; getPublicKey async
-  hash2extK(await sha512a(toU8(priv, 32)));
-const getExtendedPublicKey        = (priv: Hex) =>           // RFC8032 5.1.5; getPublicKey sync
-  hash2extK(sha512s(toU8(priv, 32)));
-export const getPublicKeyAsync = async (priv: Hex): Promise<Bytes> =>
-  (await getExtendedPublicKeyAsync(priv)).pointBytes;
-export const getPublicKey = (priv: Hex): Bytes =>           
-  getExtendedPublicKey(priv).pointBytes;
-type Finishable<T> = {                                  // Helps to reduce logic duplication between
+// RFC8032 5.1.5; getPublicKey async, sync
+const getExtendedPublicKeyAsync = (priv: Hex) => sha512a(toU8(priv, 32)).then(hash2extK);
+const getExtendedPublicKey = (priv: Hex) => hash2extK(sha512s(toU8(priv, 32)))
+export const getPublicKeyAsync = (priv: Hex): Promise<Bytes> =>
+  getExtendedPublicKeyAsync(priv).then(p => p.pointBytes)
+export const getPublicKey = (priv: Hex): Bytes => getExtendedPublicKey(priv).pointBytes;
+type Finishable<T> = {                                  // Reduces logic duplication between
   hashable: Bytes, finish: (hashed: Bytes) => T         // sync & async versions of sign(), verify()
 }                                                       // hashable=start(); finish(hash(hashable));
-const hashFinishA = async <T>(res: Finishable<T>) => res.finish(await sha512a(res.hashable));
-const hashFinishS = <T>(res: Finishable<T>) => res.finish(sha512s(res.hashable));
-const _sign = (s: bigint, P: Bytes, rBytes: Bytes, msg: Bytes): Finishable<Bytes> => { // for sign
+function hashFinish<T>(asynchronous: true, res: Finishable<T>): Promise<T>;
+function hashFinish<T>(asynchronous: false, res: Finishable<T>): T;
+function hashFinish<T>(asynchronous: boolean, res: Finishable<T>) {
+  if (asynchronous) return sha512a(res.hashable).then(res.finish);
+  return res.finish(sha512s(res.hashable));
+}
+const _sign = (e: ExtK, rBytes: Bytes, msg: Bytes): Finishable<Bytes> => { // sign() shared code
+  const { pointBytes: P, scalar: s } = e;
   const r = modL_LE(rBytes);                            // r was created outside, reduce it modulo L
   const R = G.mul(r).toRawBytes();                      // R = [r]B
   const hashable = concatB(R, P, msg);                  // dom2(F, C) || R || A || PH(M)
   const finish = (hashed: Bytes): Bytes => {            // k = SHA512(dom2(F, C) || R || A || PH(M))
     const S = mod(r + modL_LE(hashed) * s, N);          // S = (r + k * s) mod L; 0 <= s < l
-    return au8(concatB(R, n2b_32LE(S)), 64)             // 64-byte sig: 32b R.x + 32b LE(S)
+    return au8(concatB(R, n2b_32LE(S)), 64);            // 64-byte sig: 32b R.x + 32b LE(S)
   }
-  return { hashable, finish }
+  return { hashable, finish };
 };
 export const signAsync = async (msg: Hex, privKey: Hex): Promise<Bytes> => {
   const m = toU8(msg);                                  // RFC8032 5.1.6: sign msg with key async
-  const { prefix, scalar: s, pointBytes: P } = await getExtendedPublicKeyAsync(privKey); // pub,prfx
-  const rBytes = await sha512a(prefix, m);              // r = SHA512(dom2(F, C) || prefix || PH(M))
-  return await hashFinishA(_sign(s, P, rBytes, m));      // Generate R, k, S, then 64-byte signature
+  const e = await getExtendedPublicKeyAsync(privKey);   // pub,prfx
+  const rBytes = await sha512a(e.prefix, m);            // r = SHA512(dom2(F, C) || prefix || PH(M))
+  return hashFinish(true, _sign(e, rBytes, m));         // gen R, k, S, then 64-byte signature
 };
 export const sign = (msg: Hex, privKey: Hex): Bytes => {
   const m = toU8(msg);                                  // RFC8032 5.1.6: sign msg with key sync
-  const { prefix, scalar: s, pointBytes: P } = getExtendedPublicKey(privKey); // calc pub, prefix
-  const rBytes = sha512s(prefix, m);                    // r = SHA512(dom2(F, C) || prefix || PH(M))
-  return hashFinishS(_sign(s, P, rBytes, m));            // Generate R, k, S, then 64-byte signature
+  const e = getExtendedPublicKey(privKey);              // pub,prfx
+  const rBytes = sha512s(e.prefix, m);                  // r = SHA512(dom2(F, C) || prefix || PH(M))
+  return hashFinish(false, _sign(e, rBytes, m));        // gen R, k, S, then 64-byte signature
 };
-const _verify = (sig: Hex, msg: Hex, pub: PubKey): Finishable<boolean> => { // sig verification
+const _verify = (sig: Hex, msg: Hex, pub: Hex): Finishable<boolean> => { // sig verification
   msg = toU8(msg);                                      // Message hex str/Bytes
   sig = toU8(sig, 64);                                  // Signature hex str/Bytes, must be 64 bytes
-  const A = pub instanceof Point ? pub : Point.fromHex(pub, false); // public key A decoded
+  const A = Point.fromHex(pub, false); // public key A decoded
   const R = Point.fromHex(sig.slice(0, 32), false);     // 0 <= R < 2^256: ZIP215 R can be >= P
   const s = b2n_LE(sig.slice(32, 64));                  // Decode second half as an integer S
   const SB = G.mul(s, false);                           // in the range 0 <= s < L
@@ -260,21 +256,19 @@ const _verify = (sig: Hex, msg: Hex, pub: PubKey): Finishable<boolean> => { // s
   const finish = (hashed: Bytes): boolean => {          // k = SHA512(dom2(F, C) || R || A || PH(M))
     const k = modL_LE(hashed);                          // decode in little-endian, modulo L
     const RkA = R.add(A.mul(k, false));                 // [8]R + [8][k]A'
-    return RkA.sub(SB).clearCofactor().eql(I);          // [8][S]B = [8]R + [8][k]A'
+    return RkA.subtract(SB).clearCofactor().is0();      // [8][S]B = [8]R + [8][k]A'
   }
   return { hashable, finish };
 };
-export const verifyAsync = async (sig: Hex, msg: Hex, pubKey: PubKey): Promise<boolean> =>
-  await hashFinishA(_verify(sig, msg, pubKey))           // RFC8032 5.1.7: verification async
-export const verify = (sig: Hex, msg: Hex, pubKey: PubKey): boolean =>
-  hashFinishS(_verify(sig, msg, pubKey))                 // RFC8032 5.1.7: verification sync
-
+// RFC8032 5.1.7: verification async, sync
+export const verifyAsync = async (s: Hex, m: Hex, p: Hex) => hashFinish(true, _verify(s, m, p));
+export const verify = (s: Hex, m: Hex, p: Hex) => hashFinish(false, _verify(s, m, p));
 declare const globalThis: Record<string, any> | undefined; // Typescript symbol present in browsers
 const cr = () => // We support: 1) browsers 2) node.js 19+
   typeof globalThis === 'object' && 'crypto' in globalThis ? globalThis.crypto : undefined;
 export const etc = {
-  bytesToHex: b2h, hexToBytes: h2b,
-  concatBytes: concatB, mod, invert: inv,
+  bytesToHex: b2h, hexToBytes: h2b, concatBytes: concatB,
+  mod, invert,
   randomBytes: (len: number): Bytes => {                // CSPRNG (random number generator)
     const crypto = cr(); // Can be shimmed in node.js <= 18 to prevent error:
     // import { webcrypto } from 'node:crypto';
@@ -294,7 +288,8 @@ Object.defineProperties(etc, { sha512Sync: {  // Allow setting it once. Next set
   configurable: false, get() { return _shaS; }, set(f) { if (!_shaS) _shaS = f; },
 } });
 export const utils = {
-  getExtendedPublicKeyAsync, getExtendedPublicKey, precompute(p: Point, w=8) { return p; }, // no-op
+  getExtendedPublicKeyAsync, getExtendedPublicKey,
+  precompute(w=8, p: Point = G) { p.multiply(3n); return p; }, // no-op
   randomPrivateKey: (): Bytes => etc.randomBytes(32),
 }
 const W = 8;                                            // Precomputes-related code. W = window size
@@ -306,14 +301,14 @@ const precompute = () => {                              // They give 12x faster 
     b = p;                                              // any time Gx multiplication is done.
     points.push(b);                                     // They consume 16-32 MiB of RAM.
     for (let i = 1; i < 2 ** (W - 1); i++) { b = b.add(p); points.push(b); }
-    p = b.dbl();                                        // Precomputes don't speed-up getSharedKey,
+    p = b.double();                                     // Precomputes don't speed-up getSharedKey,
   }                                                     // which multiplies user point by scalar,
   return points;                                        // when precomputes are using base point
 }
 const wNAF = (n: bigint): { p: Point; f: Point } => {   // w-ary non-adjacent form (wNAF) method.
                                                         // Compared to other point mult methods,
   const comp = Gpows || (Gpows = precompute());         // stores 2x less points using subtraction
-  const neg = (cnd: boolean, p: Point) => { let n = p.neg(); return cnd ? n : p; } // negate
+  const neg = (cnd: boolean, p: Point) => { let n = p.negate(); return cnd ? n : p; } // negate
   let p = I, f = G;                                     // f must be G, or could become I in the end
   const windows = 1 + 256 / W;                          // W=8 17 windows
   const wsize = 2 ** (W - 1);                           // W=8 128 window size
