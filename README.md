@@ -8,7 +8,7 @@ The library does not use dependencies and is as minimal as possible.
 [noble-curves](https://github.com/paulmillr/noble-curves) is advanced drop-in
 replacement for noble-ed25519 with more features such as
 [ristretto255](https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-ristretto255-decaf448),
-X25519/curve25519, ed25519ph and ed25519ctx.
+X25519 / curve25519, ed25519ph and ed25519ctx.
 
 Check out: [Upgrading](#upgrading) section for v1 to v2 transition instructions,
 [the online demo](https://paulmillr.com/noble/) and
@@ -195,28 +195,39 @@ Compare to alternative implementations:
     ristretto255@0.1.2 getPublicKey x 640 ops/sec @ 1ms/op ± 1.59%
     sodium-native#sign x 83,654 ops/sec @ 11μs/op
 
-
-## Upgrading
-
-Upgrading from @noble/ed25519 1.7 to 2.0:
-
-- Import maps are no longer required in Deno. Just import as-is.
-- Swapped async and sync method naming:
-    - `ed.sync.getPublicKey`, `sync.sign`, `sign.verify` are now just `getPublicKey`, `sign`, `verify`
-    - Async methods are now `getPublicKeyAsync`, `signAsync`, `verifyAsync`
-- `Point` was removed: use `ExtendedPoint` in xyzt coordinates
-- `Signature` was removed
-- `getSharedSecret` and Ristretto functionality had been moved to noble-curves
-- `bigint` is no longer allowed in `getPublicKey`, `sign`, `verify`. Reason: ed25519 is LE, can lead to bugs
-- Some utils such as `sha512Sync` have been moved to `etc`: `import { etc } from "@noble/ed25519";
-- node.js 18 and older are not supported without crypto shim (see [Usage](#usage))
-
 ## Contributing
 
 1. Clone the repository
 2. `npm install` to install build dependencies like TypeScript
 3. `npm run build` to compile TypeScript code
 4. `npm run test` to run jest on `test/index.ts`
+
+## Upgrading
+
+noble-ed25519 v2 features improved security and smaller attack surface.
+The goal of v2 is to provide minimum possible JS library which is safe and fast.
+
+That means the library was reduced 4x, to just over 300 lines. In order to
+achieve the goal, **some features were moved** to
+[noble-curves](https://github.com/paulmillr/noble-curves), which is
+even safer and faster drop-in replacement library with same API.
+Switch to curves if you intend to keep using these features:
+
+- x25519 / curve25519 / getSharedSecret
+- ristretto255 / RistrettoPoint
+- Using `utils.precompute()` for non-base point
+- Support for environments which don't support bigint literals
+- Common.js support
+- Support for node.js 18 and older without [shim](#usage)
+
+Other changes for upgrading from @noble/ed25519 1.7 to 2.0:
+
+- Methods are now sync by default; use `getPublicKeyAsync`, `signAsync`, `verifyAsync` for async versions
+- `bigint` is no longer allowed in `getPublicKey`, `sign`, `verify`. Reason: ed25519 is LE, can lead to bugs
+- `Point` (2d xy) has been changed to `ExtendedPoint` (xyzt)
+- `Signature` was removed: just use raw bytes or hex now
+- `utils` were split into `utils` (same api as in noble-curves) and
+  `etc` (`sha512Sync` and others)
 
 ## License
 
