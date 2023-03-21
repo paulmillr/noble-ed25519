@@ -1,4 +1,4 @@
-# noble-ed25519 ![Node CI](https://github.com/paulmillr/noble-ed25519/workflows/Node%20CI/badge.svg) [![code style: prettier](https://img.shields.io/badge/code_style-prettier-ff69b4.svg?style=flat-square)](https://github.com/prettier/prettier)
+# noble-ed25519
 
 [Fastest](#speed) 4KB JS implementation of [ed25519](https://en.wikipedia.org/wiki/EdDSA),
 [RFC8032](https://tools.ietf.org/html/rfc8032) and [ZIP215](https://zips.z.cash/zip-0215)
@@ -19,7 +19,7 @@ SSH/PGP/HDKey implementation using the library.
 
 > **noble-crypto** — high-security, easily auditable set of contained cryptographic libraries and tools.
 
-- No dependencies, one small file
+- No dependencies, protection against supply chain attacks
 - Easily auditable TypeScript/JS code
 - Supported in all major browsers and stable node.js versions
 - All releases are signed with PGP keys
