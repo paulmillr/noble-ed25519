@@ -4,9 +4,9 @@
 [RFC8032](https://tools.ietf.org/html/rfc8032) and [ZIP215](https://zips.z.cash/zip-0215)
 compliant EdDSA signature scheme.
 
-The library does not use dependencies and is as minimal as possible.
-[noble-curves](https://github.com/paulmillr/noble-curves) is advanced drop-in
-replacement for noble-ed25519 with more features such as
+The library is a tiny single-feature version of
+[noble-curves](https://github.com/paulmillr/noble-curves), with some features
+removed. Check out curves as a drop-in replacement with
 [ristretto255](https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-ristretto255-decaf448),
 X25519 / curve25519, ed25519ph and ed25519ctx.
 
