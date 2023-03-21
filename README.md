@@ -153,8 +153,9 @@ ed25519.ExtendedPoint.BASE // new ed25519.Point(Gx, Gy) where
 
 ## Security
 
-The module is production-ready. Use
-[noble-curves](https://github.com/paulmillr/noble-curves) if you need advanced security.
+The module is production-ready.
+It is cross-tested against [noble-curves](https://github.com/paulmillr/noble-curves),
+and has similar security.
 
 1. The current version is rewrite of v1, which has been audited by cure53:
 [PDF](https://cure53.de/pentest-report_ed25519.pdf). 

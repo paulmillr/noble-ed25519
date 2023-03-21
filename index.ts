@@ -1,28 +1,27 @@
 /*! noble-ed25519 - MIT License (c) 2019 Paul Miller (paulmillr.com) */
-const B256 = 2n ** 256n;
+const B256 = 2n ** 256n;                                        // ed25519 is twisted edwards curve
 const P = 2n ** 255n - 19n;                                     // curve's field prime
 const N = 2n ** 252n + 27742317777372353535851937790883648493n; // curve's (group) order
-const Gx = 15112221349535400772501151409588531511454012693041857206046113283949847762202n;
-const Gy = 46316835694926478169428394003475163141307993866256225615783033603165251855960n;
-export const CURVE = {        // ed25519 is twisted edwards curve with formula −x² + y² = 1 + dx²y²
-  a: -1n,                     // equation a=-1, d = -(121665/121666) == -(121665*inv(121666)) mod P
+const Gx = 0x216936d3cd6e53fec0a4e231fdd6dc5c692cc7609525a7b2c9562d608f25d51an; // base point x
+const Gy = 0x6666666666666666666666666666666666666666666666666666666666666658n; // base point y
+export const CURVE = {        // Curve's formula is −x² + y² = -a + dx²y²
+  a: -1n,                     // where a=-1, d = -(121665/121666) == -(121665 * inv(121666)) mod P
   d: 37095705934669439343138083508754565189542113879843219016388785533085940283555n,
-  p: P, n: N, l: N, h: 8, Gx, Gy // field prime, curve (group) order, cofactor
+  p: P, n: N, h: 8, Gx, Gy    // field prime, curve (group) order, cofactor
 };
-type Bytes = Uint8Array; type Hex = Bytes | string; type PubKey = Hex | Point; // types
+type Bytes = Uint8Array; type Hex = Bytes | string;     // types
 const err = (m = ''): never => { throw new Error(m); }; // error helper, messes-up stack trace
 const str = (s: unknown): s is string => typeof s === 'string'; // is string
 const au8 = (a: unknown, l?: number): Bytes =>          // is Uint8Array (of specific length)
   !(a instanceof Uint8Array) || (typeof l === 'number' && l > 0 && a.length !== l) ?
   err('Uint8Array expected') : a;
 const u8n = (data?: any) => new Uint8Array(data);       // creates Uint8Array
-const u8fr = (arr: any) => Uint8Array.from(arr);        // another shortcut
-const toU8 = (a: any, len?: number) => au8(str(a) ? h2b(a) : u8fr(a), len);  // norm(hex/u8a) to u8a
+const toU8 = (a: Hex, len?: number) => au8(str(a) ? h2b(a) : u8n(a), len);  // norm(hex/u8a) to u8a
 const mod = (a: bigint, b = P) => { let r = a % b; return r >= 0n ? r : b + r; }; // mod division
 const isPoint = (p: any) => (p instanceof Point ? p : err('Point expected')); // is xyzt point
 let Gpows: Point[] | undefined = undefined;             // precomputes for base point G
-interface AffinePoint { x: bigint, y: bigint }          // Point in 2d xy affine coords
-class Point {                                           // Point in xyzt extended coords
+interface AffinePoint { x: bigint, y: bigint }          // Point in 2d xy affine coordinates
+class Point {                                           // Point in xyzt extended coordinates
   constructor(readonly ex: bigint, readonly ey: bigint, readonly ez: bigint, readonly et: bigint) {}
   static readonly BASE = new Point(Gx, Gy, 1n, mod(Gx * Gy)); // Base point
   static readonly ZERO = new Point(0n, 1n, 1n, 0n);     // Identity / zero point
@@ -80,7 +79,6 @@ class Point {                                           // Point in xyzt extende
     const X3 = mod(E * F); const Y3 = mod(G * H); const T3 = mod(E * H); const Z3 = mod(F * G);
     return new Point(X3, Y3, Z3, T3);
   }
-  subtract(p: Point): Point { return this.add(p.negate()); } // point subtraction
   mul(n: bigint, safe = true): Point {                  // Multiply point by scalar n
     if (n === 0n) return safe === true ? err('cannot multiply by 0') : I;
     if (!(typeof n === 'bigint' && 0n < n && n < N)) err('invalid scalar, must be < L');
@@ -119,29 +117,29 @@ class Point {                                           // Point in xyzt extende
 }
 const { BASE: G, ZERO: I } = Point;                     // Generator, identity points
 export const ExtendedPoint = Point;
+const padh = (num: number | bigint, pad: number) => num.toString(16).padStart(pad, '0')
+const b2h = (b: Bytes): string => Array.from(b).map(e => padh(e, 2)).join(''); // bytes to hex
+const h2b = (hex: string): Bytes => {                   // hex to bytes
+  const l = hex.length;                                 // error if not string,
+  if (!str(hex) || l % 2) err('hex invalid 1');         // or has odd length like 3, 5.
+  const arr = u8n(l / 2);                               // create result array
+  for (let i = 0; i < arr.length; i++) {
+    const j = i * 2;
+    const h = hex.slice(j, j + 2);                      // hexByte. slice is faster than substr
+    const b = Number.parseInt(h, 16);                   // byte, created from string part
+    if (Number.isNaN(b) || b < 0) err('hex invalid 2'); // byte must be valid 0 <= byte < 256
+    arr[i] = b;
+  }
+  return arr;
+};
+const n2b_32LE = (num: bigint) => h2b(padh(num, 32 * 2)).reverse(); // number to bytes LE
+const b2n_LE = (b: Bytes): bigint => BigInt('0x' + b2h(u8n(au8(b)).reverse())); // bytes LE to num
 const concatB = (...arrs: Bytes[]) => {                 // concatenate Uint8Array-s
   const r = u8n(arrs.reduce((sum, a) => sum + a.length, 0)); // create u8a of summed length
   let pad = 0;                                               // walk through each array, ensure
   arrs.forEach(a => { r.set(au8(a), pad); pad += a.length }); // they have proper type
   return r;
 };
-const padh = (num: number | bigint, pad: number) => num.toString(16).padStart(pad, '0')
-const b2h = (b: Bytes): string => Array.from(b).map(e => padh(e, 2)).join(''); // bytes to hex
-const h2b = (hex: string): Bytes => {                   // hex to bytes
-  const l = hex.length;                                 // error if not string,
-  if (!str(hex) || l % 2) err('hex invalid');           // or has odd length like 3, 5.
-  const arr = u8n(l / 2);                               // create result array
-  for (let i = 0; i < arr.length; i++) {
-    const j = i * 2;
-    const h = hex.slice(j, j + 2);                      // hexByte. slice is faster than substr
-    const b = Number.parseInt(h, 16);                   // byte, created from string part
-    if (Number.isNaN(b) || b < 0) err('hex invalid b'); // byte must be valid 0 <= byte < 256
-    arr[i] = b;
-  }
-  return arr;
-};
-const n2b_32LE = (num: bigint) => h2b(padh(num, 32 * 2)).reverse(); // number to bytes LE
-const b2n_LE = (b: Bytes): bigint => BigInt('0x' + b2h(u8fr(au8(b)).reverse())); // bytes LE to num
 const invert = (num: bigint, md = P): bigint => {       // modular inversion
   if (num === 0n || md <= 0n) err(`no invert n=${num} mod=${md}`); // no negative exponents
   let a = mod(num, md), b = md, x = 0n, y = 1n, u = 1n, v = 0n;
@@ -256,7 +254,7 @@ const _verify = (sig: Hex, msg: Hex, pub: Hex): Finishable<boolean> => { // sig 
   const finish = (hashed: Bytes): boolean => {          // k = SHA512(dom2(F, C) || R || A || PH(M))
     const k = modL_LE(hashed);                          // decode in little-endian, modulo L
     const RkA = R.add(A.mul(k, false));                 // [8]R + [8][k]A'
-    return RkA.subtract(SB).clearCofactor().is0();      // [8][S]B = [8]R + [8][k]A'
+    return RkA.add(SB.negate()).clearCofactor().is0();      // [8][S]B = [8]R + [8][k]A'
   }
   return { hashable, finish };
 };
@@ -289,8 +287,8 @@ Object.defineProperties(etc, { sha512Sync: {  // Allow setting it once. Next set
 } });
 export const utils = {
   getExtendedPublicKeyAsync, getExtendedPublicKey,
-  precompute(w=8, p: Point = G) { p.multiply(3n); return p; }, // no-op
   randomPrivateKey: (): Bytes => etc.randomBytes(32),
+  precompute(w=8, p: Point = G) { p.multiply(3n); return p; }, // no-op
 }
 const W = 8;                                            // Precomputes-related code. W = window size
 const precompute = () => {                              // They give 12x faster getPublicKey(),

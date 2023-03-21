@@ -3,7 +3,6 @@ export declare const CURVE: {
     d: bigint;
     p: bigint;
     n: bigint;
-    l: bigint;
     h: number;
     Gx: bigint;
     Gy: bigint;
@@ -31,7 +30,6 @@ declare class Point {
     negate(): Point;
     double(): Point;
     add(other: Point): Point;
-    subtract(p: Point): Point;
     mul(n: bigint, safe?: boolean): Point;
     multiply(scalar: bigint): Point;
     clearCofactor(): Point;
@@ -69,7 +67,7 @@ export declare const etc: {
 export declare const utils: {
     getExtendedPublicKeyAsync: (priv: Hex) => Promise<ExtK>;
     getExtendedPublicKey: (priv: Hex) => ExtK;
-    precompute(w?: number, p?: Point): Point;
     randomPrivateKey: () => Bytes;
+    precompute(w?: number, p?: Point): Point;
 };
 export {};
