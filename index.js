@@ -1,6 +1,5 @@
 /*! noble-ed25519 - MIT License (c) 2019 Paul Miller (paulmillr.com) */
-const B256 = 2n ** 256n; // ed25519 is twisted edwards curve
-const P = 2n ** 255n - 19n; // curve's field prime
+const P = 2n ** 255n - 19n; // ed25519 is twisted edwards curve
 const N = 2n ** 252n + 27742317777372353535851937790883648493n; // curve's (group) order
 const Gx = 0x216936d3cd6e53fec0a4e231fdd6dc5c692cc7609525a7b2c9562d608f25d51an; // base point x
 const Gy = 0x6666666666666666666666666666666666666666666666666666666666666658n; // base point y
@@ -37,9 +36,9 @@ class Point {
         }
         else {
             if (strict && !(0n < y && y < P))
-                err('bad y coordinate 1'); // strict=true [1..P-1]
-            if (!strict && !(0n < y && y < B256))
-                err('bad y coordinate 2'); // strict=false [1..2^256-1]
+                err('bad y coord 1'); // strict=true [1..P-1]
+            if (!strict && !(0n < y && y < 2n ** 256n))
+                err('bad y coord 2'); // strict=false [1..2^256-1]
         }
         const y2 = mod(y * y); // y²
         const u = mod(y2 - 1n); // u=y²-1
@@ -146,8 +145,8 @@ class Point {
     }
     toHex() { return b2h(this.toRawBytes()); } // encode to hex string
 }
-Point.BASE = new Point(Gx, Gy, 1n, mod(Gx * Gy)); // Base point
-Point.ZERO = new Point(0n, 1n, 1n, 0n); // Identity / zero point
+Point.BASE = new Point(Gx, Gy, 1n, mod(Gx * Gy)); // Generator / Base point
+Point.ZERO = new Point(0n, 1n, 1n, 0n); // Identity / Zero point
 const { BASE: G, ZERO: I } = Point; // Generator, identity points
 export const ExtendedPoint = Point;
 const padh = (num, pad) => num.toString(16).padStart(pad, '0');
@@ -170,21 +169,21 @@ const h2b = (hex) => {
 const n2b_32LE = (num) => h2b(padh(num, 32 * 2)).reverse(); // number to bytes LE
 const b2n_LE = (b) => BigInt('0x' + b2h(u8n(au8(b)).reverse())); // bytes LE to num
 const concatB = (...arrs) => {
-    const r = u8n(arrs.reduce((sum, a) => sum + a.length, 0)); // create u8a of summed length
-    let pad = 0; // walk through each array, ensure
-    arrs.forEach(a => { r.set(au8(a), pad); pad += a.length; }); // they have proper type
+    const r = u8n(arrs.reduce((sum, a) => sum + au8(a).length, 0)); // create u8a of summed length
+    let pad = 0; // walk through each array,
+    arrs.forEach(a => { r.set(a, pad); pad += a.length; }); // ensure they have proper type
     return r;
 };
 const invert = (num, md = P) => {
     if (num === 0n || md <= 0n)
-        err(`no invert n=${num} mod=${md}`); // no negative exponents
+        err('no inverse n=' + num + ' mod=' + md); // no neg exponent for now
     let a = mod(num, md), b = md, x = 0n, y = 1n, u = 1n, v = 0n;
     while (a !== 0n) { // uses euclidean gcd algorithm
         const q = b / a, r = b % a; // not constant-time
         const m = x - u * q, n = y - v * q;
         b = a, a = r, x = u, y = v, u = m, v = n;
     }
-    return b === 1n ? mod(x, md) : err('no invert'); // b is gcd at this point
+    return b === 1n ? mod(x, md) : err('no inverse'); // b is gcd at this point
 };
 const pow2 = (x, power) => {
     let r = x;
