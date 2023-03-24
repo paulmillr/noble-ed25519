@@ -43,7 +43,6 @@
     "elliptic curve",
     "ecc",
     "curve",
-    "cryptography",
     "rfc7748",
     "zip215",
     "ristretto255",
