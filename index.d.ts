@@ -1,4 +1,4 @@
-export declare const CURVE: {
+declare const CURVE: {
     a: bigint;
     d: bigint;
     p: bigint;
@@ -39,7 +39,6 @@ declare class Point {
     toRawBytes(): Bytes;
     toHex(): string;
 }
-export declare const ExtendedPoint: typeof Point;
 type Sha512FnSync = undefined | ((...messages: Bytes[]) => Bytes);
 type ExtK = {
     head: Bytes;
@@ -48,13 +47,13 @@ type ExtK = {
     point: Point;
     pointBytes: Bytes;
 };
-export declare const getPublicKeyAsync: (priv: Hex) => Promise<Bytes>;
-export declare const getPublicKey: (priv: Hex) => Bytes;
-export declare const signAsync: (msg: Hex, privKey: Hex) => Promise<Bytes>;
-export declare const sign: (msg: Hex, privKey: Hex) => Bytes;
-export declare const verifyAsync: (s: Hex, m: Hex, p: Hex) => Promise<boolean>;
-export declare const verify: (s: Hex, m: Hex, p: Hex) => boolean;
-export declare const etc: {
+declare const getPublicKeyAsync: (priv: Hex) => Promise<Bytes>;
+declare const getPublicKey: (priv: Hex) => Bytes;
+declare const signAsync: (msg: Hex, privKey: Hex) => Promise<Bytes>;
+declare const sign: (msg: Hex, privKey: Hex) => Bytes;
+declare const verifyAsync: (s: Hex, m: Hex, p: Hex) => Promise<boolean>;
+declare const verify: (s: Hex, m: Hex, p: Hex) => boolean;
+declare const etc: {
     bytesToHex: (b: Bytes) => string;
     hexToBytes: (hex: string) => Bytes;
     concatBytes: (...arrs: Bytes[]) => Uint8Array;
@@ -64,10 +63,11 @@ export declare const etc: {
     sha512Async: (...messages: Bytes[]) => Promise<Bytes>;
     sha512Sync: Sha512FnSync;
 };
-export declare const utils: {
+declare const utils: {
     getExtendedPublicKeyAsync: (priv: Hex) => Promise<ExtK>;
     getExtendedPublicKey: (priv: Hex) => ExtK;
     randomPrivateKey: () => Bytes;
     precompute(w?: number, p?: Point): Point;
 };
-export {};
+export { getPublicKey, getPublicKeyAsync, sign, verify, // Remove the export to easily use in REPL
+signAsync, verifyAsync, CURVE, etc, utils, Point as ExtendedPoint };

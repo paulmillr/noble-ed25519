@@ -3,7 +3,7 @@ const P = 2n ** 255n - 19n; // ed25519 is twisted edwards curve
 const N = 2n ** 252n + 27742317777372353535851937790883648493n; // curve's (group) order
 const Gx = 0x216936d3cd6e53fec0a4e231fdd6dc5c692cc7609525a7b2c9562d608f25d51an; // base point x
 const Gy = 0x6666666666666666666666666666666666666666666666666666666666666658n; // base point y
-export const CURVE = {
+const CURVE = {
     a: -1n,
     d: 37095705934669439343138083508754565189542113879843219016388785533085940283555n,
     p: P, n: N, h: 8, Gx, Gy // field prime, curve (group) order, cofactor
@@ -148,7 +148,6 @@ class Point {
 Point.BASE = new Point(Gx, Gy, 1n, mod(Gx * Gy)); // Generator / Base point
 Point.ZERO = new Point(0n, 1n, 1n, 0n); // Identity / Zero point
 const { BASE: G, ZERO: I } = Point; // Generator, identity points
-export const ExtendedPoint = Point;
 const padh = (num, pad) => num.toString(16).padStart(pad, '0');
 const b2h = (b) => Array.from(b).map(e => padh(e, 2)).join(''); // bytes to hex
 const h2b = (hex) => {
@@ -247,8 +246,8 @@ const hash2extK = (hashed) => {
 // RFC8032 5.1.5; getPublicKey async, sync
 const getExtendedPublicKeyAsync = (priv) => sha512a(toU8(priv, 32)).then(hash2extK);
 const getExtendedPublicKey = (priv) => hash2extK(sha512s(toU8(priv, 32)));
-export const getPublicKeyAsync = (priv) => getExtendedPublicKeyAsync(priv).then(p => p.pointBytes);
-export const getPublicKey = (priv) => getExtendedPublicKey(priv).pointBytes;
+const getPublicKeyAsync = (priv) => getExtendedPublicKeyAsync(priv).then(p => p.pointBytes);
+const getPublicKey = (priv) => getExtendedPublicKey(priv).pointBytes;
 function hashFinish(asynchronous, res) {
     if (asynchronous)
         return sha512a(res.hashable).then(res.finish);
@@ -265,13 +264,13 @@ const _sign = (e, rBytes, msg) => {
     };
     return { hashable, finish };
 };
-export const signAsync = async (msg, privKey) => {
+const signAsync = async (msg, privKey) => {
     const m = toU8(msg); // RFC8032 5.1.6: sign msg with key async
     const e = await getExtendedPublicKeyAsync(privKey); // pub,prfx
     const rBytes = await sha512a(e.prefix, m); // r = SHA512(dom2(F, C) || prefix || PH(M))
     return hashFinish(true, _sign(e, rBytes, m)); // gen R, k, S, then 64-byte signature
 };
-export const sign = (msg, privKey) => {
+const sign = (msg, privKey) => {
     const m = toU8(msg); // RFC8032 5.1.6: sign msg with key sync
     const e = getExtendedPublicKey(privKey); // pub,prfx
     const rBytes = sha512s(e.prefix, m); // r = SHA512(dom2(F, C) || prefix || PH(M))
@@ -293,11 +292,11 @@ const _verify = (sig, msg, pub) => {
     return { hashable, finish };
 };
 // RFC8032 5.1.7: verification async, sync
-export const verifyAsync = async (s, m, p) => hashFinish(true, _verify(s, m, p));
-export const verify = (s, m, p) => hashFinish(false, _verify(s, m, p));
+const verifyAsync = async (s, m, p) => hashFinish(true, _verify(s, m, p));
+const verify = (s, m, p) => hashFinish(false, _verify(s, m, p));
 const cr = () => // We support: 1) browsers 2) node.js 19+
  typeof globalThis === 'object' && 'crypto' in globalThis ? globalThis.crypto : undefined;
-export const etc = {
+const etc = {
     bytesToHex: b2h, hexToBytes: h2b, concatBytes: concatB,
     mod, invert,
     randomBytes: (len) => {
@@ -321,7 +320,7 @@ Object.defineProperties(etc, { sha512Sync: {
         configurable: false, get() { return _shaS; }, set(f) { if (!_shaS)
             _shaS = f; },
     } });
-export const utils = {
+const utils = {
     getExtendedPublicKeyAsync, getExtendedPublicKey,
     randomPrivateKey: () => etc.randomBytes(32),
     precompute(w = 8, p = G) { p.multiply(3n); return p; }, // no-op
@@ -371,3 +370,5 @@ const wNAF = (n) => {
     }
     return { p, f }; // return both real and fake points for JIT
 }; // !! you can disable precomputes by commenting-out call of the wNAF() inside Point#mul()
+export { getPublicKey, getPublicKeyAsync, sign, verify, // Remove the export to easily use in REPL
+signAsync, verifyAsync, CURVE, etc, utils, Point as ExtendedPoint }; // envs like browser console

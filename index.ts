@@ -3,7 +3,7 @@ const P = 2n ** 255n - 19n;                                     // ed25519 is tw
 const N = 2n ** 252n + 27742317777372353535851937790883648493n; // curve's (group) order
 const Gx = 0x216936d3cd6e53fec0a4e231fdd6dc5c692cc7609525a7b2c9562d608f25d51an; // base point x
 const Gy = 0x6666666666666666666666666666666666666666666666666666666666666658n; // base point y
-export const CURVE = {        // Curve's formula is −x² + y² = -a + dx²y²
+const CURVE = {        // Curve's formula is −x² + y² = -a + dx²y²
   a: -1n,                     // where a=-1, d = -(121665/121666) == -(121665 * inv(121666)) mod P
   d: 37095705934669439343138083508754565189542113879843219016388785533085940283555n,
   p: P, n: N, h: 8, Gx, Gy    // field prime, curve (group) order, cofactor
@@ -115,7 +115,6 @@ class Point {                                           // Point in xyzt extende
   
 }
 const { BASE: G, ZERO: I } = Point;                     // Generator, identity points
-export const ExtendedPoint = Point;
 const padh = (num: number | bigint, pad: number) => num.toString(16).padStart(pad, '0')
 const b2h = (b: Bytes): string => Array.from(b).map(e => padh(e, 2)).join(''); // bytes to hex
 const h2b = (hex: string): Bytes => {                   // hex to bytes
@@ -204,12 +203,12 @@ const hash2extK = (hashed: Bytes): ExtK => {            // RFC8032 5.1.5
   const pointBytes = point.toRawBytes();                // point serialized to Uint8Array
   return { head, prefix, scalar, point, pointBytes };
 }
-// RFC8032 5.1.5; getPublicKey async, sync
+// RFC8032 5.1.5; getPublicKey async, sync. Hash priv key and extract point.
 const getExtendedPublicKeyAsync = (priv: Hex) => sha512a(toU8(priv, 32)).then(hash2extK);
 const getExtendedPublicKey = (priv: Hex) => hash2extK(sha512s(toU8(priv, 32)))
-export const getPublicKeyAsync = (priv: Hex): Promise<Bytes> =>
+const getPublicKeyAsync = (priv: Hex): Promise<Bytes> =>
   getExtendedPublicKeyAsync(priv).then(p => p.pointBytes)
-export const getPublicKey = (priv: Hex): Bytes => getExtendedPublicKey(priv).pointBytes;
+const getPublicKey = (priv: Hex): Bytes => getExtendedPublicKey(priv).pointBytes;
 type Finishable<T> = {                                  // Reduces logic duplication between
   hashable: Bytes, finish: (hashed: Bytes) => T         // sync & async versions of sign(), verify()
 }                                                       // hashable=start(); finish(hash(hashable));
@@ -230,13 +229,13 @@ const _sign = (e: ExtK, rBytes: Bytes, msg: Bytes): Finishable<Bytes> => { // si
   }
   return { hashable, finish };
 };
-export const signAsync = async (msg: Hex, privKey: Hex): Promise<Bytes> => {
+const signAsync = async (msg: Hex, privKey: Hex): Promise<Bytes> => {
   const m = toU8(msg);                                  // RFC8032 5.1.6: sign msg with key async
   const e = await getExtendedPublicKeyAsync(privKey);   // pub,prfx
   const rBytes = await sha512a(e.prefix, m);            // r = SHA512(dom2(F, C) || prefix || PH(M))
   return hashFinish(true, _sign(e, rBytes, m));         // gen R, k, S, then 64-byte signature
 };
-export const sign = (msg: Hex, privKey: Hex): Bytes => {
+const sign = (msg: Hex, privKey: Hex): Bytes => {
   const m = toU8(msg);                                  // RFC8032 5.1.6: sign msg with key sync
   const e = getExtendedPublicKey(privKey);              // pub,prfx
   const rBytes = sha512s(e.prefix, m);                  // r = SHA512(dom2(F, C) || prefix || PH(M))
@@ -258,12 +257,12 @@ const _verify = (sig: Hex, msg: Hex, pub: Hex): Finishable<boolean> => { // sig 
   return { hashable, finish };
 };
 // RFC8032 5.1.7: verification async, sync
-export const verifyAsync = async (s: Hex, m: Hex, p: Hex) => hashFinish(true, _verify(s, m, p));
-export const verify = (s: Hex, m: Hex, p: Hex) => hashFinish(false, _verify(s, m, p));
+const verifyAsync = async (s: Hex, m: Hex, p: Hex) => hashFinish(true, _verify(s, m, p));
+const verify = (s: Hex, m: Hex, p: Hex) => hashFinish(false, _verify(s, m, p));
 declare const globalThis: Record<string, any> | undefined; // Typescript symbol present in browsers
 const cr = () => // We support: 1) browsers 2) node.js 19+
   typeof globalThis === 'object' && 'crypto' in globalThis ? globalThis.crypto : undefined;
-export const etc = {
+const etc = {
   bytesToHex: b2h, hexToBytes: h2b, concatBytes: concatB,
   mod, invert,
   randomBytes: (len: number): Bytes => {                // CSPRNG (random number generator)
@@ -284,7 +283,7 @@ export const etc = {
 Object.defineProperties(etc, { sha512Sync: {  // Allow setting it once. Next sets will be ignored
   configurable: false, get() { return _shaS; }, set(f) { if (!_shaS) _shaS = f; },
 } });
-export const utils = {
+const utils = {
   getExtendedPublicKeyAsync, getExtendedPublicKey,
   randomPrivateKey: (): Bytes => etc.randomBytes(32),
   precompute(w=8, p: Point = G) { p.multiply(3n); return p; }, // no-op
@@ -327,3 +326,5 @@ const wNAF = (n: bigint): { p: Point; f: Point } => {   // w-ary non-adjacent fo
   }
   return { p, f }                                       // return both real and fake points for JIT
 };        // !! you can disable precomputes by commenting-out call of the wNAF() inside Point#mul()
+export { getPublicKey, getPublicKeyAsync, sign, verify, // Remove the export to easily use in REPL
+  signAsync, verifyAsync, CURVE, etc, utils, Point as ExtendedPoint } // envs like browser console
