@@ -243,7 +243,7 @@ const hash2extK = (hashed) => {
     const pointBytes = point.toRawBytes(); // point serialized to Uint8Array
     return { head, prefix, scalar, point, pointBytes };
 };
-// RFC8032 5.1.5; getPublicKey async, sync
+// RFC8032 5.1.5; getPublicKey async, sync. Hash priv key and extract point.
 const getExtendedPublicKeyAsync = (priv) => sha512a(toU8(priv, 32)).then(hash2extK);
 const getExtendedPublicKey = (priv) => hash2extK(sha512s(toU8(priv, 32)));
 const getPublicKeyAsync = (priv) => getExtendedPublicKeyAsync(priv).then(p => p.pointBytes);
