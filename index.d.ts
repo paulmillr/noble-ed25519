@@ -22,7 +22,7 @@ declare class Point {
     static readonly BASE: Point;
     static readonly ZERO: Point;
     static fromAffine(p: AffinePoint): Point;
-    static fromHex(hex: Hex, strict?: boolean): Point;
+    static fromHex(hex: Hex, zip215?: boolean): Point;
     get x(): bigint;
     get y(): bigint;
     equals(other: Point): boolean;
@@ -51,8 +51,12 @@ declare const getPublicKeyAsync: (priv: Hex) => Promise<Bytes>;
 declare const getPublicKey: (priv: Hex) => Bytes;
 declare const signAsync: (msg: Hex, privKey: Hex) => Promise<Bytes>;
 declare const sign: (msg: Hex, privKey: Hex) => Bytes;
-declare const verifyAsync: (s: Hex, m: Hex, p: Hex) => Promise<boolean>;
-declare const verify: (s: Hex, m: Hex, p: Hex) => boolean;
+declare const verifyAsync: (s: Hex, m: Hex, p: Hex, opts?: {
+    zip215: boolean;
+}) => Promise<boolean>;
+declare const verify: (s: Hex, m: Hex, p: Hex, opts?: {
+    zip215: boolean;
+}) => boolean;
 declare const etc: {
     bytesToHex: (b: Bytes) => string;
     hexToBytes: (hex: string) => Bytes;

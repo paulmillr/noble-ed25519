@@ -1,10 +1,13 @@
 import { deepStrictEqual, strictEqual, throws } from 'assert';
 import { readFileSync } from 'fs';
-import { hexToBytes, bytesToHex, randomBytes } from '@noble/hashes/utils';
+import { bytesToHex, concatBytes, hexToBytes, randomBytes } from '@noble/hashes/utils';
 import * as fc from 'fast-check';
 import { describe, should } from 'micro-should';
-import { ed25519, ED25519_TORSION_SUBGROUP } from './ed25519.helpers.mjs';
-import { default as ed25519vectors } from './wycheproof/eddsa_test.json' assert { type: 'json' };
+import { ed25519, ED25519_TORSION_SUBGROUP, numberToBytesLE } from './ed25519.helpers.mjs';
+// Old vectors allow to test sign() because they include private key
+import { default as ed25519vectors_OLD } from './ed25519/ed25519_test_OLD.json' assert { type: 'json' };
+import { default as ed25519vectors } from './wycheproof/ed25519_test.json' assert { type: 'json' };
+
 import { default as zip215 } from './ed25519/zip215.json' assert { type: 'json' };
 
 describe('ed25519', () => {
@@ -305,23 +308,25 @@ describe('ed25519', () => {
 
   // https://zips.z.cash/zip-0215
   // Vectors from https://gist.github.com/hdevalence/93ed42d17ecab8e42138b213812c8cc7
-  should('ZIP-215 compliance tests/should pass all of them', () => {
-    const str = utf8ToBytes('Zcash');
-    for (let v of zip215) {
-      let noble = false;
-      try {
-        noble = ed.verify(v.sig_bytes, str, v.vk_bytes);
-      } catch (e) {
-        noble = false;
+  describe('ZIP215', () => {
+    should('pass all compliance tests', () => {
+      const str = utf8ToBytes('Zcash');
+      for (let v of zip215) {
+        let noble = false;
+        try {
+          noble = ed.verify(v.sig_bytes, str, v.vk_bytes);
+        } catch (e) {
+          noble = false;
+        }
+        deepStrictEqual(noble, v.valid_zip215, JSON.stringify(v));
       }
-      deepStrictEqual(noble, v.valid_zip215, JSON.stringify(v));
-    }
-  });
-  should('ZIP-215 compliance tests/disallows sig.s >= CURVE.n', () => {
-    // sig.R = BASE, sig.s = N+1
-    const sig =
-      '5866666666666666666666666666666666666666666666666666666666666666eed3f55c1a631258d69cf7a2def9de1400000000000000000000000000000010';
-    throws(() => ed.verify(sig, 'deadbeef', Point.BASE));
+    });
+    should('disallow sig.s >= CURVE.n', () => {
+      // sig.R = BASE, sig.s = N+1
+      const sig =
+        '5866666666666666666666666666666666666666666666666666666666666666eed3f55c1a631258d69cf7a2def9de1400000000000000000000000000000010';
+      deepStrictEqual(ed.verify(sig, 'deadbeef', Point.BASE), false);
+    });
   });
 
   // should('X25519/getSharedSecret() should be commutative', () => {
@@ -346,9 +351,9 @@ describe('ed25519', () => {
   //   );
   // });
 
-  should(`Wycheproof/ED25519`, () => {
-    for (let g = 0; g < ed25519vectors.testGroups.length; g++) {
-      const group = ed25519vectors.testGroups[g];
+  should(`wycheproof/ED25519 (OLD)`, () => {
+    for (let g = 0; g < ed25519vectors_OLD.testGroups.length; g++) {
+      const group = ed25519vectors_OLD.testGroups[g];
       const key = group.key;
       deepStrictEqual(hex(ed.getPublicKey(key.sk)), key.pk, `(${g}, public)`);
       for (let i = 0; i < group.tests.length; i++) {
@@ -370,7 +375,29 @@ describe('ed25519', () => {
     }
   });
 
-  should('Property test issue #1', () => {
+  should(`wycheproof/ED25519`, () => {
+    for (let g = 0; g < ed25519vectors.testGroups.length; g++) {
+      const group = ed25519vectors.testGroups[g];
+      const key = group.publicKey;
+      for (let i = 0; i < group.tests.length; i++) {
+        const v = group.tests[i];
+        const comment = `(${g}/${i}, ${v.result}): ${v.comment}`;
+        if (v.result === 'valid' || v.result === 'acceptable') {
+          deepStrictEqual(ed.verify(v.sig, v.msg, key.pk), true, comment);
+        } else if (v.result === 'invalid') {
+          let failed = false;
+          try {
+            failed = !ed.verify(v.sig, v.msg, key.pk);
+          } catch (error) {
+            failed = true;
+          }
+          deepStrictEqual(failed, true, comment);
+        } else throw new Error('unknown test result');
+      }
+    }
+  });
+
+  should('not mutate inputs', () => {
     const message = new Uint8Array([12, 12, 12]);
     const signature = ed.sign(message, to32Bytes(1n));
     const publicKey = ed.getPublicKey(to32Bytes(1n)); // <- was 1n
@@ -387,15 +414,33 @@ describe('ed25519', () => {
       strictEqual(cleared.isTorsionFree(), true, `cleared must be torsionFree: ${hex}`);
     }
   });
-});
 
-should('ed25519 bug', () => {
-  const t = 81718630521762619991978402609047527194981150691135404693881672112315521837062n;
-  const point = ed25519.ExtendedPoint.fromAffine({ x: t, y: t });
-  throws(() => point.assertValidity());
-  // Otherwise (without assertValidity):
-  // const point2 = point.double();
-  // point2.toAffine(); // crash!
+  should('not verify when sig.s >= CURVE.n', () => {
+    const privateKey = ed25519.utils.randomPrivateKey();
+    const message = Uint8Array.from([0xab, 0xbc, 0xcd, 0xde]);
+    const publicKey = ed25519.getPublicKey(privateKey);
+    const signature = ed25519.sign(message, privateKey);
+
+    const R = signature.slice(0, 32);
+    let s = signature.slice(32, 64);
+
+    s = bytesToHex(s.slice().reverse());
+    s = BigInt('0x' + s);
+    s = s + ed25519.CURVE.n;
+    s = numberToBytesLE(s, 32);
+
+    const sig_invalid = concatBytes(R, s);
+    deepStrictEqual(ed25519.verify(sig_invalid, message, publicKey), false);
+  });
+
+  should('not accept point without z, t', () => {
+    const t = 81718630521762619991978402609047527194981150691135404693881672112315521837062n;
+    const point = ed25519.ExtendedPoint.fromAffine({ x: t, y: t });
+    throws(() => point.assertValidity());
+    // Otherwise (without assertValidity):
+    // const point2 = point.double();
+    // point2.toAffine(); // crash!
+  });
 });
 
 // ESM is broken.

@@ -25,17 +25,14 @@ class Point {                                           // Point in xyzt extende
   static readonly BASE = new Point(Gx, Gy, 1n, mod(Gx * Gy)); // Generator / Base point
   static readonly ZERO = new Point(0n, 1n, 1n, 0n);           // Identity / Zero point
   static fromAffine(p: AffinePoint) { return new Point(p.x, p.y, 1n, mod(p.x * p.y)); }
-  static fromHex(hex: Hex, strict = true) {             // RFC8032 5.1.3: hex / Uint8Array to Point.
+  static fromHex(hex: Hex, zip215 = false) {            // RFC8032 5.1.3: hex / Uint8Array to Point.
     const { d } = CURVE;
     hex = toU8(hex, 32);
     const normed = hex.slice();                         // copy the array to not mess it up
     normed[31] = hex[31] & ~0x80;                       // adjust first LE byte = last BE byte
     const y = b2n_LE(normed);                           // decode as little-endian, convert to num
-    if (y === 0n) {                                     // y=0 is valid, proceed
-    } else {
-      if (strict && !(0n < y && y < P)) err('bad y coord 1'); // strict=true [1..P-1]
-      if (!strict && !(0n < y && y < 2n ** 256n)) err('bad y coord 2'); // strict=false [1..2^256-1]
-    }
+    if (zip215 && !(0n <= y && y < 2n ** 256n)) err('bad y coord 1'); // zip215=true  [1..2^256-1]
+    if (!zip215 && !(0n <= y && y < P)) err('bad y coord 2');         // zip215=false [1..P-1]
     const y2 = mod(y * y);                              // y²
     const u = mod(y2 - 1n);                             // u=y²-1
     const v = mod(d * y2 + 1n);                         // v=dy²+1
@@ -241,15 +238,21 @@ const sign = (msg: Hex, privKey: Hex): Bytes => {
   const rBytes = sha512s(e.prefix, m);                  // r = SHA512(dom2(F, C) || prefix || PH(M))
   return hashFinish(false, _sign(e, rBytes, m));        // gen R, k, S, then 64-byte signature
 };
-const _verify = (sig: Hex, msg: Hex, pub: Hex): Finishable<boolean> => { // sig verification
+const dvo = { zip215: true };
+const _verify = (sig: Hex, msg: Hex, pub: Hex, opts = dvo): Finishable<boolean> => {
   msg = toU8(msg);                                      // Message hex str/Bytes
   sig = toU8(sig, 64);                                  // Signature hex str/Bytes, must be 64 bytes
-  const A = Point.fromHex(pub, false); // public key A decoded
-  const R = Point.fromHex(sig.slice(0, 32), false);     // 0 <= R < 2^256: ZIP215 R can be >= P
-  const s = b2n_LE(sig.slice(32, 64));                  // Decode second half as an integer S
-  const SB = G.mul(s, false);                           // in the range 0 <= s < L
-  const hashable = concatB(R.toRawBytes(), A.toRawBytes(), msg); // dom2(F, C) || R || A || PH(M)
+  const { zip215 } = opts;                              // switch between zip215 and rfc8032 verif
+  let A: Point, R: Point, s: bigint, SB: Point, hashable = new Uint8Array();
+  try { 
+    A = Point.fromHex(pub, zip215);                     // public key A decoded
+    R = Point.fromHex(sig.slice(0, 32), zip215);        // 0 <= R < 2^256: ZIP215 R can be >= P
+    s = b2n_LE(sig.slice(32, 64));                      // Decode second half as an integer S
+    SB = G.mul(s, false);                               // in the range 0 <= s < L
+    hashable = concatB(R.toRawBytes(), A.toRawBytes(), msg); // dom2(F, C) || R || A || PH(M)  
+  } catch (error) {}
   const finish = (hashed: Bytes): boolean => {          // k = SHA512(dom2(F, C) || R || A || PH(M))
+    if (SB == null) return false;                       // false if try-catch catched an error
     const k = modL_LE(hashed);                          // decode in little-endian, modulo L
     const RkA = R.add(A.mul(k, false));                 // [8]R + [8][k]A'
     return RkA.add(SB.negate()).clearCofactor().is0();      // [8][S]B = [8]R + [8][k]A'
@@ -257,8 +260,10 @@ const _verify = (sig: Hex, msg: Hex, pub: Hex): Finishable<boolean> => { // sig 
   return { hashable, finish };
 };
 // RFC8032 5.1.7: verification async, sync
-const verifyAsync = async (s: Hex, m: Hex, p: Hex) => hashFinish(true, _verify(s, m, p));
-const verify = (s: Hex, m: Hex, p: Hex) => hashFinish(false, _verify(s, m, p));
+const verifyAsync = async (s: Hex, m: Hex, p: Hex, opts = dvo) =>
+  hashFinish(true, _verify(s, m, p, dvo));
+const verify = (s: Hex, m: Hex, p: Hex, opts = dvo) =>
+  hashFinish(false, _verify(s, m, p));
 declare const globalThis: Record<string, any> | undefined; // Typescript symbol present in browsers
 const cr = () => // We support: 1) browsers 2) node.js 19+
   typeof globalThis === 'object' && 'crypto' in globalThis ? globalThis.crypto : undefined;

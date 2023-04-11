@@ -93,18 +93,19 @@ function sign(
 ): Uint8Array;
 function signAsync(message: Hex, privateKey: Hex): Promise<Uint8Array>;
 
-// Verifies EdDSA signature. Compatible with [ZIP215](https://zips.z.cash/zip-0215):
+// Verifies EdDSA signature. Uses ZIP215 (default) or RFC8032 verification rule.
+// [ZIP215](https://zips.z.cash/zip-0215):
 // - `0 <= sig.R/publicKey < 2**256` (can be `>= curve.P` aka non-canonical encoding)
 // - `0 <= sig.s < l`
 // - There is no security risk in ZIP behavior, and there is no effect on
 //   honestly generated sigs, but it is verify important for consensus-critical
 //   apps. See [It’s 255:19AM](https://hdevalence.ca/blog/2020-10-04-its-25519am).
-// - _Not compatible with RFC8032_ because RFC enforces canonical encoding of
-//   R/publicKey.
+// RFC8032: enforces canonical encoding of R/publicKey. Enable with zip215=false
 function verify(
   signature: Hex, // returned by the `sign` function
   message: Hex, // message that needs to be verified
-  publicKey: Hex // public (not private) key
+  publicKey: Hex // public (not private) key,
+  options = { zip215: true } // ZIP215 or RFC8032 verification type
 ): boolean;
 function verifyAsync(signature: Hex, message: Hex, publicKey: Hex): Promise<boolean>;
 ```
@@ -113,30 +114,32 @@ A bunch of useful **utilities** are also exposed:
 
 ```typescript
 export const etc: {
-    bytesToHex: (b: Bytes) => string;
-    hexToBytes: (hex: string) => Bytes;
-    concatBytes: (...arrs: Bytes[]) => Uint8Array;
-    mod: (a: bigint, b?: bigint) => bigint;
-    invert: (num: bigint, md?: bigint) => bigint;
-    randomBytes: (len: number) => Bytes;
-    sha512Async: (...messages: Bytes[]) => Promise<Bytes>;
-    sha512Sync: Sha512FnSync;
+  bytesToHex: (b: Bytes) => string;
+  hexToBytes: (hex: string) => Bytes;
+  concatBytes: (...arrs: Bytes[]) => Uint8Array;
+  mod: (a: bigint, b?: bigint) => bigint;
+  invert: (num: bigint, md?: bigint) => bigint;
+  randomBytes: (len: number) => Bytes;
+  sha512Async: (...messages: Bytes[]) => Promise<Bytes>;
+  sha512Sync: Sha512FnSync;
 };
 export const utils: {
-    getExtendedPublicKeyAsync: (priv: Hex) => Promise<ExtK>;
-    getExtendedPublicKey: (priv: Hex) => ExtK;
-    precompute(p: Point, w?: number): Point;
-    randomPrivateKey: () => Bytes;
+  getExtendedPublicKeyAsync: (priv: Hex) => Promise<ExtK>;
+  getExtendedPublicKey: (priv: Hex) => ExtK;
+  precompute(p: Point, w?: number): Point;
+  randomPrivateKey: () => Bytes;
 };
 
 export class ExtendedPoint { // Elliptic curve point in Extended (x, y, z, t) coordinates.
-  constructor(x: bigint, y: bigint, z: bigint, t: bigint);
+  constructor(ex: bigint, ey: bigint, ez: bigint, et: bigint);
   static fromAffine(point: AffinePoint): ExtendedPoint;
   static fromHex(hash: string);
+  get x(): bigint;
+  get y(): bigint;
+  toAffine(): Point;
   toRawBytes(): Uint8Array;
   toHex(): string; // Compact representation of a Point
   isTorsionFree(): boolean; // Multiplies the point by curve order
-  toAffine(): Point;
   equals(other: ExtendedPoint): boolean;
   // Note: It does not check whether the `other` point is valid point on curve.
   add(other: ExtendedPoint): ExtendedPoint;

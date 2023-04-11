@@ -4,7 +4,12 @@ if (!globalThis.crypto) globalThis.crypto = webcrypto; // @ts-ignore
 import * as ed from '../index.js';
 export * as ed25519 from '../index.js';
 import { sha512 } from '@noble/hashes/sha512';
+import { hexToBytes } from '@noble/hashes/utils';
 ed.etc.sha512Sync = (...m) => sha512(ed.etc.concatBytes(...m));
+
+export function numberToBytesLE(num, len = 32) {
+  return hexToBytes(num.toString(16).padStart(len * 2, '0')).reverse();
+}
 
 export const ED25519_TORSION_SUBGROUP = [
   '0100000000000000000000000000000000000000000000000000000000000000',
