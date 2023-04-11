@@ -132,19 +132,21 @@ export const utils: {
 
 export class ExtendedPoint { // Elliptic curve point in Extended (x, y, z, t) coordinates.
   constructor(ex: bigint, ey: bigint, ez: bigint, et: bigint);
+  static readonly BASE: Point;
+  static readonly ZERO: Point;
   static fromAffine(point: AffinePoint): ExtendedPoint;
   static fromHex(hash: string);
   get x(): bigint;
   get y(): bigint;
+  // Note: It does not check whether the `other` point is valid point on curve.
+  add(other: ExtendedPoint): ExtendedPoint;
+  equals(other: ExtendedPoint): boolean;
+  isTorsionFree(): boolean; // Multiplies the point by curve order
+  multiply(scalar: bigint): ExtendedPoint;
+  subtract(other: ExtendedPoint): ExtendedPoint;
   toAffine(): Point;
   toRawBytes(): Uint8Array;
   toHex(): string; // Compact representation of a Point
-  isTorsionFree(): boolean; // Multiplies the point by curve order
-  equals(other: ExtendedPoint): boolean;
-  // Note: It does not check whether the `other` point is valid point on curve.
-  add(other: ExtendedPoint): ExtendedPoint;
-  subtract(other: ExtendedPoint): ExtendedPoint;
-  multiply(scalar: bigint): ExtendedPoint;
 }
 // Curve params
 ed25519.CURVE.p // 2 ** 255 - 19
