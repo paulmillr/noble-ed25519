@@ -1,8 +1,7 @@
 # noble-ed25519
 
-[Fastest](#speed) 4KB JS implementation of [ed25519](https://en.wikipedia.org/wiki/EdDSA)
-elliptic curve. Auditable, high-security, 0-dependency EdDSA signatures compliant with
-[RFC8032](https://tools.ietf.org/html/rfc8032) and [ZIP215](https://zips.z.cash/zip-0215).
+[Fastest](#speed) 4KB JS implementation of ed25519 [EDDSA](https://en.wikipedia.org/wiki/EdDSA)
+signatures compliant with [RFC8032](https://tools.ietf.org/html/rfc8032) & [ZIP215](https://zips.z.cash/zip-0215).
 
 The library is a tiny single-feature version of
 [noble-curves](https://github.com/paulmillr/noble-curves), with some features
