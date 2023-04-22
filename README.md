@@ -185,13 +185,12 @@ be downloading malware with every `npm install`. Our goal is to minimize this at
 
 ## Speed
 
-Benchmarks done with Apple M2 on macOS 13 with Node.js 19.
+Benchmarks done with Apple M2 on macOS 13 with Node.js 20.
 
-    getPublicKey 1 bit x 8,260 ops/sec @ 121μs/op
-    getPublicKey(utils.randomPrivateKey()) x 8,096 ops/sec @ 123μs/op
-    sign x 4,084 ops/sec @ 244μs/op
-    verify x 872 ops/sec @ 1ms/op
-    Point.fromHex decompression x 14,523 ops/sec @ 68μs/op
+    getPublicKey(utils.randomPrivateKey()) x 9,173 ops/sec @ 109μs/op
+    sign x 4,567 ops/sec @ 218μs/op
+    verify x 994 ops/sec @ 1ms/op
+    Point.fromHex decompression x 16,164 ops/sec @ 61μs/op
 
 Compare to alternative implementations:
 
