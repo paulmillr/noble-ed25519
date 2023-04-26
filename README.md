@@ -9,10 +9,8 @@ removed. Check out curves as a drop-in replacement with common.js,
 [ristretto255](https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-ristretto255-decaf448),
 X25519 / curve25519, ed25519ph and ed25519ctx.
 
-Take a look at: [Upgrading](#upgrading) section for v1 to v2 transition instructions,
-[the online demo](https://paulmillr.com/noble/) and
-[ed25519-keygen](https://github.com/paulmillr/ed25519-keygen) if you need
-SSH/PGP/HDKey implementation using the library.
+Take a look at: [Upgrading](#upgrading) section for v1 to v2 transition instructions 
+and [the online demo](https://paulmillr.com/noble/).
 
 ### This library belongs to _noble_ crypto
 
