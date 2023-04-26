@@ -964,6 +964,23 @@ function signSync(message: Hex, privateKey: Hex): Uint8Array {
   return new Signature(R, s).toRawBytes();
 }
 
+function signWithContextSync(message: Hex, privateKey: Hex, context?: Uint8Array): Uint8Array {
+  message = ensureBytes(message);
+  const { prefix, scalar, pointBytes } = getExtendedPublicKeySync(privateKey);
+  context = context || new Uint8Array();
+  const contextBuffer = Buffer.concat([
+    Buffer.from("SigEd25519 no Ed25519 collisions", "ascii"),
+    new Uint8Array([1]),
+    new Uint8Array([context.length]),
+    new Uint8Array(context),
+  ]);
+  const r = modlLE(sha512s(contextBuffer, prefix, message)); // r = hash(context + prefix + msg)
+  const R = Point.BASE.multiply(r); // R = rG
+  const k = modlLE(sha512s(contextBuffer, R.toRawBytes(), pointBytes, message)); // k = hash(context+R+P+msg)
+  const s = mod(r + k * scalar, CURVE.l); // s = r + kp
+  return new Signature(R, s).toRawBytes();
+}
+
 // Helper functions because we have async and sync methods.
 function prepareVerification(sig: SigType, message: Hex, publicKey: PubKey) {
   message = ensureBytes(message);
@@ -1014,6 +1031,8 @@ export const sync = {
   getPublicKey: getPublicKeySync,
   /** Signs message with privateKey. RFC8032 5.1.6 */
   sign: signSync,
+  /** Signs message with privateKey, with a context prefix. */
+  signWithContext: signWithContextSync,
   /** Verifies ed25519 signature against message and public key. */
   verify: verifySync,
 };
