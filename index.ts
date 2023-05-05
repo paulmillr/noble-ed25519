@@ -255,7 +255,7 @@ const _verify = (sig: Hex, msg: Hex, pub: Hex, opts = dvo): Finishable<boolean> 
   } catch (error) {}
   const finish = (hashed: Bytes): boolean => {          // k = SHA512(dom2(F, C) || R || A || PH(M))
     if (SB == null) return false;                       // false if try-catch catched an error
-    if (!zip215 && A.isSmallOrder()) return false;
+    if (!zip215 && A.isSmallOrder()) return false;      // false for SBS: Strongly Binding Signature
     const k = modL_LE(hashed);                          // decode in little-endian, modulo L
     const RkA = R.add(A.mul(k, false));                 // [8]R + [8][k]A'
     return RkA.add(SB.negate()).clearCofactor().is0();      // [8][S]B = [8]R + [8][k]A'

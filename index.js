@@ -293,7 +293,7 @@ const _verify = (sig, msg, pub, opts = dvo) => {
         if (SB == null)
             return false; // false if try-catch catched an error
         if (!zip215 && A.isSmallOrder())
-            return false;
+            return false; // false for SBS: Strongly Binding Signature
         const k = modL_LE(hashed); // decode in little-endian, modulo L
         const RkA = R.add(A.mul(k, false)); // [8]R + [8][k]A'
         return RkA.add(SB.negate()).clearCofactor().is0(); // [8][S]B = [8]R + [8][k]A'
