@@ -3,7 +3,7 @@ const P = 2n ** 255n - 19n;                                     // ed25519 is tw
 const N = 2n ** 252n + 27742317777372353535851937790883648493n; // curve's (group) order
 const Gx = 0x216936d3cd6e53fec0a4e231fdd6dc5c692cc7609525a7b2c9562d608f25d51an; // base point x
 const Gy = 0x6666666666666666666666666666666666666666666666666666666666666658n; // base point y
-const CURVE = {        // Curve's formula is −x² + y² = -a + dx²y²
+const CURVE = {               // Curve's formula is −x² + y² = -a + dx²y²
   a: -1n,                     // where a=-1, d = -(121665/121666) == -(121665 * inv(121666)) mod P
   d: 37095705934669439343138083508754565189542113879843219016388785533085940283555n,
   p: P, n: N, h: 8, Gx, Gy    // field prime, curve (group) order, cofactor
@@ -30,7 +30,7 @@ class Point {                                           // Point in xyzt extende
     hex = toU8(hex, 32);
     const normed = hex.slice();                         // copy the array to not mess it up
     const lastByte = hex[31];
-    normed[31] = lastByte & ~0x80;                       // adjust first LE byte = last BE byte
+    normed[31] = lastByte & ~0x80;                      // adjust first LE byte = last BE byte
     const y = b2n_LE(normed);                           // decode as little-endian, convert to num
     if (zip215 && !(0n <= y && y < 2n ** 256n)) err('bad y coord 1'); // zip215=true  [1..2^256-1]
     if (!zip215 && !(0n <= y && y < P)) err('bad y coord 2');         // zip215=false [1..P-1]
@@ -258,7 +258,7 @@ const _verify = (sig: Hex, msg: Hex, pub: Hex, opts = dvo): Finishable<boolean> 
     if (!zip215 && A.isSmallOrder()) return false;      // false for SBS: Strongly Binding Signature
     const k = modL_LE(hashed);                          // decode in little-endian, modulo L
     const RkA = R.add(A.mul(k, false));                 // [8]R + [8][k]A'
-    return RkA.add(SB.negate()).clearCofactor().is0();      // [8][S]B = [8]R + [8][k]A'
+    return RkA.add(SB.negate()).clearCofactor().is0();  // [8][S]B = [8]R + [8][k]A'
   }
   return { hashable, finish };
 };
