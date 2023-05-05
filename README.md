@@ -1,7 +1,7 @@
 # noble-ed25519
 
 [Fastest](#speed) 4KB JS implementation of ed25519 [EDDSA](https://en.wikipedia.org/wiki/EdDSA)
-signatures compliant with [RFC8032](https://tools.ietf.org/html/rfc8032) & [ZIP215](https://zips.z.cash/zip-0215).
+signatures compliant with [RFC8032](https://tools.ietf.org/html/rfc8032), FIPS 186-5 & [ZIP215](https://zips.z.cash/zip-0215).
 
 The library is a tiny single-feature version of
 [noble-curves](https://github.com/paulmillr/noble-curves), with some features
@@ -9,7 +9,11 @@ removed. Check out curves as a drop-in replacement with common.js,
 [ristretto255](https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-ristretto255-decaf448),
 X25519 / curve25519, ed25519ph and ed25519ctx.
 
-Take a look at: [Upgrading](#upgrading) section for v1 to v2 transition instructions 
+Unlike many other libraries, noble-ed25519
+has SUF-CMA (strong unforgeability under chosen message attacks) and
+SBS (Strongly Binding Signatures) properties. See docs for verify function.
+
+Take a look at: [Upgrading](#upgrading) section for v1 to v2 transition instructions
 and [the online demo](https://paulmillr.com/noble/).
 
 ### This library belongs to _noble_ crypto
@@ -91,13 +95,12 @@ function sign(
 function signAsync(message: Hex, privateKey: Hex): Promise<Uint8Array>;
 
 // Verifies EdDSA signature. Uses ZIP215 (default) or RFC8032 verification rule.
-// [ZIP215](https://zips.z.cash/zip-0215):
-// - `0 <= sig.R/publicKey < 2**256` (can be `>= curve.P` aka non-canonical encoding)
-// - `0 <= sig.s < l`
-// - There is no security risk in ZIP behavior, and there is no effect on
-//   honestly generated sigs, but it is verify important for consensus-critical
-//   apps. See [It’s 255:19AM](https://hdevalence.ca/blog/2020-10-04-its-25519am).
-// RFC8032: enforces canonical encoding of R/publicKey. Enable with zip215=false
+// Default `verify` behavior follows [ZIP215](https://zips.z.cash/zip-0215) and
+// [can be used in consensus-critical applications](https://hdevalence.ca/blog/2020-10-04-its-25519am).
+// `zip215: false` option switches verification criteria to strict
+// RFC8032 / FIPS 186-5 which is also
+// SUF-CMA (strong unforgeability under chosen message attacks) and
+// SBS (Strongly Binding Signatures) as per [eprint 2020/1244](https://eprint.iacr.org/2020/1244).
 function verify(
   signature: Hex, // returned by the `sign` function
   message: Hex, // message that needs to be verified
@@ -160,7 +163,7 @@ It is cross-tested against [noble-curves](https://github.com/paulmillr/noble-cur
 and has similar security.
 
 1. The current version is rewrite of v1, which has been audited by cure53:
-[PDF](https://cure53.de/pentest-report_ed25519.pdf). 
+[PDF](https://cure53.de/pentest-report_ed25519.pdf).
 2. It's being fuzzed by [Guido Vranken's cryptofuzz](https://github.com/guidovranken/cryptofuzz):
 run the fuzzer by yourself to check.
 

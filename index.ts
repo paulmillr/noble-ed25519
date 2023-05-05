@@ -29,7 +29,8 @@ class Point {                                           // Point in xyzt extende
     const { d } = CURVE;
     hex = toU8(hex, 32);
     const normed = hex.slice();                         // copy the array to not mess it up
-    normed[31] = hex[31] & ~0x80;                       // adjust first LE byte = last BE byte
+    const lastByte = hex[31];
+    normed[31] = lastByte & ~0x80;                       // adjust first LE byte = last BE byte
     const y = b2n_LE(normed);                           // decode as little-endian, convert to num
     if (zip215 && !(0n <= y && y < 2n ** 256n)) err('bad y coord 1'); // zip215=true  [1..2^256-1]
     if (!zip215 && !(0n <= y && y < P)) err('bad y coord 2');         // zip215=false [1..P-1]
@@ -39,8 +40,9 @@ class Point {                                           // Point in xyzt extende
     let { isValid, value: x } = uvRatio(u, v);          // (uv³)(uv⁷)^(p-5)/8; square root
     if (!isValid) err('bad y coordinate 3');            // not square root: bad point
     const isXOdd = (x & 1n) === 1n;                     // adjust sign of x coordinate
-    const isHeadOdd = (hex[31] & 0x80) !== 0;
-    if (isHeadOdd !== isXOdd) x = mod(-x);
+    const isLastByteOdd = (lastByte & 0x80) !== 0;      // x_0, last bit
+    if (!zip215 && x === 0n && isLastByteOdd) err('bad y coord 3'); // x=0 and x_0 = 1
+    if (isLastByteOdd !== isXOdd) x = mod(-x);
     return new Point(x, y, 1n, mod(x * y));             // Z=1, T=xy
   }
   get x() { return this.toAffine().x; }                 // .x, .y will call expensive toAffine.
@@ -109,7 +111,7 @@ class Point {                                           // Point in xyzt extende
     return b;
   }
   toHex(): string { return b2h(this.toRawBytes()); }    // encode to hex string
-  
+
 }
 const { BASE: G, ZERO: I } = Point;                     // Generator, identity points
 const padh = (num: number | bigint, pad: number) => num.toString(16).padStart(pad, '0')
@@ -244,15 +246,16 @@ const _verify = (sig: Hex, msg: Hex, pub: Hex, opts = dvo): Finishable<boolean> 
   sig = toU8(sig, 64);                                  // Signature hex str/Bytes, must be 64 bytes
   const { zip215 } = opts;                              // switch between zip215 and rfc8032 verif
   let A: Point, R: Point, s: bigint, SB: Point, hashable = new Uint8Array();
-  try { 
+  try {
     A = Point.fromHex(pub, zip215);                     // public key A decoded
     R = Point.fromHex(sig.slice(0, 32), zip215);        // 0 <= R < 2^256: ZIP215 R can be >= P
     s = b2n_LE(sig.slice(32, 64));                      // Decode second half as an integer S
     SB = G.mul(s, false);                               // in the range 0 <= s < L
-    hashable = concatB(R.toRawBytes(), A.toRawBytes(), msg); // dom2(F, C) || R || A || PH(M)  
+    hashable = concatB(R.toRawBytes(), A.toRawBytes(), msg); // dom2(F, C) || R || A || PH(M)
   } catch (error) {}
   const finish = (hashed: Bytes): boolean => {          // k = SHA512(dom2(F, C) || R || A || PH(M))
     if (SB == null) return false;                       // false if try-catch catched an error
+    if (!zip215 && A.isSmallOrder()) return false;
     const k = modL_LE(hashed);                          // decode in little-endian, modulo L
     const RkA = R.add(A.mul(k, false));                 // [8]R + [8][k]A'
     return RkA.add(SB.negate()).clearCofactor().is0();      // [8][S]B = [8]R + [8][k]A'
@@ -261,9 +264,9 @@ const _verify = (sig: Hex, msg: Hex, pub: Hex, opts = dvo): Finishable<boolean> 
 };
 // RFC8032 5.1.7: verification async, sync
 const verifyAsync = async (s: Hex, m: Hex, p: Hex, opts = dvo) =>
-  hashFinish(true, _verify(s, m, p, dvo));
+  hashFinish(true, _verify(s, m, p, opts));
 const verify = (s: Hex, m: Hex, p: Hex, opts = dvo) =>
-  hashFinish(false, _verify(s, m, p));
+  hashFinish(false, _verify(s, m, p, opts));
 declare const globalThis: Record<string, any> | undefined; // Typescript symbol present in browsers
 const cr = () => // We support: 1) browsers 2) node.js 19+
   typeof globalThis === 'object' && 'crypto' in globalThis ? globalThis.crypto : undefined;
