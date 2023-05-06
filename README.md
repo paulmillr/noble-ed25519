@@ -9,9 +9,9 @@ removed. Check out curves as a drop-in replacement with common.js,
 [ristretto255](https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-ristretto255-decaf448),
 X25519 / curve25519, ed25519ph and ed25519ctx.
 
-Unlike many other libraries, noble-ed25519
-has SUF-CMA (strong unforgeability under chosen message attacks) and
-SBS (Strongly Binding Signatures) properties. See docs for verify function.
+Unlike most other libraries, noble-ed25519 has
+SUF-CMA (strong unforgeability under chosen message attacks)
+and non-repudiation (SBS; Strongly Binding Signatures). See `verify` docs for details.
 
 Take a look at: [Upgrading](#upgrading) section for v1 to v2 transition instructions
 and [the online demo](https://paulmillr.com/noble/).
@@ -94,13 +94,13 @@ function sign(
 ): Uint8Array;
 function signAsync(message: Hex, privateKey: Hex): Promise<Uint8Array>;
 
-// Verifies EdDSA signature. Uses ZIP215 (default) or RFC8032 verification rule.
+// Verifies EdDSA signature.
 // Default `verify` behavior follows [ZIP215](https://zips.z.cash/zip-0215) and
 // [can be used in consensus-critical applications](https://hdevalence.ca/blog/2020-10-04-its-25519am).
+// It has SUF-CMA (strong unforgeability under chosen message attacks).
 // `zip215: false` option switches verification criteria to strict
-// RFC8032 / FIPS 186-5 which is also
-// SUF-CMA (strong unforgeability under chosen message attacks) and
-// SBS (Strongly Binding Signatures) as per [eprint 2020/1244](https://eprint.iacr.org/2020/1244).
+// RFC8032 / FIPS 186-5 and provides non-repudiation with
+// SBS [(Strongly Binding Signatures)](https://eprint.iacr.org/2020/1244).
 function verify(
   signature: Hex, // returned by the `sign` function
   message: Hex, // message that needs to be verified
