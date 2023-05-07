@@ -1,19 +1,19 @@
 # noble-ed25519
 
 [Fastest](#speed) 4KB JS implementation of ed25519 [EDDSA](https://en.wikipedia.org/wiki/EdDSA)
-signatures compliant with [RFC8032](https://tools.ietf.org/html/rfc8032), FIPS 186-5 & [ZIP215](https://zips.z.cash/zip-0215).
+signatures compliant with [RFC8032](https://tools.ietf.org/html/rfc8032),
+FIPS 186-5 & [ZIP215](https://zips.z.cash/zip-0215).
 
-The library is a tiny single-feature version of
-[noble-curves](https://github.com/paulmillr/noble-curves), with some features
-removed. Check out curves as a drop-in replacement with common.js,
-[ristretto255](https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-ristretto255-decaf448),
-X25519 / curve25519, ed25519ph and ed25519ctx.
+If you're looking for additional features,
+check out [noble-curves](https://github.com/paulmillr/noble-curves):
+a drop-in replacement with common.js, ristretto255, X25519 / curve25519, ed25519ph and ed25519ctx.
 
-Unlike most other libraries, noble-ed25519 has
-SUF-CMA (strong unforgeability under chosen message attacks)
-and non-repudiation (SBS; Strongly Binding Signatures). See `verify` docs for details.
+Has SUF-CMA (strong unforgeability under chosen message attacks)
+and, unlike many other libraries, non-repudiation
+(SBS / Strongly Binding Signatures aka exclusive ownership).
+See `verify` docs for details.
 
-Take a look at: [Upgrading](#upgrading) section for v1 to v2 transition instructions
+Check out [Upgrading](#upgrading) section for v1 to v2 transition instructions
 and [the online demo](https://paulmillr.com/noble/).
 
 ### This library belongs to _noble_ crypto
