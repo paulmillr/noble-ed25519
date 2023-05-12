@@ -46,12 +46,12 @@ import * as ed from '@noble/ed25519'; // ESM-only. Use bundler for common.js
   const privKey = ed.utils.randomPrivateKey(); // Secure random private key
   const message = Uint8Array.from([0xab, 0xbc, 0xcd, 0xde]);
   const pubKey = await ed.getPublicKeyAsync(privKey);
-  const signature = await ed.signAsync(message, privKey);
+  const signature = await ed.signAsync(message, privKey); // sync methods below
   const isValid = await ed.verifyAsync(signature, message, pubKey);
 })();
 ```
 
-Advanced examples:
+Note that node.js <= 18 requires `global.crypto` polyfill. Advanced examples:
 
 ```ts
 // 1. Use the shim to enable synchronous methods.
@@ -62,9 +62,9 @@ ed.getPublicKey(privateKey); // sync methods can be used now
 ed.sign(message, privateKey);
 ed.verify(signature, message, publicKey);
 
-// 2. Use the shim only for node.js <= 18 BEFORE importing noble-secp256k1.
-// The library depends on global variable crypto to work. It is available in
-// all browsers and many environments, but node.js <= 18 don't have it.
+// 2. Use the shim only in node.js <= 18 BEFORE importing noble.
+// `crypto` global variable is already present in all browsers and node.js 19+.
+// It is necessary for the library to work.
 import { webcrypto } from 'node:crypto';
 // @ts-ignore
 if (!globalThis.crypto) globalThis.crypto = webcrypto;
