@@ -32,9 +32,11 @@ and [the online demo](https://paulmillr.com/noble/).
 
 ## Usage
 
-Browser, deno, node.js and unpkg are supported:
-
 > npm install @noble/ed25519
+
+We support all major platforms and runtimes.
+For node.js <= 18, a polyfill for `globalThis.crypto` is needed, see below.
+For React Native, you may need a [polyfill for getRandomValues](https://github.com/LinusU/react-native-get-random-values).
 
 ```js
 import * as ed from '@noble/ed25519'; // ESM-only. Use bundler for common.js
@@ -51,20 +53,18 @@ import * as ed from '@noble/ed25519'; // ESM-only. Use bundler for common.js
 })();
 ```
 
-Note that node.js <= 18 requires `global.crypto` polyfill. Advanced examples:
+Advanced examples:
 
 ```ts
-// 1. Use the shim to enable synchronous methods.
-// Only async methods are available by default to keep library dependency-free.
+// Enable synchronous methods.
+// Only async methods are available by default, to keep the library dependency-free.
 import { sha512 } from '@noble/hashes/sha512';
 ed.etc.sha512Sync = (...m) => sha512(ed.etc.concatBytes(...m));
 ed.getPublicKey(privateKey); // sync methods can be used now
 ed.sign(message, privateKey);
 ed.verify(signature, message, publicKey);
 
-// 2. Use the shim only in node.js <= 18 BEFORE importing noble.
-// `crypto` global variable is already present in all browsers and node.js 19+.
-// It is necessary for the library to work.
+// node.js 18 and earlier requires globalThis.crypto polyfill.
 import { webcrypto } from 'node:crypto';
 // @ts-ignore
 if (!globalThis.crypto) globalThis.crypto = webcrypto;
@@ -113,7 +113,7 @@ function verifyAsync(signature: Hex, message: Hex, publicKey: Hex): Promise<bool
 A bunch of useful **utilities** are also exposed:
 
 ```typescript
-export const etc: {
+const etc: {
   bytesToHex: (b: Bytes) => string;
   hexToBytes: (hex: string) => Bytes;
   concatBytes: (...arrs: Bytes[]) => Uint8Array;
@@ -123,14 +123,14 @@ export const etc: {
   sha512Async: (...messages: Bytes[]) => Promise<Bytes>;
   sha512Sync: Sha512FnSync;
 };
-export const utils: {
+const utils: {
   getExtendedPublicKeyAsync: (priv: Hex) => Promise<ExtK>;
   getExtendedPublicKey: (priv: Hex) => ExtK;
   precompute(p: Point, w?: number): Point;
   randomPrivateKey: () => Bytes;
 };
 
-export class ExtendedPoint { // Elliptic curve point in Extended (x, y, z, t) coordinates.
+class ExtendedPoint { // Elliptic curve point in Extended (x, y, z, t) coordinates.
   constructor(ex: bigint, ey: bigint, ez: bigint, et: bigint);
   static readonly BASE: Point;
   static readonly ZERO: Point;
