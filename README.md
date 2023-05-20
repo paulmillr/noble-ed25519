@@ -39,7 +39,7 @@ For node.js <= 18, a polyfill for `globalThis.crypto` is needed, see below.
 For React Native, you may need a [polyfill for getRandomValues](https://github.com/LinusU/react-native-get-random-values).
 
 ```js
-import * as ed from '@noble/ed25519'; // ESM-only. Use bundler for common.js
+import * as ed from '@noble/ed25519';
 // import * as ed from "https://deno.land/x/ed25519/mod.ts"; // Deno
 // import * as ed from "https://unpkg.com/@noble/ed25519"; // Unpkg
 (async () => {
@@ -47,8 +47,8 @@ import * as ed from '@noble/ed25519'; // ESM-only. Use bundler for common.js
   // Uint8Array.from([0xde, 0xad, 0xbe, 0xef]) === 'deadbeef'
   const privKey = ed.utils.randomPrivateKey(); // Secure random private key
   const message = Uint8Array.from([0xab, 0xbc, 0xcd, 0xde]);
-  const pubKey = await ed.getPublicKeyAsync(privKey);
-  const signature = await ed.signAsync(message, privKey); // sync methods below
+  const pubKey = await ed.getPublicKeyAsync(privKey); // Sync methods below
+  const signature = await ed.signAsync(message, privKey);
   const isValid = await ed.verifyAsync(signature, message, pubKey);
 })();
 ```
@@ -60,9 +60,9 @@ Advanced examples:
 // Only async methods are available by default, to keep the library dependency-free.
 import { sha512 } from '@noble/hashes/sha512';
 ed.etc.sha512Sync = (...m) => sha512(ed.etc.concatBytes(...m));
-ed.getPublicKey(privateKey); // sync methods can be used now
-ed.sign(message, privateKey);
-ed.verify(signature, message, publicKey);
+// ed.getPublicKey(privKey); // sync methods can be used now
+// ed.sign(message, privKey);
+// ed.verify(signature, message, pubKey);
 
 // node.js 18 and earlier requires globalThis.crypto polyfill.
 import { webcrypto } from 'node:crypto';
