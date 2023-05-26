@@ -36,7 +36,7 @@ and [the online demo](https://paulmillr.com/noble/).
 
 We support all major platforms and runtimes.
 For node.js <= 18, a polyfill for `globalThis.crypto` is needed, see below.
-For React Native, you may need a [polyfill for getRandomValues](https://github.com/LinusU/react-native-get-random-values).
+For React Native, which doesn't implement webcrypto, you may need a [polyfill for crypto.getRandomValues](https://github.com/LinusU/react-native-get-random-values) and either a polyfill for webcrypto, or simply enabling synchronous methods.
 
 ```js
 import * as ed from '@noble/ed25519';
