@@ -76,34 +76,45 @@ ed.etc.sha512Async = (...m) => Promise.resolve(ed.etc.sha512Sync(...m));
 ## API
 
 There are 3 main methods: `getPublicKey(privateKey)`, `sign(message, privateKey)`
-and `verify(signature, message, publicKey)`.
+and `verify(signature, message, publicKey)`. We accept Hex type everywhere:
+
+```ts
+type Hex = Uint8Array | string
+```
+
+### getPublicKey
 
 ```typescript
-type Hex = Uint8Array | string;
-// Generates 32-byte public key from 32-byte private key.
-// - Some libraries have 64-byte private keys. Don't worry, those are just
-//   priv+pub concatenated. Slice it: `priv64b.slice(0, 32)`
-// - Use `Point.fromPrivateKey(privateKey)` if you want `Point` instance instead
-// - Use `Point.fromHex(publicKey)` if you want to convert hex / bytes into Point.
-//   It will use decompression algorithm 5.1.3 of RFC 8032.
-// - Use `utils.getExtendedPublicKey` if you need full SHA512 hash of seed
 function getPublicKey(privateKey: Hex): Uint8Array;
 function getPublicKeyAsync(privateKey: Hex): Promise<Uint8Array>;
+```
 
-// Generates EdDSA signature.
+Generates 32-byte public key from 32-byte private key.
+- Some libraries have 64-byte private keys. Don't worry, those are just
+  priv+pub concatenated. Slice it: `priv64b.slice(0, 32)`
+- Use `Point.fromPrivateKey(privateKey)` if you want `Point` instance instead
+- Use `Point.fromHex(publicKey)` if you want to convert hex / bytes into Point.
+  It will use decompression algorithm 5.1.3 of RFC 8032.
+- Use `utils.getExtendedPublicKey` if you need full SHA512 hash of seed
+
+### sign
+
+```ts
 function sign(
   message: Hex, // message which would be signed
   privateKey: Hex // 32-byte private key
 ): Uint8Array;
 function signAsync(message: Hex, privateKey: Hex): Promise<Uint8Array>;
+```
 
-// Verifies EdDSA signature. Has SUF-CMA (strong unforgeability under chosen message attacks).
-// By default, follows ZIP215 [1] and can be used in consensus-critical apps [2].
-// `zip215: false` option switches verification criteria to strict
-// RFC8032 / FIPS 186-5 and provides non-repudiation with SBS (Strongly Binding Signatures) [3].
-// [1]: https://zips.z.cash/zip-0215
-// [2]: https://hdevalence.ca/blog/2020-10-04-its-25519am
-// [3]: https://eprint.iacr.org/2020/1244
+Generates EdDSA signature. Always deterministic.
+
+Assumes unhashed `message`: it would be hashed by ed25519 internally.
+For prehashed ed25519ph, switch to noble-curves.
+
+### verify
+
+```ts
 function verify(
   signature: Hex, // returned by the `sign` function
   message: Hex, // message that needs to be verified
@@ -112,6 +123,17 @@ function verify(
 ): boolean;
 function verifyAsync(signature: Hex, message: Hex, publicKey: Hex): Promise<boolean>;
 ```
+
+Verifies EdDSA signature. Has SUF-CMA (strong unforgeability under chosen message attacks).
+By default, follows ZIP215 [1] and can be used in consensus-critical apps [2].
+`zip215: false` option switches verification criteria to strict
+RFC8032 / FIPS 186-5 and provides non-repudiation with SBS (Strongly Binding Signatures) [3].
+
+[1]: https://zips.z.cash/zip-0215
+[2]: https://hdevalence.ca/blog/2020-10-04-its-25519am
+[3]: https://eprint.iacr.org/2020/1244
+
+### utils
 
 A bunch of useful **utilities** are also exposed:
 
