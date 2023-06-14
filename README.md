@@ -97,13 +97,13 @@ function sign(
 ): Uint8Array;
 function signAsync(message: Hex, privateKey: Hex): Promise<Uint8Array>;
 
-// Verifies EdDSA signature.
-// Default `verify` behavior follows [ZIP215](https://zips.z.cash/zip-0215) and
-// [can be used in consensus-critical applications](https://hdevalence.ca/blog/2020-10-04-its-25519am).
-// It has SUF-CMA (strong unforgeability under chosen message attacks).
+// Verifies EdDSA signature. Has SUF-CMA (strong unforgeability under chosen message attacks).
+// By default, follows ZIP215 [1] and can be used in consensus-critical apps [2].
 // `zip215: false` option switches verification criteria to strict
-// RFC8032 / FIPS 186-5 and provides non-repudiation with
-// SBS [(Strongly Binding Signatures)](https://eprint.iacr.org/2020/1244).
+// RFC8032 / FIPS 186-5 and provides non-repudiation with SBS (Strongly Binding Signatures) [3].
+// [1]: https://zips.z.cash/zip-0215
+// [2]: https://hdevalence.ca/blog/2020-10-04-its-25519am
+// [3]: https://eprint.iacr.org/2020/1244
 function verify(
   signature: Hex, // returned by the `sign` function
   message: Hex, // message that needs to be verified
