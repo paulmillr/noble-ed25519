@@ -273,7 +273,7 @@ const cr = () => // We support: 1) browsers 2) node.js 19+
 const etc = {
   bytesToHex: b2h, hexToBytes: h2b, concatBytes: concatB,
   mod, invert,
-  randomBytes: (len: number): Bytes => {                // CSPRNG (random number generator)
+  randomBytes: (len = 32): Bytes => {                     // CSPRNG (random number generator)
     const crypto = cr(); // Can be shimmed in node.js <= 18 to prevent error:
     // import { webcrypto } from 'node:crypto';
     // if (!globalThis.crypto) globalThis.crypto = webcrypto;
