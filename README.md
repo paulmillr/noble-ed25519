@@ -34,9 +34,7 @@ and [the online demo](https://paulmillr.com/noble/).
 
 > npm install @noble/ed25519
 
-We support all major platforms and runtimes.
-For node.js <= 18, a polyfill for `globalThis.crypto` is needed, see below.
-For React Native, which doesn't implement webcrypto, you may need a [polyfill for crypto.getRandomValues](https://github.com/LinusU/react-native-get-random-values) and either a polyfill for webcrypto, or simply enabling synchronous methods.
+We support all major platforms and runtimes. For node.js <= 18 and React Native, additional polyfills are needed: see below.
 
 ```js
 import * as ed from '@noble/ed25519';
@@ -53,7 +51,7 @@ import * as ed from '@noble/ed25519';
 })();
 ```
 
-Advanced examples:
+Additional steps needed for some environments:
 
 ```ts
 // 1. Enable synchronous methods.
@@ -72,7 +70,7 @@ if (!globalThis.crypto) globalThis.crypto = webcrypto;
 import 'react-native-get-random-values';
 import { sha512 } from '@noble/hashes/sha512';
 ed.etc.sha512Sync = (...m) => sha512(ed.etc.concatBytes(...m));
-ed.etc.sha512Async = (...m) => Promise.resolve(sha512(ed.etc.concatBytes(...m)));
+ed.etc.sha512Async = (...m) => Promise.resolve(ed.etc.sha512Sync(...m));
 ```
 
 ## API
