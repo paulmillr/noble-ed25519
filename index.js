@@ -312,13 +312,13 @@ const etc = {
         const crypto = cr(); // Can be shimmed in node.js <= 18 to prevent error:
         // import { webcrypto } from 'node:crypto';
         // if (!globalThis.crypto) globalThis.crypto = webcrypto;
-        if (!crypto)
+        if (!crypto || !crypto.getRandomValues)
             err('crypto.getRandomValues must be defined');
         return crypto.getRandomValues(u8n(len));
     },
     sha512Async: async (...messages) => {
         const crypto = cr();
-        if (!crypto)
+        if (!crypto || !crypto.subtle)
             err('crypto.subtle or etc.sha512Async must be defined');
         const m = concatB(...messages);
         return u8n(await crypto.subtle.digest('SHA-512', m.buffer));
