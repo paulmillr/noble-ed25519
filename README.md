@@ -56,18 +56,23 @@ import * as ed from '@noble/ed25519';
 Advanced examples:
 
 ```ts
-// Enable synchronous methods.
+// 1. Enable synchronous methods.
 // Only async methods are available by default, to keep the library dependency-free.
 import { sha512 } from '@noble/hashes/sha512';
 ed.etc.sha512Sync = (...m) => sha512(ed.etc.concatBytes(...m));
-// ed.getPublicKey(privKey); // sync methods can be used now
-// ed.sign(message, privKey);
-// ed.verify(signature, message, pubKey);
+// Sync methods can be used now:
+// ed.getPublicKey(privKey); ed.sign(msg, privKey); ed.verify(signature, msg, pubKey);
 
-// node.js 18 and earlier requires globalThis.crypto polyfill.
+// 2. node.js 18 and earlier,  needs globalThis.crypto polyfill
 import { webcrypto } from 'node:crypto';
 // @ts-ignore
 if (!globalThis.crypto) globalThis.crypto = webcrypto;
+
+// 3. React Native needs crypto.getRandomValues polyfill and sha512
+import 'react-native-get-random-values';
+import { sha512 } from '@noble/hashes/sha512';
+ed.etc.sha512Sync = (...m) => sha512(ed.etc.concatBytes(...m));
+ed.etc.sha512Async = (...m) => Promise.resolve(sha512(ed.etc.concatBytes(...m)));
 ```
 
 ## API
