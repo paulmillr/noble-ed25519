@@ -234,7 +234,7 @@ Compare to alternative implementations:
 1. Clone the repository
 2. `npm install` to install build dependencies like TypeScript
 3. `npm run build` to compile TypeScript code
-4. `npm run test` to run jest on `test/index.ts`
+4. `npm run test` to run tests
 
 ## Upgrading
 
