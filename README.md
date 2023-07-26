@@ -52,7 +52,7 @@ import * as ed from '@noble/ed25519';
 })();
 ```
 
-Additional steps needed for some environments:
+Additional polyfills for some environments:
 
 ```ts
 // 1. Enable synchronous methods.
@@ -62,7 +62,7 @@ ed.etc.sha512Sync = (...m) => sha512(ed.etc.concatBytes(...m));
 // Sync methods can be used now:
 // ed.getPublicKey(privKey); ed.sign(msg, privKey); ed.verify(signature, msg, pubKey);
 
-// 2. node.js 18 and earlier,  needs globalThis.crypto polyfill
+// 2. node.js 18 and earlier, requires polyfilling globalThis.crypto
 import { webcrypto } from 'node:crypto';
 // @ts-ignore
 if (!globalThis.crypto) globalThis.crypto = webcrypto;
