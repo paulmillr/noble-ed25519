@@ -332,7 +332,7 @@ Object.defineProperties(etc, { sha512Sync: {
 const utils = {
     getExtendedPublicKeyAsync, getExtendedPublicKey,
     randomPrivateKey: () => etc.randomBytes(32),
-    precompute(w = 8, p = G) { p.multiply(3n); return p; }, // no-op
+    precompute(w = 8, p = G) { p.multiply(3n); w; return p; }, // no-op
 };
 const W = 8; // Precomputes-related code. W = window size
 const precompute = () => {

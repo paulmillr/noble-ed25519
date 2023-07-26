@@ -294,7 +294,7 @@ Object.defineProperties(etc, { sha512Sync: {  // Allow setting it once. Next set
 const utils = {
   getExtendedPublicKeyAsync, getExtendedPublicKey,
   randomPrivateKey: (): Bytes => etc.randomBytes(32),
-  precompute(w=8, p: Point = G) { p.multiply(3n); return p; }, // no-op
+  precompute(w=8, p: Point = G) { p.multiply(3n); w; return p; }, // no-op
 }
 const W = 8;                                            // Precomputes-related code. W = window size
 const precompute = () => {                              // They give 12x faster getPublicKey(),
