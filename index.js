@@ -12,7 +12,7 @@ const err = (m = '') => { throw new Error(m); }; // error helper, messes-up stac
 const str = (s) => typeof s === 'string'; // is string
 const au8 = (a, l) => // is Uint8Array (of specific length)
  !(a instanceof Uint8Array) || (typeof l === 'number' && l > 0 && a.length !== l) ?
-    err('Uint8Array expected') : a;
+    err('Uint8Array of valid length expected') : a;
 const u8n = (data) => new Uint8Array(data); // creates Uint8Array
 const toU8 = (a, len) => au8(str(a) ? h2b(a) : u8n(a), len); // norm(hex/u8a) to u8a
 const mod = (a, b = P) => { let r = a % b; return r >= 0n ? r : b + r; }; // mod division
