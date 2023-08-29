@@ -184,35 +184,53 @@ ed25519.ExtendedPoint.BASE // new ed25519.Point(Gx, Gy) where
 
 ## Security
 
-The module is production-ready.
-It is cross-tested against [noble-curves](https://github.com/paulmillr/noble-curves),
-and has similar security.
+The library has not been independently audited as of v2, which is a rewrite of v1.
+v1 has been audited by [Cure53](https://cure53.de/pentest-report_ed25519.pdf) in Feb 2022.
 
-1. The current version is rewrite of v1, which has been audited by cure53:
-[PDF](https://cure53.de/pentest-report_ed25519.pdf).
-2. It's being fuzzed by [Guido Vranken's cryptofuzz](https://github.com/guidovranken/cryptofuzz):
-run the fuzzer by yourself to check.
+The code is identical to [noble-curves](https://github.com/paulmillr/noble-curves), which *has* been audited.
 
-Our EC multiplication is hardened to be algorithmically constant time.
-We're using built-in JS `BigInt`, which is potentially vulnerable to
-[timing attacks](https://en.wikipedia.org/wiki/Timing_attack) as
-[per MDN](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/BigInt#cryptography).
-But, _JIT-compiler_ and _Garbage Collector_ make "constant time" extremely hard
-to achieve in a scripting language. Which means _any other JS library doesn't
-use constant-time bigints_. Including bn.js or anything else.
-Even statically typed Rust, a language without GC,
+It is tested against property-based, cross-library and Wycheproof vectors,
+and has fuzzing by [Guido Vranken's cryptofuzz](https://github.com/guidovranken/cryptofuzz).
+
+### Constant-timeness
+
+_JIT-compiler_ and _Garbage Collector_ make "constant time" extremely hard to
+achieve [timing attack](https://en.wikipedia.org/wiki/Timing_attack) resistance
+in a scripting language. Which means _any other JS library can't have
+constant-timeness_. Even statically typed Rust, a language without GC,
 [makes it harder to achieve constant-time](https://www.chosenplaintext.ca/open-source/rust-timing-shield/security)
-for some cases. If your goal is absolute security, don't use any JS lib —
-including bindings to native ones. Use low-level libraries & languages.
+for some cases. If your goal is absolute security, don't use any JS lib — including bindings to native ones.
+Use low-level libraries & languages. Nonetheless we're targetting algorithmic constant time.
+
+### Supply chain security
+
+1. **Commits** are signed with PGP keys, to prevent forgery. Make sure to verify commit signatures.
+2. **Releases** are transparent and built on GitHub CI. Make sure to verify [provenance](https://docs.npmjs.com/generating-provenance-statements) logs
+3. **Rare releasing** is followed.
+   The less often it is done, the less code dependents would need to audit
+4. **Dependencies** are minimal:
+   - All deps are prevented from automatic updates and have locked-down version ranges. Every update is checked with `npm-diff`
+   - Updates themselves are rare, to ensure rogue updates are not catched accidentally
+5. devDependencies are only used if you want to contribute to the repo. They are disabled for end-users:
+   - [noble-hashes](https://github.com/paulmillr/noble-hashes) is used, by the same author, to provide hashing functionality tests
+   - micro-bmark and micro-should are developed by the same author and follow identical security practices
+   - fast-check (property-based testing) and typescript are used for code quality, vector generation and ts compilation.
+   The packages are big, which makes it hard to audit their source code thoroughly and fully
 
 We consider infrastructure attacks like rogue NPM modules very important;
-that's why it's crucial to minimize the amount of 3rd-party dependencies & native
-bindings. If your app uses 500 dependencies, any dep could get hacked and you'll
-be downloading malware with every `npm install`. Our goal is to minimize this attack vector.
+that's why it's crucial to minimize the amount of 3rd-party dependencies & native bindings.
+If your app uses 500 dependencies, any dep could get hacked and you'll be
+downloading malware with every install. Our goal is to minimize this attack vector.
 
-As for key generation, we're deferring to built-in
+If you see anything unusual: investigate and report.
+
+### Randomness
+
+We're deferring to built-in
 [crypto.getRandomValues](https://developer.mozilla.org/en-US/docs/Web/API/Crypto/getRandomValues)
 which is considered cryptographically secure (CSPRNG).
+
+In the past, browsers had bugs that made it weak: it may happen again.
 
 ## Speed
 
