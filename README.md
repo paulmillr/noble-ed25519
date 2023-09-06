@@ -1,29 +1,26 @@
 # noble-ed25519
 
-[Fastest](#speed) 4KB JS implementation of ed25519 [EDDSA](https://en.wikipedia.org/wiki/EdDSA)
-signatures compliant with [RFC8032](https://tools.ietf.org/html/rfc8032),
-FIPS 186-5 & [ZIP215](https://zips.z.cash/zip-0215).
+Fastest 4KB JS implementation of ed25519 signatures.
 
-If you're looking for additional features,
-check out [noble-curves](https://github.com/paulmillr/noble-curves):
-a drop-in replacement with common.js, ristretto255, X25519 / curve25519, ed25519ph and ed25519ctx.
+- ✍️ [EDDSA](https://en.wikipedia.org/wiki/EdDSA) signatures compliant with [RFC8032](https://tools.ietf.org/html/rfc8032),
+  FIPS 186-5
+- 🪢 Consensus-friendly, compliant with [ZIP215](https://zips.z.cash/zip-0215)
+- 🔖 SUF-CMA (strong unforgeability under chosen message attacks) and SBS (non-repudiation / exclusive ownership)
+- 🪶 4KB gzipped, 350 lines of code
 
-Has SUF-CMA (strong unforgeability under chosen message attacks)
-and, unlike many other libraries, non-repudiation
-(SBS / Strongly Binding Signatures aka exclusive ownership).
-See `verify` docs for details.
-
-Check out [Upgrading](#upgrading) section for v1 to v2 transition instructions
-and [the online demo](https://paulmillr.com/noble/).
+To upgrade from v1 to v2, see [Upgrading](#upgrading).
+If you're looking for additional features (cjs, ristretto255, X25519, curve25519, ed25519ph, ed25519ctx),
+check out a drop-in replacement [noble-curves](https://github.com/paulmillr/noble-curves).
+[Online demo](https://paulmillr.com/noble/).
 
 ### This library belongs to _noble_ crypto
 
 > **noble-crypto** — high-security, easily auditable set of contained cryptographic libraries and tools.
 
-- No dependencies, protection against supply chain attacks
-- Auditable TypeScript / JS code
+- Zero or minimal dependencies
 - Supported on all major platforms
-- Releases are signed with PGP keys and built transparently with NPM provenance
+- Highly readable TypeScript / JS code
+- PGP-signed releases & transparent NPM builds with provenance
 - Check out [homepage](https://paulmillr.com/noble/) & all libraries:
   [ciphers](https://github.com/paulmillr/noble-ciphers),
   [curves](https://github.com/paulmillr/noble-curves),
