@@ -6,6 +6,7 @@ Fastest 4KB JS implementation of ed25519 signatures.
   FIPS 186-5
 - 🪢 Consensus-friendly, compliant with [ZIP215](https://zips.z.cash/zip-0215)
 - 🔖 SUF-CMA (strong unforgeability under chosen message attacks) and SBS (non-repudiation / exclusive ownership)
+- 📦 Pure ESM, can be imported without transpilers
 - 🪶 4KB gzipped, 350 lines of code
 
 To upgrade from v1 to v2, see [Upgrading](#upgrading).
