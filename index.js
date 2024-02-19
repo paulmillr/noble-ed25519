@@ -129,8 +129,8 @@ class Point {
     }
     toAffine() {
         const { ex: x, ey: y, ez: z } = this; // (x, y, z, t) ∋ (x=x/z, y=y/z, t=xy)
-        if (this.is0())
-            return { x: 0n, y: 0n }; // fast-path for zero point
+        if (this.equals(I))
+            return { x: 0n, y: 1n }; // fast-path for zero point
         const iz = invert(z); // z^-1: invert z
         if (mod(z * iz) !== 1n)
             err('invalid inverse'); // (z * z^-1) must be 1, otherwise bad math
