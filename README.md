@@ -9,8 +9,9 @@ Fastest 4KB JS implementation of ed25519 signatures.
 - 📦 Pure ESM, can be imported without transpilers
 - 🪶 4KB gzipped, 350 lines of code
 
-Use [noble-curves](https://github.com/paulmillr/noble-curves) instead, if you need additional features such as
-common.js support, ristretto255, X25519, curve25519, ed25519ph, ed25519ctx. To upgrade from v1 to v2, see [Upgrading](#upgrading). [Online demo](https://paulmillr.com/noble/).
+Use larger drop-in replacement [noble-curves](https://github.com/paulmillr/noble-curves) instead,
+if you need additional features such as common.js support, ristretto255, X25519, curve25519, ed25519ph, ed25519ctx.
+To upgrade from v1 to v2, see [Upgrading](#upgrading). [Online demo](https://paulmillr.com/noble/).
 
 ### This library belongs to _noble_ cryptography
 
