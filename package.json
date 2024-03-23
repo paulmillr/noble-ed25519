@@ -15,7 +15,7 @@
   "scripts": {
     "build": "tsc",
     "build:release": "rollup -c rollup.config.js",
-    "test": "node test/ed25519.test.js",
+    "test": "node test/index.test.js",
     "bench": "node test/benchmark/benchmark.js",
     "min": "cd test/build; npm install; npm run terser",
     "loc": "echo \"`npm run --silent min | wc -c` symbols `wc -l < index.ts` LOC, `npm run --silent min | gzip -c8 | wc -c`B gzipped\""
