@@ -11,14 +11,17 @@ const CURVE = {               // Curve's formula is −x² + y² = -a + dx²y²
 type Bytes = Uint8Array; type Hex = Bytes | string;     // types
 const err = (m = ''): never => { throw new Error(m); }; // error helper, messes-up stack trace
 const str = (s: unknown): s is string => typeof s === 'string'; // is string
+const isu8 = (a: unknown): a is Uint8Array => (
+  a instanceof Uint8Array ||
+  (a != null && typeof a === 'object' && a.constructor.name === 'Uint8Array')
+);
 const au8 = (a: unknown, l?: number): Bytes =>          // is Uint8Array (of specific length)
-  !(a instanceof Uint8Array) || (typeof l === 'number' && l > 0 && a.length !== l) ?
-  err('Uint8Array of valid length expected') : a;
+  !isu8(a) || (typeof l === 'number' && l > 0 && a.length !== l) ?
+    err('Uint8Array of valid length expected') : a;
 const u8n = (data?: any) => new Uint8Array(data);       // creates Uint8Array
-const toU8 = (a: Hex, len?: number) => au8(str(a) ? h2b(a) : u8n(a), len);  // norm(hex/u8a) to u8a
+const toU8 = (a: Hex, len?: number) => au8(str(a) ? h2b(a) : u8n(au8(a)), len);  // norm(hex/u8a) to u8a
 const mod = (a: bigint, b = P) => { let r = a % b; return r >= 0n ? r : b + r; }; // mod division
 const isPoint = (p: any) => (p instanceof Point ? p : err('Point expected')); // is xyzt point
-let Gpows: Point[] | undefined = undefined;             // precomputes for base point G
 interface AffinePoint { x: bigint, y: bigint }          // Point in 2d xy affine coordinates
 class Point {                                           // Point in xyzt extended coordinates
   constructor(readonly ex: bigint, readonly ey: bigint, readonly ez: bigint, readonly et: bigint) {}
@@ -309,6 +312,7 @@ const precompute = () => {                              // They give 12x faster 
   }                                                     // which multiplies user point by scalar,
   return points;                                        // when precomputes are using base point
 }
+let Gpows: Point[] | undefined = undefined;             // precomputes for base point G
 const wNAF = (n: bigint): { p: Point; f: Point } => {   // w-ary non-adjacent form (wNAF) method.
                                                         // Compared to other point mult methods,
   const comp = Gpows || (Gpows = precompute());         // stores 2x less points using subtraction
