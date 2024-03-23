@@ -24,6 +24,7 @@ To upgrade from v1 to v2, see [Upgrading](#upgrading). [Online demo](https://pau
   [ciphers](https://github.com/paulmillr/noble-ciphers),
   [curves](https://github.com/paulmillr/noble-curves),
   [hashes](https://github.com/paulmillr/noble-hashes),
+  [post-quantum](https://github.com/paulmillr/noble-post-quantum),
   4kb [secp256k1](https://github.com/paulmillr/noble-secp256k1) /
   [ed25519](https://github.com/paulmillr/noble-ed25519)
 
@@ -58,7 +59,7 @@ ed.etc.sha512Sync = (...m) => sha512(ed.etc.concatBytes(...m));
 // Sync methods can be used now:
 // ed.getPublicKey(privKey); ed.sign(msg, privKey); ed.verify(signature, msg, pubKey);
 
-// 2. node.js 18 and earlier, requires polyfilling globalThis.crypto
+// 2. node.js 18 and older, requires polyfilling globalThis.crypto
 import { webcrypto } from 'node:crypto';
 // @ts-ignore
 if (!globalThis.crypto) globalThis.crypto = webcrypto;
