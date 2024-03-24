@@ -14,12 +14,13 @@
   "sideEffects": false,
   "scripts": {
     "build": "tsc",
-    "build:release": "rollup -c rollup.config.js",
+    "build:min": "cd test/build; npm install; npm run terser",
+    "build:mingz": "npm run --silent build:min | gzip -c8",
+    "build:release": "npm run --silent build:min > test/build/noble-ed25519.min.js; npm run --silent build:mingz > test/build/noble-ed25519.min.js.gz",
     "test": "node test/index.test.js",
     "test:webcrypto": "node test/ed25519.webcrypto.test.js",
     "bench": "node test/benchmark/benchmark.js",
-    "min": "cd test/build; npm install; npm run terser",
-    "loc": "echo \"`npm run --silent min | wc -c` symbols `wc -l < index.ts` LOC, `npm run --silent min | gzip -c8 | wc -c`B gzipped\""
+    "loc": "echo \"`npm run --silent build:min | wc -c` symbols `wc -l < index.ts` LOC, `npm run --silent build:mingz | wc -c`B gzipped\""
   },
   "author": "Paul Miller (https://paulmillr.com)",
   "homepage": "https://paulmillr.com/noble/",
