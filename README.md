@@ -30,17 +30,18 @@ To upgrade from v1 to v2, see [Upgrading](#upgrading). [Online demo](https://pau
 
 ## Usage
 
-> npm install @noble/ed25519
+> `npm install @noble/ed25519`
+
+> `deno add @noble/ed25519`
 
 We support all major platforms and runtimes. For node.js <= 18 and React Native, additional polyfills are needed: see below.
 
 ```js
 import * as ed from '@noble/ed25519';
-// import * as ed from "https://deno.land/x/ed25519/mod.ts"; // Deno
 // import * as ed from "https://unpkg.com/@noble/ed25519"; // Unpkg
 (async () => {
-  // keys, messages & other inputs can be Uint8Arrays or hex strings
-  // Uint8Array.from([0xde, 0xad, 0xbe, 0xef]) === 'deadbeef'
+  // Uint8Arrays or hex strings are accepted:
+  // Uint8Array.from([0xde, 0xad, 0xbe, 0xef]) is equal to 'deadbeef'
   const privKey = ed.utils.randomPrivateKey(); // Secure random private key
   const message = Uint8Array.from([0xab, 0xbc, 0xcd, 0xde]);
   const pubKey = await ed.getPublicKeyAsync(privKey); // Sync methods below
@@ -77,7 +78,7 @@ There are 3 main methods: `getPublicKey(privateKey)`, `sign(message, privateKey)
 and `verify(signature, message, publicKey)`. We accept Hex type everywhere:
 
 ```ts
-type Hex = Uint8Array | string
+type Hex = Uint8Array | string;
 ```
 
 ### getPublicKey
@@ -88,6 +89,7 @@ function getPublicKeyAsync(privateKey: Hex): Promise<Uint8Array>;
 ```
 
 Generates 32-byte public key from 32-byte private key.
+
 - Some libraries have 64-byte private keys. Don't worry, those are just
   priv+pub concatenated. Slice it: `priv64b.slice(0, 32)`
 - Use `Point.fromPrivateKey(privateKey)` if you want `Point` instance instead
@@ -153,7 +155,8 @@ const utils: {
   randomPrivateKey: () => Bytes; // Uses CSPRNG https://developer.mozilla.org/en-US/docs/Web/API/Crypto/getRandomValues
 };
 
-class ExtendedPoint { // Elliptic curve point in Extended (x, y, z, t) coordinates.
+class ExtendedPoint {
+  // Elliptic curve point in Extended (x, y, z, t) coordinates.
   constructor(ex: bigint, ey: bigint, ez: bigint, et: bigint);
   static readonly BASE: Point;
   static readonly ZERO: Point;
@@ -172,9 +175,9 @@ class ExtendedPoint { // Elliptic curve point in Extended (x, y, z, t) coordinat
   toHex(): string; // Compact representation of a Point
 }
 // Curve params
-ed25519.CURVE.p // 2 ** 255 - 19
-ed25519.CURVE.n // 2 ** 252 + 27742317777372353535851937790883648493
-ed25519.ExtendedPoint.BASE // new ed25519.Point(Gx, Gy) where
+ed25519.CURVE.p; // 2 ** 255 - 19
+ed25519.CURVE.n; // 2 ** 252 + 27742317777372353535851937790883648493
+ed25519.ExtendedPoint.BASE; // new ed25519.Point(Gx, Gy) where
 // Gx=15112221349535400772501151409588531511454012693041857206046113283949847762202n
 // Gy=46316835694926478169428394003475163141307993866256225615783033603165251855960n;
 ```
@@ -184,7 +187,7 @@ ed25519.ExtendedPoint.BASE // new ed25519.Point(Gx, Gy) where
 The library has not been independently audited as of v2, which is a rewrite of v1.
 v1 has been audited by [Cure53](https://cure53.de/pentest-report_ed25519.pdf) in Feb 2022.
 
-The code is identical to [noble-curves](https://github.com/paulmillr/noble-curves), which *has* been audited.
+The code is identical to [noble-curves](https://github.com/paulmillr/noble-curves), which _has_ been audited.
 
 It is tested against property-based, cross-library and Wycheproof vectors,
 and has fuzzing by [Guido Vranken's cryptofuzz](https://github.com/guidovranken/cryptofuzz).
@@ -212,7 +215,7 @@ Use low-level libraries & languages. Nonetheless we're targetting algorithmic co
    - [noble-hashes](https://github.com/paulmillr/noble-hashes) is used, by the same author, to provide hashing functionality tests
    - micro-bmark and micro-should are developed by the same author and follow identical security practices
    - fast-check (property-based testing) and typescript are used for code quality, vector generation and ts compilation.
-   The packages are big, which makes it hard to audit their source code thoroughly and fully
+     The packages are big, which makes it hard to audit their source code thoroughly and fully
 
 We consider infrastructure attacks like rogue NPM modules very important;
 that's why it's crucial to minimize the amount of 3rd-party dependencies & native bindings.
