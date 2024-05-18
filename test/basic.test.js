@@ -4,7 +4,7 @@ import * as fc from 'fast-check';
 import * as ed25519 from '../index.js';
 import * as h from './ed25519.helpers.js';
 
-const CURVES = { ed25519 }
+const CURVES = { ed25519 };
 const name = 'ed25519';
 const C = CURVES[name];
 const CURVE_ORDER = C.CURVE.n;
@@ -136,10 +136,7 @@ for (const pointName in POINTS) {
           throws(() => G[1][op]('1'), "'1'");
           throws(() => G[1][op]({ x: 1n, y: 1n }), '{ x: 1n, y: 1n }');
           throws(() => G[1][op]({ x: 1n, y: 1n, z: 1n }), '{ x: 1n, y: 1n, z: 1n }');
-          throws(
-            () => G[1][op]({ x: 1n, y: 1n, z: 1n, t: 1n }),
-            '{ x: 1n, y: 1n, z: 1n, t: 1n }'
-          );
+          throws(() => G[1][op]({ x: 1n, y: 1n, z: 1n, t: 1n }), '{ x: 1n, y: 1n, z: 1n, t: 1n }');
           throws(() => G[1][op](new Uint8Array([])), 'ui8a([])');
           throws(() => G[1][op](new Uint8Array([0])), 'ui8a([0])');
           throws(() => G[1][op](new Uint8Array([1])), 'ui8a([1])');
@@ -264,11 +261,7 @@ describe(name, () => {
         const pub = C.getPublicKey(priv);
         const sig = C.sign(msg, priv);
         const err = `priv=${toHex(priv)},pub=${toHex(pub)},msg=${msg}`;
-        deepStrictEqual(
-          C.verify(sig, msg, pub),
-          true,
-          err
-        );
+        deepStrictEqual(C.verify(sig, msg, pub), true, err);
       }),
       { numRuns: NUM_RUNS }
     )
@@ -399,7 +392,7 @@ describe(name, () => {
 });
 
 // ESM is broken.
-import url from 'url';
+import url from 'node:url';
 if (import.meta.url === url.pathToFileURL(process.argv[1]).href) {
   should.run();
 }
