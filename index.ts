@@ -272,7 +272,7 @@ const verify = (s: Hex, m: Hex, p: Hex, opts = dvo) =>
   hashFinish(false, _verify(s, m, p, opts));
 declare const globalThis: Record<string, any> | undefined; // Typescript symbol present in browsers
 const cr = () => // We support: 1) browsers 2) node.js 19+
-  typeof globalThis === 'object' && 'crypto' in globalThis ? globalThis.crypto : undefined;
+  typeof globalThis === 'object' && 'crypto' in globalThis && 'subtle' in globalThis.crypto ? globalThis.crypto : undefined;
 const etc = {
   bytesToHex: b2h, hexToBytes: h2b, concatBytes: concatB,
   mod, invert,

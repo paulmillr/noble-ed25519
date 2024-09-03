@@ -305,7 +305,7 @@ const _verify = (sig, msg, pub, opts = dvo) => {
 const verifyAsync = async (s, m, p, opts = dvo) => hashFinish(true, _verify(s, m, p, opts));
 const verify = (s, m, p, opts = dvo) => hashFinish(false, _verify(s, m, p, opts));
 const cr = () => // We support: 1) browsers 2) node.js 19+
- typeof globalThis === 'object' && 'crypto' in globalThis ? globalThis.crypto : undefined;
+ typeof globalThis === 'object' && 'crypto' in globalThis && 'subtle' in globalThis.crypto ? globalThis.crypto : undefined;
 const etc = {
     bytesToHex: b2h, hexToBytes: h2b, concatBytes: concatB,
     mod, invert,
