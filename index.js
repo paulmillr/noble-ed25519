@@ -9,15 +9,14 @@ const CURVE = {
     p: P, n: N, h: 8, Gx, Gy // field prime, curve (group) order, cofactor
 };
 const err = (m = '') => { throw new Error(m); }; // error helper, messes-up stack trace
-const str = (s) => typeof s === 'string'; // is string
-const isu8 = (a) => (a instanceof Uint8Array ||
-    (a != null && typeof a === 'object' && a.constructor.name === 'Uint8Array'));
+const isS = (s) => typeof s === 'string'; // is string
+const isu8 = (a) => (a instanceof Uint8Array || (ArrayBuffer.isView(a) && a.constructor.name === 'Uint8Array'));
 const au8 = (a, l) => // is Uint8Array (of specific length)
  !isu8(a) || (typeof l === 'number' && l > 0 && a.length !== l) ?
     err('Uint8Array of valid length expected') : a;
 const u8n = (data) => new Uint8Array(data); // creates Uint8Array
-const toU8 = (a, len) => au8(str(a) ? h2b(a) : u8n(au8(a)), len); // norm(hex/u8a) to u8a
-const mod = (a, b = P) => { let r = a % b; return r >= 0n ? r : b + r; }; // mod division
+const toU8 = (a, len) => au8(isS(a) ? h2b(a) : u8n(au8(a)), len); // norm(hex/u8a) to u8a
+const M = (a, b = P) => { let r = a % b; return r >= 0n ? r : b + r; }; // mod division
 const isPoint = (p) => (p instanceof Point ? p : err('Point expected')); // is xyzt point
 class Point {
     constructor(ex, ey, ez, et) {
@@ -26,7 +25,7 @@ class Point {
         this.ez = ez;
         this.et = et;
     }
-    static fromAffine(p) { return new Point(p.x, p.y, 1n, mod(p.x * p.y)); }
+    static fromAffine(p) { return new Point(p.x, p.y, 1n, M(p.x * p.y)); }
     static fromHex(hex, zip215 = false) {
         const { d } = CURVE;
         hex = toU8(hex, 32);
@@ -38,9 +37,9 @@ class Point {
             err('bad y coord 1'); // zip215=true  [1..2^256-1]
         if (!zip215 && !(0n <= y && y < P))
             err('bad y coord 2'); // zip215=false [1..P-1]
-        const y2 = mod(y * y); // y²
-        const u = mod(y2 - 1n); // u=y²-1
-        const v = mod(d * y2 + 1n); // v=dy²+1
+        const y2 = M(y * y); // y²
+        const u = M(y2 - 1n); // u=y²-1
+        const v = M(d * y2 + 1n); // v=dy²+1
         let { isValid, value: x } = uvRatio(u, v); // (uv³)(uv⁷)^(p-5)/8; square root
         if (!isValid)
             err('bad y coordinate 3'); // not square root: bad point
@@ -49,56 +48,56 @@ class Point {
         if (!zip215 && x === 0n && isLastByteOdd)
             err('bad y coord 3'); // x=0 and x_0 = 1
         if (isLastByteOdd !== isXOdd)
-            x = mod(-x);
-        return new Point(x, y, 1n, mod(x * y)); // Z=1, T=xy
+            x = M(-x);
+        return new Point(x, y, 1n, M(x * y)); // Z=1, T=xy
     }
     get x() { return this.toAffine().x; } // .x, .y will call expensive toAffine.
     get y() { return this.toAffine().y; } // Should be used with care.
     equals(other) {
         const { ex: X1, ey: Y1, ez: Z1 } = this;
         const { ex: X2, ey: Y2, ez: Z2 } = isPoint(other); // isPoint() checks class equality
-        const X1Z2 = mod(X1 * Z2), X2Z1 = mod(X2 * Z1);
-        const Y1Z2 = mod(Y1 * Z2), Y2Z1 = mod(Y2 * Z1);
+        const X1Z2 = M(X1 * Z2), X2Z1 = M(X2 * Z1);
+        const Y1Z2 = M(Y1 * Z2), Y2Z1 = M(Y2 * Z1);
         return X1Z2 === X2Z1 && Y1Z2 === Y2Z1;
     }
     is0() { return this.equals(I); }
     negate() {
-        return new Point(mod(-this.ex), this.ey, this.ez, mod(-this.et));
+        return new Point(M(-this.ex), this.ey, this.ez, M(-this.et));
     }
     double() {
         const { ex: X1, ey: Y1, ez: Z1 } = this; // Cost: 4M + 4S + 1*a + 6add + 1*2
         const { a } = CURVE; // https://hyperelliptic.org/EFD/g1p/auto-twisted-extended.html#doubling-dbl-2008-hwcd
-        const A = mod(X1 * X1);
-        const B = mod(Y1 * Y1);
-        const C = mod(2n * mod(Z1 * Z1));
-        const D = mod(a * A);
+        const A = M(X1 * X1);
+        const B = M(Y1 * Y1);
+        const C = M(2n * M(Z1 * Z1));
+        const D = M(a * A);
         const x1y1 = X1 + Y1;
-        const E = mod(mod(x1y1 * x1y1) - A - B);
+        const E = M(M(x1y1 * x1y1) - A - B);
         const G = D + B;
         const F = G - C;
         const H = D - B;
-        const X3 = mod(E * F);
-        const Y3 = mod(G * H);
-        const T3 = mod(E * H);
-        const Z3 = mod(F * G);
+        const X3 = M(E * F);
+        const Y3 = M(G * H);
+        const T3 = M(E * H);
+        const Z3 = M(F * G);
         return new Point(X3, Y3, Z3, T3);
     }
     add(other) {
         const { ex: X1, ey: Y1, ez: Z1, et: T1 } = this; // Cost: 8M + 1*k + 8add + 1*2.
         const { ex: X2, ey: Y2, ez: Z2, et: T2 } = isPoint(other); // doesn't check if other on-curve
         const { a, d } = CURVE; // http://hyperelliptic.org/EFD/g1p/auto-twisted-extended-1.html#addition-add-2008-hwcd-3
-        const A = mod(X1 * X2);
-        const B = mod(Y1 * Y2);
-        const C = mod(T1 * d * T2);
-        const D = mod(Z1 * Z2);
-        const E = mod((X1 + Y1) * (X2 + Y2) - A - B);
-        const F = mod(D - C);
-        const G = mod(D + C);
-        const H = mod(B - a * A);
-        const X3 = mod(E * F);
-        const Y3 = mod(G * H);
-        const T3 = mod(E * H);
-        const Z3 = mod(F * G);
+        const A = M(X1 * X2);
+        const B = M(Y1 * Y2);
+        const C = M(T1 * d * T2);
+        const D = M(Z1 * Z2);
+        const E = M((X1 + Y1) * (X2 + Y2) - A - B);
+        const F = M(D - C);
+        const G = M(D + C);
+        const H = M(B - a * A);
+        const X3 = M(E * F);
+        const Y3 = M(G * H);
+        const T3 = M(E * H);
+        const Z3 = M(F * G);
         return new Point(X3, Y3, Z3, T3);
     }
     mul(n, safe = true) {
@@ -133,9 +132,9 @@ class Point {
         if (this.equals(I))
             return { x: 0n, y: 1n }; // fast-path for zero point
         const iz = invert(z); // z^-1: invert z
-        if (mod(z * iz) !== 1n)
+        if (M(z * iz) !== 1n)
             err('invalid inverse'); // (z * z^-1) must be 1, otherwise bad math
-        return { x: mod(x * iz), y: mod(y * iz) }; // x = x*z^-1; y = y*z^-1
+        return { x: M(x * iz), y: M(y * iz) }; // x = x*z^-1; y = y*z^-1
     }
     toRawBytes() {
         const { x, y } = this.toAffine(); // convert to affine 2d point
@@ -145,25 +144,37 @@ class Point {
     }
     toHex() { return b2h(this.toRawBytes()); } // encode to hex string
 }
-Point.BASE = new Point(Gx, Gy, 1n, mod(Gx * Gy)); // Generator / Base point
+Point.BASE = new Point(Gx, Gy, 1n, M(Gx * Gy)); // Generator / Base point
 Point.ZERO = new Point(0n, 1n, 1n, 0n); // Identity / Zero point
 const { BASE: G, ZERO: I } = Point; // Generator, identity points
 const padh = (num, pad) => num.toString(16).padStart(pad, '0');
-const b2h = (b) => Array.from(b).map(e => padh(e, 2)).join(''); // bytes to hex
+const b2h = (b) => Array.from(au8(b)).map(e => padh(e, 2)).join(''); // bytes to hex
+const C = { _0: 48, _9: 57, A: 65, F: 70, a: 97, f: 102 };
+const ch = (char) => {
+    if (char >= C._0 && char <= C._9)
+        return char - C._0; // '0' will resolve to 48-48, '1' to 49-48 (1)
+    if (char >= C.A && char <= C.F)
+        return char - (C.A - 10); // 'A' will resolve to 65-(65-10), 'F' to 70-(70-10)
+    if (char >= C.a && char <= C.f)
+        return char - (C.a - 10); // similar to upcase
+    return;
+};
 const h2b = (hex) => {
-    const l = hex.length; // error if not string,
-    if (!str(hex) || l % 2)
-        err('hex invalid 1'); // or has odd length like 3, 5.
-    const arr = u8n(l / 2); // create result array
-    for (let i = 0; i < arr.length; i++) {
-        const j = i * 2;
-        const h = hex.slice(j, j + 2); // hexByte. slice is faster than substr
-        const b = Number.parseInt(h, 16); // byte, created from string part
-        if (Number.isNaN(b) || b < 0)
-            err('hex invalid 2'); // byte must be valid 0 <= byte < 256
-        arr[i] = b;
+    const e = 'hex invalid';
+    if (!isS(hex))
+        return err(e);
+    const hl = hex.length, al = hl / 2;
+    if (hl % 2)
+        return err(e);
+    const array = u8n(al);
+    for (let ai = 0, hi = 0; ai < al; ai++, hi += 2) { // treat each char as ASCII
+        const n1 = ch(hex.charCodeAt(hi)); // parse first char, multiply it by 16
+        const n2 = ch(hex.charCodeAt(hi + 1)); // parse second char
+        if (n1 === undefined || n2 === undefined)
+            return err(e);
+        array[ai] = n1 * 16 + n2; // example: 'A9' => 10*16 + 9
     }
-    return arr;
+    return array;
 };
 const n2b_32LE = (num) => h2b(padh(num, 32 * 2)).reverse(); // number to bytes LE
 const b2n_LE = (b) => BigInt('0x' + b2h(u8n(au8(b)).reverse())); // bytes LE to num
@@ -176,13 +187,13 @@ const concatB = (...arrs) => {
 const invert = (num, md = P) => {
     if (num === 0n || md <= 0n)
         err('no inverse n=' + num + ' mod=' + md); // no neg exponent for now
-    let a = mod(num, md), b = md, x = 0n, y = 1n, u = 1n, v = 0n;
+    let a = M(num, md), b = md, x = 0n, y = 1n, u = 1n, v = 0n;
     while (a !== 0n) { // uses euclidean gcd algorithm
         const q = b / a, r = b % a; // not constant-time
         const m = x - u * q, n = y - v * q;
         b = a, a = r, x = u, y = v, u = m, v = n;
     }
-    return b === 1n ? mod(x, md) : err('no inverse'); // b is gcd at this point
+    return b === 1n ? M(x, md) : err('no inverse'); // b is gcd at this point
 };
 const pow2 = (x, power) => {
     let r = x;
@@ -209,25 +220,25 @@ const pow_2_252_3 = (x) => {
 };
 const RM1 = 19681161376707505956807079304988542015446066515923890162744021073123829784752n; // √-1
 const uvRatio = (u, v) => {
-    const v3 = mod(v * v * v); // v³
-    const v7 = mod(v3 * v3 * v); // v⁷
+    const v3 = M(v * v * v); // v³
+    const v7 = M(v3 * v3 * v); // v⁷
     const pow = pow_2_252_3(u * v7).pow_p_5_8; // (uv⁷)^(p-5)/8
-    let x = mod(u * v3 * pow); // (uv³)(uv⁷)^(p-5)/8
-    const vx2 = mod(v * x * x); // vx²
+    let x = M(u * v3 * pow); // (uv³)(uv⁷)^(p-5)/8
+    const vx2 = M(v * x * x); // vx²
     const root1 = x; // First root candidate
-    const root2 = mod(x * RM1); // Second root candidate; RM1 is √-1
+    const root2 = M(x * RM1); // Second root candidate; RM1 is √-1
     const useRoot1 = vx2 === u; // If vx² = u (mod p), x is a square root
-    const useRoot2 = vx2 === mod(-u); // If vx² = -u, set x <-- x * 2^((p-1)/4)
-    const noRoot = vx2 === mod(-u * RM1); // There is no valid root, vx² = -u√-1
+    const useRoot2 = vx2 === M(-u); // If vx² = -u, set x <-- x * 2^((p-1)/4)
+    const noRoot = vx2 === M(-u * RM1); // There is no valid root, vx² = -u√-1
     if (useRoot1)
         x = root1;
     if (useRoot2 || noRoot)
         x = root2; // We return root2 anyway, for const-time
-    if ((mod(x) & 1n) === 1n)
-        x = mod(-x); // edIsNegative
+    if ((M(x) & 1n) === 1n)
+        x = M(-x); // edIsNegative
     return { isValid: useRoot1 || useRoot2, value: x };
 };
-const modL_LE = (hash) => mod(b2n_LE(hash), N); // modulo L; but little-endian
+const modL_LE = (hash) => M(b2n_LE(hash), N); // modulo L; but little-endian
 let _shaS;
 const sha512a = (...m) => etc.sha512Async(...m); // Async SHA512
 const sha512s = (...m) => // Sync SHA512, not set by default
@@ -259,7 +270,7 @@ const _sign = (e, rBytes, msg) => {
     const R = G.mul(r).toRawBytes(); // R = [r]B
     const hashable = concatB(R, P, msg); // dom2(F, C) || R || A || PH(M)
     const finish = (hashed) => {
-        const S = mod(r + modL_LE(hashed) * s, N); // S = (r + k * s) mod L; 0 <= s < l
+        const S = M(r + modL_LE(hashed) * s, N); // S = (r + k * s) mod L; 0 <= s < l
         return au8(concatB(R, n2b_32LE(S)), 64); // 64-byte sig: 32b R.x + 32b LE(S)
     };
     return { hashable, finish };
@@ -308,7 +319,7 @@ const cr = () => // We support: 1) browsers 2) node.js 19+
  typeof globalThis === 'object' && 'crypto' in globalThis && 'subtle' in globalThis.crypto ? globalThis.crypto : undefined;
 const etc = {
     bytesToHex: b2h, hexToBytes: h2b, concatBytes: concatB,
-    mod, invert,
+    mod: M, invert,
     randomBytes: (len = 32) => {
         const crypto = cr(); // Can be shimmed in node.js <= 18 to prevent error:
         // import { webcrypto } from 'node:crypto';
