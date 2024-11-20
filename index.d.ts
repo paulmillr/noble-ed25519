@@ -59,7 +59,7 @@ declare const verify: (s: Hex, m: Hex, p: Hex, opts?: {
 }) => boolean;
 declare const etc: {
     bytesToHex: (b: Bytes) => string;
-    hexToBytes: (hex: string) => Uint8Array;
+    hexToBytes: (hex: string) => Bytes;
     concatBytes: (...arrs: Bytes[]) => Uint8Array;
     mod: (a: bigint, b?: bigint) => bigint;
     invert: (num: bigint, md?: bigint) => bigint;

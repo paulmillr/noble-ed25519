@@ -118,27 +118,27 @@ class Point {                                           // Point in xyzt extende
 const { BASE: G, ZERO: I } = Point;                     // Generator, identity points
 const padh = (num: number | bigint, pad: number) => num.toString(16).padStart(pad, '0')
 const b2h = (b: Bytes): string => Array.from(au8(b)).map(e => padh(e, 2)).join(''); // bytes to hex
-const C = { _0: 48, _9: 57, A: 65, F: 70, a: 97, f: 102 } as const;
-const ch = (char: number): number | undefined => {      // ASCII to base16
-  if (char >= C._0 && char <= C._9) return char - C._0;     // '0' will resolve to 48-48, '1' to 49-48 (1)
-  if (char >= C.A && char <= C.F) return char - (C.A - 10); // 'A' will resolve to 65-(65-10), 'F' to 70-(70-10)
-  if (char >= C.a && char <= C.f) return char - (C.a - 10); // similar to upcase
+const C = { _0: 48, _9: 57, A: 65, F: 70, a: 97, f: 102 } as const; // ASCII characters
+const _ch = (ch: number): number | undefined => {
+  if (ch >= C._0 && ch <= C._9) return ch - C._0;       // '2' => 50-48
+  if (ch >= C.A && ch <= C.F) return ch - (C.A - 10);   // 'B' => 66-(65-10)
+  if (ch >= C.a && ch <= C.f) return ch - (C.a - 10);   // 'b' => 98-(97-10)
   return;
 };
-const h2b = (hex: string): Uint8Array => {              // hex to bytes
+const h2b = (hex: string): Bytes => {                   // hex to bytes
   const e = 'hex invalid';
   if (!isS(hex)) return err(e);
   const hl = hex.length, al = hl / 2;
   if (hl % 2) return err(e);
   const array = u8n(al);
   for (let ai = 0, hi = 0; ai < al; ai++, hi += 2) {    // treat each char as ASCII
-    const n1 = ch(hex.charCodeAt(hi));                  // parse first char, multiply it by 16
-    const n2 = ch(hex.charCodeAt(hi + 1));              // parse second char
+    const n1 = _ch(hex.charCodeAt(hi));                 // parse first char, multiply it by 16
+    const n2 = _ch(hex.charCodeAt(hi + 1));             // parse second char
     if (n1 === undefined || n2 === undefined) return err(e);
     array[ai] = n1 * 16 + n2;                           // example: 'A9' => 10*16 + 9
   }
   return array;
-}
+};
 const n2b_32LE = (num: bigint) => h2b(padh(num, 32 * 2)).reverse(); // number to bytes LE
 const b2n_LE = (b: Bytes): bigint => BigInt('0x' + b2h(u8n(au8(b)).reverse())); // bytes LE to num
 const concatB = (...arrs: Bytes[]) => {                 // concatenate Uint8Array-s
