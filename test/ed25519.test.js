@@ -449,6 +449,13 @@ describe('ed25519', () => {
     // const point2 = point.double();
     // point2.toAffine(); // crash!
   });
+
+  should('.fromAffine', () => {
+    const xy = { x: 0n, y: 1n };
+    const p = Point.fromAffine(xy);
+    deepStrictEqual(p, Point.ZERO);
+    deepStrictEqual(p.toAffine(), xy);
+  });
 });
 
 // ESM is broken.
