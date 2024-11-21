@@ -131,7 +131,7 @@ class Point {
         const { ex: x, ey: y, ez: z } = this; // (x, y, z, t) ∋ (x=x/z, y=y/z, t=xy)
         if (this.equals(I))
             return { x: 0n, y: 1n }; // fast-path for zero point
-        const iz = invert(z); // z^-1: invert z
+        const iz = invert(z, P); // z^-1: invert z
         if (M(z * iz) !== 1n)
             err('invalid inverse'); // (z * z^-1) must be 1, otherwise bad math
         return { x: M(x * iz), y: M(y * iz) }; // x = x*z^-1; y = y*z^-1
@@ -184,7 +184,7 @@ const concatB = (...arrs) => {
     arrs.forEach(a => { r.set(a, pad); pad += a.length; }); // ensure they have proper type
     return r;
 };
-const invert = (num, md = P) => {
+const invert = (num, md) => {
     if (num === 0n || md <= 0n)
         err('no inverse n=' + num + ' mod=' + md); // no neg exponent for now
     let a = M(num, md), b = md, x = 0n, y = 1n, u = 1n, v = 0n;

@@ -62,7 +62,7 @@ declare const etc: {
     hexToBytes: (hex: string) => Bytes;
     concatBytes: (...arrs: Bytes[]) => Uint8Array;
     mod: (a: bigint, b?: bigint) => bigint;
-    invert: (num: bigint, md?: bigint) => bigint;
+    invert: (num: bigint, md: bigint) => bigint;
     randomBytes: (len?: number) => Bytes;
     sha512Async: (...messages: Bytes[]) => Promise<Bytes>;
     sha512Sync: Sha512FnSync;
