@@ -184,13 +184,14 @@ ed25519.ExtendedPoint.BASE; // new ed25519.Point(Gx, Gy) where
 
 ## Security
 
-The library has not been independently audited as of v2, which is a rewrite of v1.
-v1 has been audited by [Cure53](https://cure53.de/pentest-report_ed25519.pdf) in Feb 2022.
+The module is production-ready.
+While [noble-curves](https://github.com/paulmillr/noble-curves) provide improved security,
+we cross-test against curves.
 
-The code is identical to [noble-curves](https://github.com/paulmillr/noble-curves), which _has_ been audited.
-
-It is tested against property-based, cross-library and Wycheproof vectors,
-and has fuzzing by [Guido Vranken's cryptofuzz](https://github.com/guidovranken/cryptofuzz).
+1. The current version has not been independently audited. It is a rewrite of v1, which has been audited by cure53 in Feb 2022:
+   [PDF](https://cure53.de/pentest-report_ed25519.pdf).
+2. It's being fuzzed by [Guido Vranken's cryptofuzz](https://github.com/guidovranken/cryptofuzz):
+   you can also run the fuzzer by yourself.
 
 ### Constant-timeness
 
