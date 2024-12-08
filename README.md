@@ -249,13 +249,6 @@ Compare to alternative implementations:
     ristretto255@0.1.2 getPublicKey x 640 ops/sec @ 1ms/op ± 1.59%
     sodium-native#sign x 83,654 ops/sec @ 11μs/op
 
-## Contributing
-
-1. Clone the repository
-2. `npm install` to install build dependencies like TypeScript
-3. `npm run build` to compile TypeScript code
-4. `npm run test` to run tests
-
 ## Upgrading
 
 noble-ed25519 v2 features improved security and smaller attack surface.
@@ -282,6 +275,19 @@ Other changes for upgrading from @noble/ed25519 1.7 to 2.0:
 - `Signature` was removed: just use raw bytes or hex now
 - `utils` were split into `utils` (same api as in noble-curves) and
   `etc` (`sha512Sync` and others)
+
+## Contributing & testing
+
+* `npm install && npm run build && npm test` will build the code and run tests.
+* `npm run bench` will run benchmarks, which may need their deps first (`npm run bench:install`)
+* `npm run loc` will count total output size, important to be less than 4KB
+
+Check out [github.com/paulmillr/guidelines](https://github.com/paulmillr/guidelines)
+for general coding practices and rules.
+
+See [paulmillr.com/noble](https://paulmillr.com/noble/)
+for useful resources, articles, documentation and demos
+related to the library.
 
 ## License
 
