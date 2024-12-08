@@ -289,8 +289,9 @@ const sign = (msg, privKey) => {
 };
 const dvo = { zip215: true };
 const _verify = (sig, msg, pub, opts = dvo) => {
-    msg = toU8(msg); // Message hex str/Bytes
     sig = toU8(sig, 64); // Signature hex str/Bytes, must be 64 bytes
+    msg = toU8(msg); // Message hex str/Bytes
+    pub = toU8(pub, 32);
     const { zip215 } = opts; // switch between zip215 and rfc8032 verif
     let A, R, s, SB, hashable = new Uint8Array();
     try {

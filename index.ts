@@ -252,8 +252,9 @@ const sign = (msg: Hex, privKey: Hex): Bytes => {
 };
 const dvo = { zip215: true };
 const _verify = (sig: Hex, msg: Hex, pub: Hex, opts = dvo): Finishable<boolean> => {
-  msg = toU8(msg);                                      // Message hex str/Bytes
   sig = toU8(sig, 64);                                  // Signature hex str/Bytes, must be 64 bytes
+  msg = toU8(msg);                                      // Message hex str/Bytes
+  pub = toU8(pub, 32);
   const { zip215 } = opts;                              // switch between zip215 and rfc8032 verif
   let A: Point, R: Point, s: bigint, SB: Point, hashable = new Uint8Array();
   try {

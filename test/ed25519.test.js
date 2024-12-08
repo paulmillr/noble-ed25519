@@ -324,7 +324,10 @@ describe('ed25519', () => {
       // sig.R = BASE, sig.s = N+1
       const sig =
         '5866666666666666666666666666666666666666666666666666666666666666eed3f55c1a631258d69cf7a2def9de1400000000000000000000000000000010';
-      deepStrictEqual(ed.verify(sig, 'deadbeef', Point.BASE), false);
+      throws(() => {
+        deepStrictEqual(ed.verify(sig, 'deadbeef', Point.BASE), false);
+      });
+      deepStrictEqual(ed.verify(sig, 'deadbeef', Point.BASE.toRawBytes()), false);
     });
   });
 
