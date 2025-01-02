@@ -1,6 +1,6 @@
 {
   "name": "@noble/ed25519",
-  "version": "2.2.0",
+  "version": "2.2.1",
   "description": "Fastest 4KB JS implementation of ed25519 EDDSA signatures compliant with RFC8032, FIPS 186-5 & ZIP215",
   "files": [
     "index.js",
