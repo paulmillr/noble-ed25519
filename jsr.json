@@ -9,5 +9,6 @@
       "index.ts",
       "jsr.json"
     ]
-  }
+  },
+  "license": "MIT"
 }
