@@ -1,17 +1,29 @@
 /*! noble-ed25519 - MIT License (c) 2019 Paul Miller (paulmillr.com) */
+/**
+ * 4KB JS implementation of ed25519 EDDSA signatures compliant with RFC8032, FIPS 186-5 & ZIP215.
+ * @module
+ */
 const P = 2n ** 255n - 19n;                                     // ed25519 is twisted edwards curve
 const N = 2n ** 252n + 27742317777372353535851937790883648493n; // curve's (group) order
 const Gx = 0x216936d3cd6e53fec0a4e231fdd6dc5c692cc7609525a7b2c9562d608f25d51an; // base point x
 const Gy = 0x6666666666666666666666666666666666666666666666666666666666666658n; // base point y
-type CURVET = {
+const _d = 37095705934669439343138083508754565189542113879843219016388785533085940283555n;
+/**
+ * ed25519 curve parameters. Equation is −x² + y² = -a + dx²y².
+ * Gx and Gy are generator coordinates. p is field order, n is group order.
+ * h is cofactor.
+ */
+const CURVE: {
   a: bigint; d: bigint; p: bigint; n: bigint; h: number; Gx: bigint; Gy: bigint;
-}
-const CURVE: CURVET = {               // Curve's formula is −x² + y² = -a + dx²y²
-  a: -1n,      // where a=-1, d = -(121665/121666) == -(121665 * inv(121666)) mod P
-  d: 37095705934669439343138083508754565189542113879843219016388785533085940283555n,
+} = {
+  a: -1n,                                                       // -1 mod p
+  d: _d,                                                        // -(121665/121666) mod p
   p: P, n: N, h: 8, Gx: Gx, Gy: Gy    // field prime, curve (group) order, cofactor
 };
-type Bytes = Uint8Array; type Hex = Bytes | string;     // types
+/** Alias to Uint8Array. */
+export type Bytes = Uint8Array;
+/** Hex-encoded string or Uint8Array. */
+export type Hex = Bytes | string;
 const err = (m = ''): never => { throw new Error(m); }; // error helper, messes-up stack trace
 const isS = (s: unknown): s is string => typeof s === 'string'; // is string
 const isu8 = (a: unknown): a is Uint8Array => (
@@ -24,8 +36,10 @@ const u8n = (data?: any) => new Uint8Array(data);       // creates Uint8Array
 const toU8 = (a: Hex, len?: number) => au8(isS(a) ? h2b(a) : u8n(au8(a)), len);  // norm(hex/u8a) to u8a
 const M = (a: bigint, b = P) => { let r = a % b; return r >= 0n ? r : b + r; }; // mod division
 const isPoint = (p: any) => (p instanceof Point ? p : err('Point expected')); // is xyzt point
-interface AffinePoint { x: bigint, y: bigint }          // Point in 2d xy affine coordinates
-class Point {                                           // Point in xyzt extended coordinates
+/** Point in 2d xy affine coordinates. */
+export interface AffinePoint { x: bigint, y: bigint }
+/** Point in xyzt extended coordinates. */
+class Point {
   constructor(readonly ex: bigint, readonly ey: bigint, readonly ez: bigint, readonly et: bigint) {}
   static readonly BASE: Point = new Point(Gx, Gy, 1n, M(Gx * Gy)); // Generator / Base point
   static readonly ZERO: Point = new Point(0n, 1n, 1n, 0n);         // Identity / Zero point
@@ -218,8 +232,10 @@ const hash2extK = (hashed: Bytes): ExtK => {            // RFC8032 5.1.5
 // RFC8032 5.1.5; getPublicKey async, sync. Hash priv key and extract point.
 const getExtendedPublicKeyAsync = (priv: Hex) => sha512a(toU8(priv, 32)).then(hash2extK);
 const getExtendedPublicKey = (priv: Hex) => hash2extK(sha512s(toU8(priv, 32)))
+/** Creates 32-byte ed25519 public key from 32-byte private key. Async. */
 const getPublicKeyAsync = (priv: Hex): Promise<Bytes> =>
   getExtendedPublicKeyAsync(priv).then(p => p.pointBytes)
+/** Creates 32-byte ed25519 public key from 32-byte private key. To use, set `etc.sha512Sync` first. */
 const getPublicKey = (priv: Hex): Bytes => getExtendedPublicKey(priv).pointBytes;
 type Finishable<T> = {                                  // Reduces logic duplication between
   hashable: Bytes, finish: (hashed: Bytes) => T         // sync & async versions of sign(), verify()
@@ -241,19 +257,21 @@ const _sign = (e: ExtK, rBytes: Bytes, msg: Bytes): Finishable<Bytes> => { // si
   }
   return { hashable, finish };
 };
+/** Signs message (NOT message hash) using private key. Async. */
 const signAsync = async (msg: Hex, privKey: Hex): Promise<Bytes> => {
   const m = toU8(msg);                                  // RFC8032 5.1.6: sign msg with key async
   const e = await getExtendedPublicKeyAsync(privKey);   // pub,prfx
   const rBytes = await sha512a(e.prefix, m);            // r = SHA512(dom2(F, C) || prefix || PH(M))
   return hashFinish(true, _sign(e, rBytes, m));         // gen R, k, S, then 64-byte signature
 };
+/** Signs message (NOT message hash) using private key. To use, set `etc.sha512Sync` first. */
 const sign = (msg: Hex, privKey: Hex): Bytes => {
   const m = toU8(msg);                                  // RFC8032 5.1.6: sign msg with key sync
   const e = getExtendedPublicKey(privKey);              // pub,prfx
   const rBytes = sha512s(e.prefix, m);                  // r = SHA512(dom2(F, C) || prefix || PH(M))
   return hashFinish(false, _sign(e, rBytes, m));        // gen R, k, S, then 64-byte signature
 };
-type DVO = { zip215?: boolean };
+export type DVO = { zip215?: boolean };
 const dvo: DVO = { zip215: true };
 const _verify = (sig: Hex, msg: Hex, pub: Hex, opts: DVO = dvo): Finishable<boolean> => {
   sig = toU8(sig, 64);                                  // Signature hex str/Bytes, must be 64 bytes
@@ -278,13 +296,17 @@ const _verify = (sig: Hex, msg: Hex, pub: Hex, opts: DVO = dvo): Finishable<bool
   return { hashable, finish };
 };
 // RFC8032 5.1.7: verification async, sync
+
+/** Verifies signature on message and public key. Async. */
 const verifyAsync = async (s: Hex, m: Hex, p: Hex, opts: DVO = dvo): Promise<boolean> =>
   hashFinish(true, _verify(s, m, p, opts));
+/** Verifies signature on message and public key. To use, set `etc.sha512Sync` first. */
 const verify = (s: Hex, m: Hex, p: Hex, opts: DVO = dvo): boolean =>
   hashFinish(false, _verify(s, m, p, opts));
 declare const globalThis: Record<string, any> | undefined; // Typescript symbol present in browsers
 const cr = () => // We support: 1) browsers 2) node.js 19+
   typeof globalThis === 'object' && 'crypto' in globalThis && 'subtle' in globalThis.crypto ? globalThis.crypto : undefined;
+/** Math, hex, byte helpers. Not in `utils` because utils share API with noble-curves. */
 const etc = {
   bytesToHex: b2h satisfies (b: Bytes) => string as (b: Bytes) => string,
   hexToBytes: h2b satisfies (hex: string) => Bytes as (hex: string) => Bytes,
@@ -309,6 +331,7 @@ const etc = {
 Object.defineProperties(etc, { sha512Sync: {  // Allow setting it once. Next sets will be ignored
   configurable: false, get() { return _shaS; }, set(f) { if (!_shaS) _shaS = f; },
 } });
+/** ed25519-specific key utilities. */
 const utils = {
   getExtendedPublicKeyAsync: getExtendedPublicKeyAsync as (priv: Hex) => Promise<ExtK>,
   getExtendedPublicKey: getExtendedPublicKey as (priv: Hex) => ExtK,

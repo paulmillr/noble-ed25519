@@ -1,11 +1,21 @@
 /*! noble-ed25519 - MIT License (c) 2019 Paul Miller (paulmillr.com) */
+/**
+ * 4KB JS implementation of ed25519 EDDSA signatures compliant with RFC8032, FIPS 186-5 & ZIP215.
+ * @module
+ */
 const P = 2n ** 255n - 19n; // ed25519 is twisted edwards curve
 const N = 2n ** 252n + 27742317777372353535851937790883648493n; // curve's (group) order
 const Gx = 0x216936d3cd6e53fec0a4e231fdd6dc5c692cc7609525a7b2c9562d608f25d51an; // base point x
 const Gy = 0x6666666666666666666666666666666666666666666666666666666666666658n; // base point y
+const _d = 37095705934669439343138083508754565189542113879843219016388785533085940283555n;
+/**
+ * ed25519 curve parameters. Equation is −x² + y² = -a + dx²y².
+ * Gx and Gy are generator coordinates. p is field order, n is group order.
+ * h is cofactor.
+ */
 const CURVE = {
-    a: -1n, // where a=-1, d = -(121665/121666) == -(121665 * inv(121666)) mod P
-    d: 37095705934669439343138083508754565189542113879843219016388785533085940283555n,
+    a: -1n, // -1 mod p
+    d: _d, // -(121665/121666) mod p
     p: P, n: N, h: 8, Gx: Gx, Gy: Gy // field prime, curve (group) order, cofactor
 };
 const err = (m = '') => { throw new Error(m); }; // error helper, messes-up stack trace
@@ -18,6 +28,7 @@ const u8n = (data) => new Uint8Array(data); // creates Uint8Array
 const toU8 = (a, len) => au8(isS(a) ? h2b(a) : u8n(au8(a)), len); // norm(hex/u8a) to u8a
 const M = (a, b = P) => { let r = a % b; return r >= 0n ? r : b + r; }; // mod division
 const isPoint = (p) => (p instanceof Point ? p : err('Point expected')); // is xyzt point
+/** Point in xyzt extended coordinates. */
 class Point {
     constructor(ex, ey, ez, et) {
         this.ex = ex;
@@ -257,7 +268,9 @@ const hash2extK = (hashed) => {
 // RFC8032 5.1.5; getPublicKey async, sync. Hash priv key and extract point.
 const getExtendedPublicKeyAsync = (priv) => sha512a(toU8(priv, 32)).then(hash2extK);
 const getExtendedPublicKey = (priv) => hash2extK(sha512s(toU8(priv, 32)));
+/** Creates 32-byte ed25519 public key from 32-byte private key. Async. */
 const getPublicKeyAsync = (priv) => getExtendedPublicKeyAsync(priv).then(p => p.pointBytes);
+/** Creates 32-byte ed25519 public key from 32-byte private key. To use, set `etc.sha512Sync` first. */
 const getPublicKey = (priv) => getExtendedPublicKey(priv).pointBytes;
 function hashFinish(asynchronous, res) {
     if (asynchronous)
@@ -275,12 +288,14 @@ const _sign = (e, rBytes, msg) => {
     };
     return { hashable, finish };
 };
+/** Signs message (NOT message hash) using private key. Async. */
 const signAsync = async (msg, privKey) => {
     const m = toU8(msg); // RFC8032 5.1.6: sign msg with key async
     const e = await getExtendedPublicKeyAsync(privKey); // pub,prfx
     const rBytes = await sha512a(e.prefix, m); // r = SHA512(dom2(F, C) || prefix || PH(M))
     return hashFinish(true, _sign(e, rBytes, m)); // gen R, k, S, then 64-byte signature
 };
+/** Signs message (NOT message hash) using private key. To use, set `etc.sha512Sync` first. */
 const sign = (msg, privKey) => {
     const m = toU8(msg); // RFC8032 5.1.6: sign msg with key sync
     const e = getExtendedPublicKey(privKey); // pub,prfx
@@ -314,10 +329,13 @@ const _verify = (sig, msg, pub, opts = dvo) => {
     return { hashable, finish };
 };
 // RFC8032 5.1.7: verification async, sync
+/** Verifies signature on message and public key. Async. */
 const verifyAsync = async (s, m, p, opts = dvo) => hashFinish(true, _verify(s, m, p, opts));
+/** Verifies signature on message and public key. To use, set `etc.sha512Sync` first. */
 const verify = (s, m, p, opts = dvo) => hashFinish(false, _verify(s, m, p, opts));
 const cr = () => // We support: 1) browsers 2) node.js 19+
  typeof globalThis === 'object' && 'crypto' in globalThis && 'subtle' in globalThis.crypto ? globalThis.crypto : undefined;
+/** Math, hex, byte helpers. Not in `utils` because utils share API with noble-curves. */
 const etc = {
     bytesToHex: b2h,
     hexToBytes: h2b,
@@ -345,6 +363,7 @@ Object.defineProperties(etc, { sha512Sync: {
         configurable: false, get() { return _shaS; }, set(f) { if (!_shaS)
             _shaS = f; },
     } });
+/** ed25519-specific key utilities. */
 const utils = {
     getExtendedPublicKeyAsync: getExtendedPublicKeyAsync,
     getExtendedPublicKey: getExtendedPublicKey,
