@@ -3,10 +3,13 @@ const P = 2n ** 255n - 19n;                                     // ed25519 is tw
 const N = 2n ** 252n + 27742317777372353535851937790883648493n; // curve's (group) order
 const Gx = 0x216936d3cd6e53fec0a4e231fdd6dc5c692cc7609525a7b2c9562d608f25d51an; // base point x
 const Gy = 0x6666666666666666666666666666666666666666666666666666666666666658n; // base point y
-const CURVE = {               // Curve's formula is −x² + y² = -a + dx²y²
-  a: -1n,                     // where a=-1, d = -(121665/121666) == -(121665 * inv(121666)) mod P
+type CURVET = {
+  a: bigint; d: bigint; p: bigint; n: bigint; h: number; Gx: bigint; Gy: bigint;
+}
+const CURVE: CURVET = {               // Curve's formula is −x² + y² = -a + dx²y²
+  a: -1n,      // where a=-1, d = -(121665/121666) == -(121665 * inv(121666)) mod P
   d: 37095705934669439343138083508754565189542113879843219016388785533085940283555n,
-  p: P, n: N, h: 8, Gx, Gy    // field prime, curve (group) order, cofactor
+  p: P, n: N, h: 8, Gx: Gx, Gy: Gy    // field prime, curve (group) order, cofactor
 };
 type Bytes = Uint8Array; type Hex = Bytes | string;     // types
 const err = (m = ''): never => { throw new Error(m); }; // error helper, messes-up stack trace
@@ -24,10 +27,10 @@ const isPoint = (p: any) => (p instanceof Point ? p : err('Point expected')); //
 interface AffinePoint { x: bigint, y: bigint }          // Point in 2d xy affine coordinates
 class Point {                                           // Point in xyzt extended coordinates
   constructor(readonly ex: bigint, readonly ey: bigint, readonly ez: bigint, readonly et: bigint) {}
-  static readonly BASE = new Point(Gx, Gy, 1n, M(Gx * Gy)); // Generator / Base point
-  static readonly ZERO = new Point(0n, 1n, 1n, 0n);           // Identity / Zero point
-  static fromAffine(p: AffinePoint) { return new Point(p.x, p.y, 1n, M(p.x * p.y)); }
-  static fromHex(hex: Hex, zip215 = false) {            // RFC8032 5.1.3: hex / Uint8Array to Point.
+  static readonly BASE: Point = new Point(Gx, Gy, 1n, M(Gx * Gy)); // Generator / Base point
+  static readonly ZERO: Point = new Point(0n, 1n, 1n, 0n);         // Identity / Zero point
+  static fromAffine(p: AffinePoint): Point { return new Point(p.x, p.y, 1n, M(p.x * p.y)); }
+  static fromHex(hex: Hex, zip215 = false): Point {            // RFC8032 5.1.3: hex / Uint8Array to Point.
     const { d } = CURVE;
     hex = toU8(hex, 32);
     const normed = hex.slice();                         // copy the array to not mess it up
@@ -47,8 +50,8 @@ class Point {                                           // Point in xyzt extende
     if (isLastByteOdd !== isXOdd) x = M(-x);
     return new Point(x, y, 1n, M(x * y));               // Z=1, T=xy
   }
-  get x() { return this.toAffine().x; }                 // .x, .y will call expensive toAffine.
-  get y() { return this.toAffine().y; }                 // Should be used with care.
+  get x(): bigint { return this.toAffine().x; }         // .x, .y will call expensive toAffine.
+  get y(): bigint { return this.toAffine().y; }         // Should be used with care.
   equals(other: Point): boolean {                       // equality check: compare points
     const { ex: X1, ey: Y1, ez: Z1 } = this;
     const { ex: X2, ey: Y2, ez: Z2 } = isPoint(other);  // isPoint() checks class equality
@@ -69,7 +72,7 @@ class Point {                                           // Point in xyzt extende
     const X3 = M(E * F); const Y3 = M(G * H); const T3 = M(E * H); const Z3 = M(F * G);
     return new Point(X3, Y3, Z3, T3);
   }
-  add(other: Point) {                                   // Point addition. Complete formula.
+  add(other: Point): Point {                            // Point addition. Complete formula.
     const { ex: X1, ey: Y1, ez: Z1, et: T1 } = this;    // Cost: 8M + 1*k + 8add + 1*2.
     const { ex: X2, ey: Y2, ez: Z2, et: T2 } = isPoint(other); // doesn't check if other on-curve
     const { a, d } = CURVE; // http://hyperelliptic.org/EFD/g1p/auto-twisted-extended-1.html#addition-add-2008-hwcd-3
@@ -91,7 +94,7 @@ class Point {                                           // Point in xyzt extende
     }
     return p;
   }
-  multiply(scalar: bigint) { return this.mul(scalar); } // Aliases for compatibilty
+  multiply(scalar: bigint): Point { return this.mul(scalar); } // Aliases for compatibilty
   clearCofactor(): Point { return this.mul(BigInt(CURVE.h), false); } // multiply by cofactor
   isSmallOrder(): boolean { return this.clearCofactor().is0(); } // check if P is small order
   isTorsionFree(): boolean {                            // multiply by big number CURVE.n
@@ -250,8 +253,9 @@ const sign = (msg: Hex, privKey: Hex): Bytes => {
   const rBytes = sha512s(e.prefix, m);                  // r = SHA512(dom2(F, C) || prefix || PH(M))
   return hashFinish(false, _sign(e, rBytes, m));        // gen R, k, S, then 64-byte signature
 };
-const dvo = { zip215: true };
-const _verify = (sig: Hex, msg: Hex, pub: Hex, opts = dvo): Finishable<boolean> => {
+type DVO = { zip215?: boolean };
+const dvo: DVO = { zip215: true };
+const _verify = (sig: Hex, msg: Hex, pub: Hex, opts: DVO = dvo): Finishable<boolean> => {
   sig = toU8(sig, 64);                                  // Signature hex str/Bytes, must be 64 bytes
   msg = toU8(msg);                                      // Message hex str/Bytes
   pub = toU8(pub, 32);
@@ -274,16 +278,19 @@ const _verify = (sig: Hex, msg: Hex, pub: Hex, opts = dvo): Finishable<boolean> 
   return { hashable, finish };
 };
 // RFC8032 5.1.7: verification async, sync
-const verifyAsync = async (s: Hex, m: Hex, p: Hex, opts = dvo) =>
+const verifyAsync = async (s: Hex, m: Hex, p: Hex, opts: DVO = dvo): Promise<boolean> =>
   hashFinish(true, _verify(s, m, p, opts));
-const verify = (s: Hex, m: Hex, p: Hex, opts = dvo) =>
+const verify = (s: Hex, m: Hex, p: Hex, opts: DVO = dvo): boolean =>
   hashFinish(false, _verify(s, m, p, opts));
 declare const globalThis: Record<string, any> | undefined; // Typescript symbol present in browsers
 const cr = () => // We support: 1) browsers 2) node.js 19+
   typeof globalThis === 'object' && 'crypto' in globalThis && 'subtle' in globalThis.crypto ? globalThis.crypto : undefined;
 const etc = {
-  bytesToHex: b2h, hexToBytes: h2b, concatBytes: concatB,
-  mod: M, invert,
+  bytesToHex: b2h satisfies (b: Bytes) => string as (b: Bytes) => string,
+  hexToBytes: h2b satisfies (hex: string) => Bytes as (hex: string) => Bytes,
+  concatBytes: concatB satisfies (...arrs: Bytes[]) => Uint8Array as (...arrs: Bytes[]) => Uint8Array,
+  mod: M satisfies (a: bigint, b?: bigint) => bigint as (a: bigint, b?: bigint) => bigint,
+  invert: invert as (num: bigint, md: bigint) => bigint,
   randomBytes: (len = 32): Bytes => {                     // CSPRNG (random number generator)
     const crypto = cr(); // Can be shimmed in node.js <= 18 to prevent error:
     // import { webcrypto } from 'node:crypto';
@@ -303,9 +310,10 @@ Object.defineProperties(etc, { sha512Sync: {  // Allow setting it once. Next set
   configurable: false, get() { return _shaS; }, set(f) { if (!_shaS) _shaS = f; },
 } });
 const utils = {
-  getExtendedPublicKeyAsync, getExtendedPublicKey,
+  getExtendedPublicKeyAsync: getExtendedPublicKeyAsync as (priv: Hex) => Promise<ExtK>,
+  getExtendedPublicKey: getExtendedPublicKey as (priv: Hex) => ExtK,
   randomPrivateKey: (): Bytes => etc.randomBytes(32),
-  precompute(w=8, p: Point = G) { p.multiply(3n); w; return p; }, // no-op
+  precompute: (w=8, p: Point = G): Point => { p.multiply(3n); w; return p; }, // no-op
 }
 const W = 8;                                            // Precomputes-related code. W = window size
 const precompute = () => {                              // They give 12x faster getPublicKey(),

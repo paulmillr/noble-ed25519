@@ -1,4 +1,4 @@
-declare const CURVE: {
+type CURVET = {
     a: bigint;
     d: bigint;
     p: bigint;
@@ -7,6 +7,7 @@ declare const CURVE: {
     Gx: bigint;
     Gy: bigint;
 };
+declare const CURVE: CURVET;
 type Bytes = Uint8Array;
 type Hex = Bytes | string;
 interface AffinePoint {
@@ -51,12 +52,11 @@ declare const getPublicKeyAsync: (priv: Hex) => Promise<Bytes>;
 declare const getPublicKey: (priv: Hex) => Bytes;
 declare const signAsync: (msg: Hex, privKey: Hex) => Promise<Bytes>;
 declare const sign: (msg: Hex, privKey: Hex) => Bytes;
-declare const verifyAsync: (s: Hex, m: Hex, p: Hex, opts?: {
-    zip215: boolean;
-}) => Promise<boolean>;
-declare const verify: (s: Hex, m: Hex, p: Hex, opts?: {
-    zip215: boolean;
-}) => boolean;
+type DVO = {
+    zip215?: boolean;
+};
+declare const verifyAsync: (s: Hex, m: Hex, p: Hex, opts?: DVO) => Promise<boolean>;
+declare const verify: (s: Hex, m: Hex, p: Hex, opts?: DVO) => boolean;
 declare const etc: {
     bytesToHex: (b: Bytes) => string;
     hexToBytes: (hex: string) => Bytes;
@@ -71,7 +71,7 @@ declare const utils: {
     getExtendedPublicKeyAsync: (priv: Hex) => Promise<ExtK>;
     getExtendedPublicKey: (priv: Hex) => ExtK;
     randomPrivateKey: () => Bytes;
-    precompute(w?: number, p?: Point): Point;
+    precompute: (w?: number, p?: Point) => Point;
 };
 export { getPublicKey, getPublicKeyAsync, sign, verify, // Remove the export to easily use in REPL
 signAsync, verifyAsync, CURVE, etc, utils, Point as ExtendedPoint };

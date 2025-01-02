@@ -6,7 +6,7 @@ const Gy = 0x6666666666666666666666666666666666666666666666666666666666666658n; 
 const CURVE = {
     a: -1n, // where a=-1, d = -(121665/121666) == -(121665 * inv(121666)) mod P
     d: 37095705934669439343138083508754565189542113879843219016388785533085940283555n,
-    p: P, n: N, h: 8, Gx, Gy // field prime, curve (group) order, cofactor
+    p: P, n: N, h: 8, Gx: Gx, Gy: Gy // field prime, curve (group) order, cofactor
 };
 const err = (m = '') => { throw new Error(m); }; // error helper, messes-up stack trace
 const isS = (s) => typeof s === 'string'; // is string
@@ -319,8 +319,11 @@ const verify = (s, m, p, opts = dvo) => hashFinish(false, _verify(s, m, p, opts)
 const cr = () => // We support: 1) browsers 2) node.js 19+
  typeof globalThis === 'object' && 'crypto' in globalThis && 'subtle' in globalThis.crypto ? globalThis.crypto : undefined;
 const etc = {
-    bytesToHex: b2h, hexToBytes: h2b, concatBytes: concatB,
-    mod: M, invert,
+    bytesToHex: b2h,
+    hexToBytes: h2b,
+    concatBytes: concatB,
+    mod: M,
+    invert: invert,
     randomBytes: (len = 32) => {
         const crypto = cr(); // Can be shimmed in node.js <= 18 to prevent error:
         // import { webcrypto } from 'node:crypto';
@@ -343,9 +346,10 @@ Object.defineProperties(etc, { sha512Sync: {
             _shaS = f; },
     } });
 const utils = {
-    getExtendedPublicKeyAsync, getExtendedPublicKey,
+    getExtendedPublicKeyAsync: getExtendedPublicKeyAsync,
+    getExtendedPublicKey: getExtendedPublicKey,
     randomPrivateKey: () => etc.randomBytes(32),
-    precompute(w = 8, p = G) { p.multiply(3n); w; return p; }, // no-op
+    precompute: (w = 8, p = G) => { p.multiply(3n); w; return p; }, // no-op
 };
 const W = 8; // Precomputes-related code. W = window size
 const precompute = () => {
