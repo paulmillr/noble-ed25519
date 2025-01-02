@@ -1,6 +1,6 @@
 {
   "name": "@noble/ed25519",
-  "version": "2.2.1",
+  "version": "2.2.2",
   "exports": "./index.ts",
   "publish": {
     "include": [
