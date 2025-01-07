@@ -305,7 +305,7 @@ const verify = (s: Hex, m: Hex, p: Hex, opts: DVO = dvo): boolean =>
   hashFinish(false, _verify(s, m, p, opts));
 declare const globalThis: Record<string, any> | undefined; // Typescript symbol present in browsers
 const cr = () => // We support: 1) browsers 2) node.js 19+
-  typeof globalThis === 'object' && 'crypto' in globalThis && 'subtle' in globalThis.crypto ? globalThis.crypto : undefined;
+  typeof globalThis === 'object' && 'crypto' in globalThis ? globalThis.crypto : undefined;
 /** Math, hex, byte helpers. Not in `utils` because utils share API with noble-curves. */
 const etc = {
   bytesToHex: b2h satisfies (b: Bytes) => string as (b: Bytes) => string,
@@ -314,17 +314,18 @@ const etc = {
   mod: M satisfies (a: bigint, b?: bigint) => bigint as (a: bigint, b?: bigint) => bigint,
   invert: invert as (num: bigint, md: bigint) => bigint,
   randomBytes: (len = 32): Bytes => {                     // CSPRNG (random number generator)
-    const crypto = cr(); // Can be shimmed in node.js <= 18 to prevent error:
+    const c = cr(); // Can be shimmed in node.js <= 18 to prevent error:
     // import { webcrypto } from 'node:crypto';
     // if (!globalThis.crypto) globalThis.crypto = webcrypto;
-    if (!crypto || !crypto.getRandomValues) err('crypto.getRandomValues must be defined');
-    return crypto.getRandomValues(u8n(len));
+    if (!c || !c.getRandomValues) err('crypto.getRandomValues must be defined');
+    return c.getRandomValues(u8n(len));
   },
   sha512Async: async (...messages: Bytes[]): Promise<Bytes> => {
-    const crypto = cr();
-    if (!crypto || !crypto.subtle) err('crypto.subtle or etc.sha512Async must be defined');
+    const c = cr();
+    const s = c && c.subtle
+    if (!s) err('etc.sha512Async or crypto.subtle must be defined');
     const m = concatB(...messages);
-    return u8n(await crypto.subtle.digest('SHA-512', m.buffer));
+    return u8n(await s.digest('SHA-512', m.buffer));
   },
   sha512Sync: undefined as Sha512FnSync,                // Actual logic below
 };

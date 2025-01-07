@@ -334,7 +334,7 @@ const verifyAsync = async (s, m, p, opts = dvo) => hashFinish(true, _verify(s, m
 /** Verifies signature on message and public key. To use, set `etc.sha512Sync` first. */
 const verify = (s, m, p, opts = dvo) => hashFinish(false, _verify(s, m, p, opts));
 const cr = () => // We support: 1) browsers 2) node.js 19+
- typeof globalThis === 'object' && 'crypto' in globalThis && 'subtle' in globalThis.crypto ? globalThis.crypto : undefined;
+ typeof globalThis === 'object' && 'crypto' in globalThis ? globalThis.crypto : undefined;
 /** Math, hex, byte helpers. Not in `utils` because utils share API with noble-curves. */
 const etc = {
     bytesToHex: b2h,
@@ -343,19 +343,20 @@ const etc = {
     mod: M,
     invert: invert,
     randomBytes: (len = 32) => {
-        const crypto = cr(); // Can be shimmed in node.js <= 18 to prevent error:
+        const c = cr(); // Can be shimmed in node.js <= 18 to prevent error:
         // import { webcrypto } from 'node:crypto';
         // if (!globalThis.crypto) globalThis.crypto = webcrypto;
-        if (!crypto || !crypto.getRandomValues)
+        if (!c || !c.getRandomValues)
             err('crypto.getRandomValues must be defined');
-        return crypto.getRandomValues(u8n(len));
+        return c.getRandomValues(u8n(len));
     },
     sha512Async: async (...messages) => {
-        const crypto = cr();
-        if (!crypto || !crypto.subtle)
-            err('crypto.subtle or etc.sha512Async must be defined');
+        const c = cr();
+        const s = c && c.subtle;
+        if (!s)
+            err('etc.sha512Async or crypto.subtle must be defined');
         const m = concatB(...messages);
-        return u8n(await crypto.subtle.digest('SHA-512', m.buffer));
+        return u8n(await s.digest('SHA-512', m.buffer));
     },
     sha512Sync: undefined, // Actual logic below
 };
