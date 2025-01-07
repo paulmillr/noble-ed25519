@@ -41,10 +41,13 @@ export interface AffinePoint { x: bigint, y: bigint }
 /** Point in xyzt extended coordinates. */
 class Point {
   constructor(readonly ex: bigint, readonly ey: bigint, readonly ez: bigint, readonly et: bigint) {}
-  static readonly BASE: Point = new Point(Gx, Gy, 1n, M(Gx * Gy)); // Generator / Base point
-  static readonly ZERO: Point = new Point(0n, 1n, 1n, 0n);         // Identity / Zero point
+  /** Generator / Base point */
+  static readonly BASE: Point = new Point(Gx, Gy, 1n, M(Gx * Gy));
+  /** Identity / Zero point */
+  static readonly ZERO: Point = new Point(0n, 1n, 1n, 0n);
   static fromAffine(p: AffinePoint): Point { return new Point(p.x, p.y, 1n, M(p.x * p.y)); }
-  static fromHex(hex: Hex, zip215 = false): Point {            // RFC8032 5.1.3: hex / Uint8Array to Point.
+  /** RFC8032 5.1.3: hex / Uint8Array to Point. */
+  static fromHex(hex: Hex, zip215 = false): Point {
     const { d } = CURVE;
     hex = toU8(hex, 32);
     const normed = hex.slice();                         // copy the array to not mess it up
@@ -77,7 +80,8 @@ class Point {
   negate(): Point {                                     // negate: flip over the affine x coordinate
     return new Point(M(-this.ex), this.ey, this.ez, M(-this.et));
   }
-  double(): Point {                                     // Point doubling. Complete formula.
+  /** Point doubling. Complete formula. */
+  double(): Point {
     const { ex: X1, ey: Y1, ez: Z1 } = this;            // Cost: 4M + 4S + 1*a + 6add + 1*2
     const { a } = CURVE; // https://hyperelliptic.org/EFD/g1p/auto-twisted-extended.html#doubling-dbl-2008-hwcd
     const A = M(X1 * X1); const B = M(Y1 * Y1); const C = M(2n * M(Z1 * Z1));
@@ -86,7 +90,8 @@ class Point {
     const X3 = M(E * F); const Y3 = M(G * H); const T3 = M(E * H); const Z3 = M(F * G);
     return new Point(X3, Y3, Z3, T3);
   }
-  add(other: Point): Point {                            // Point addition. Complete formula.
+  /** Point addition. Complete formula. */
+  add(other: Point): Point {
     const { ex: X1, ey: Y1, ez: Z1, et: T1 } = this;    // Cost: 8M + 1*k + 8add + 1*2.
     const { ex: X2, ey: Y2, ez: Z2, et: T2 } = isPoint(other); // doesn't check if other on-curve
     const { a, d } = CURVE; // http://hyperelliptic.org/EFD/g1p/auto-twisted-extended-1.html#addition-add-2008-hwcd-3
@@ -116,8 +121,9 @@ class Point {
     if (N % 2n) p = p.add(this); // P^(N+1)             // P*N == (P*(N/2))*2+P
     return p.is0();
   }
-  toAffine(): AffinePoint {                             // converts point to 2d xy affine point
-    const { ex: x, ey: y, ez: z } = this;               // (x, y, z, t) ∋ (x=x/z, y=y/z, t=xy)
+  /** converts point to 2d xy affine point. (x, y, z, t) ∋ (x=x/z, y=y/z, t=xy). */
+  toAffine(): AffinePoint {
+    const { ex: x, ey: y, ez: z } = this;
     if (this.equals(I)) return { x: 0n, y: 1n };        // fast-path for zero point
     const iz = invert(z, P);                            // z^-1: invert z
     if (M(z * iz) !== 1n) err('invalid inverse');       // (z * z^-1) must be 1, otherwise bad math
@@ -212,7 +218,7 @@ const uvRatio = (u: bigint, v: bigint): { isValid: boolean, value: bigint } => {
   return { isValid: useRoot1 || useRoot2, value: x };
 }
 const modL_LE = (hash: Bytes): bigint => M(b2n_LE(hash), N); // modulo L; but little-endian
-type Sha512FnSync = undefined | ((...messages: Bytes[]) => Bytes);
+export type Sha512FnSync = undefined | ((...messages: Bytes[]) => Bytes);
 let _shaS: Sha512FnSync;
 const sha512a = (...m: Bytes[]) => etc.sha512Async(...m);  // Async SHA512
 const sha512s = (...m: Bytes[]) =>                      // Sync SHA512, not set by default
@@ -271,9 +277,10 @@ const sign = (msg: Hex, privKey: Hex): Bytes => {
   const rBytes = sha512s(e.prefix, m);                  // r = SHA512(dom2(F, C) || prefix || PH(M))
   return hashFinish(false, _sign(e, rBytes, m));        // gen R, k, S, then 64-byte signature
 };
-export type DVO = { zip215?: boolean };
-const dvo: DVO = { zip215: true };
-const _verify = (sig: Hex, msg: Hex, pub: Hex, opts: DVO = dvo): Finishable<boolean> => {
+/** Verification options. zip215: true (default) follows ZIP215 spec. false would follow RFC8032. */
+export type VerifOpts = { zip215?: boolean };
+const dvo: VerifOpts = { zip215: true };
+const _verify = (sig: Hex, msg: Hex, pub: Hex, opts: VerifOpts = dvo): Finishable<boolean> => {
   sig = toU8(sig, 64);                                  // Signature hex str/Bytes, must be 64 bytes
   msg = toU8(msg);                                      // Message hex str/Bytes
   pub = toU8(pub, 32);
@@ -298,10 +305,10 @@ const _verify = (sig: Hex, msg: Hex, pub: Hex, opts: DVO = dvo): Finishable<bool
 // RFC8032 5.1.7: verification async, sync
 
 /** Verifies signature on message and public key. Async. */
-const verifyAsync = async (s: Hex, m: Hex, p: Hex, opts: DVO = dvo): Promise<boolean> =>
+const verifyAsync = async (s: Hex, m: Hex, p: Hex, opts: VerifOpts = dvo): Promise<boolean> =>
   hashFinish(true, _verify(s, m, p, opts));
 /** Verifies signature on message and public key. To use, set `etc.sha512Sync` first. */
-const verify = (s: Hex, m: Hex, p: Hex, opts: DVO = dvo): boolean =>
+const verify = (s: Hex, m: Hex, p: Hex, opts: VerifOpts = dvo): boolean =>
   hashFinish(false, _verify(s, m, p, opts));
 declare const globalThis: Record<string, any> | undefined; // Typescript symbol present in browsers
 const cr = () => // We support: 1) browsers 2) node.js 19+

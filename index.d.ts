@@ -28,27 +28,33 @@ declare class Point {
     readonly ez: bigint;
     readonly et: bigint;
     constructor(ex: bigint, ey: bigint, ez: bigint, et: bigint);
+    /** Generator / Base point */
     static readonly BASE: Point;
+    /** Identity / Zero point */
     static readonly ZERO: Point;
     static fromAffine(p: AffinePoint): Point;
+    /** RFC8032 5.1.3: hex / Uint8Array to Point. */
     static fromHex(hex: Hex, zip215?: boolean): Point;
     get x(): bigint;
     get y(): bigint;
     equals(other: Point): boolean;
     is0(): boolean;
     negate(): Point;
+    /** Point doubling. Complete formula. */
     double(): Point;
+    /** Point addition. Complete formula. */
     add(other: Point): Point;
     mul(n: bigint, safe?: boolean): Point;
     multiply(scalar: bigint): Point;
     clearCofactor(): Point;
     isSmallOrder(): boolean;
     isTorsionFree(): boolean;
+    /** converts point to 2d xy affine point. (x, y, z, t) ∋ (x=x/z, y=y/z, t=xy). */
     toAffine(): AffinePoint;
     toRawBytes(): Bytes;
     toHex(): string;
 }
-type Sha512FnSync = undefined | ((...messages: Bytes[]) => Bytes);
+export type Sha512FnSync = undefined | ((...messages: Bytes[]) => Bytes);
 type ExtK = {
     head: Bytes;
     prefix: Bytes;
@@ -64,13 +70,14 @@ declare const getPublicKey: (priv: Hex) => Bytes;
 declare const signAsync: (msg: Hex, privKey: Hex) => Promise<Bytes>;
 /** Signs message (NOT message hash) using private key. To use, set `etc.sha512Sync` first. */
 declare const sign: (msg: Hex, privKey: Hex) => Bytes;
-export type DVO = {
+/** Verification options. zip215: true (default) follows ZIP215 spec. false would follow RFC8032. */
+export type VerifOpts = {
     zip215?: boolean;
 };
 /** Verifies signature on message and public key. Async. */
-declare const verifyAsync: (s: Hex, m: Hex, p: Hex, opts?: DVO) => Promise<boolean>;
+declare const verifyAsync: (s: Hex, m: Hex, p: Hex, opts?: VerifOpts) => Promise<boolean>;
 /** Verifies signature on message and public key. To use, set `etc.sha512Sync` first. */
-declare const verify: (s: Hex, m: Hex, p: Hex, opts?: DVO) => boolean;
+declare const verify: (s: Hex, m: Hex, p: Hex, opts?: VerifOpts) => boolean;
 /** Math, hex, byte helpers. Not in `utils` because utils share API with noble-curves. */
 declare const etc: {
     bytesToHex: (b: Bytes) => string;

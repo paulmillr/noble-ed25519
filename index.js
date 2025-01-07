@@ -37,6 +37,7 @@ class Point {
         this.et = et;
     }
     static fromAffine(p) { return new Point(p.x, p.y, 1n, M(p.x * p.y)); }
+    /** RFC8032 5.1.3: hex / Uint8Array to Point. */
     static fromHex(hex, zip215 = false) {
         const { d } = CURVE;
         hex = toU8(hex, 32);
@@ -75,6 +76,7 @@ class Point {
     negate() {
         return new Point(M(-this.ex), this.ey, this.ez, M(-this.et));
     }
+    /** Point doubling. Complete formula. */
     double() {
         const { ex: X1, ey: Y1, ez: Z1 } = this; // Cost: 4M + 4S + 1*a + 6add + 1*2
         const { a } = CURVE; // https://hyperelliptic.org/EFD/g1p/auto-twisted-extended.html#doubling-dbl-2008-hwcd
@@ -93,6 +95,7 @@ class Point {
         const Z3 = M(F * G);
         return new Point(X3, Y3, Z3, T3);
     }
+    /** Point addition. Complete formula. */
     add(other) {
         const { ex: X1, ey: Y1, ez: Z1, et: T1 } = this; // Cost: 8M + 1*k + 8add + 1*2.
         const { ex: X2, ey: Y2, ez: Z2, et: T2 } = isPoint(other); // doesn't check if other on-curve
@@ -138,8 +141,9 @@ class Point {
             p = p.add(this); // P^(N+1)             // P*N == (P*(N/2))*2+P
         return p.is0();
     }
+    /** converts point to 2d xy affine point. (x, y, z, t) ∋ (x=x/z, y=y/z, t=xy). */
     toAffine() {
-        const { ex: x, ey: y, ez: z } = this; // (x, y, z, t) ∋ (x=x/z, y=y/z, t=xy)
+        const { ex: x, ey: y, ez: z } = this;
         if (this.equals(I))
             return { x: 0n, y: 1n }; // fast-path for zero point
         const iz = invert(z, P); // z^-1: invert z
@@ -155,8 +159,10 @@ class Point {
     }
     toHex() { return b2h(this.toRawBytes()); } // encode to hex string
 }
-Point.BASE = new Point(Gx, Gy, 1n, M(Gx * Gy)); // Generator / Base point
-Point.ZERO = new Point(0n, 1n, 1n, 0n); // Identity / Zero point
+/** Generator / Base point */
+Point.BASE = new Point(Gx, Gy, 1n, M(Gx * Gy));
+/** Identity / Zero point */
+Point.ZERO = new Point(0n, 1n, 1n, 0n);
 const { BASE: G, ZERO: I } = Point; // Generator, identity points
 const padh = (num, pad) => num.toString(16).padStart(pad, '0');
 const b2h = (b) => Array.from(au8(b)).map(e => padh(e, 2)).join(''); // bytes to hex
