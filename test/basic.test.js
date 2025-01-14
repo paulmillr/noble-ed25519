@@ -2,7 +2,6 @@ import { deepStrictEqual, throws } from 'node:assert';
 import { should, describe } from 'micro-should';
 import * as fc from 'fast-check';
 import * as ed25519 from '../index.js';
-import * as h from './ed25519.helpers.js';
 
 const CURVES = { ed25519 };
 const name = 'ed25519';

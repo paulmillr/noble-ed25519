@@ -1,4 +1,4 @@
-import { deepStrictEqual, throws } from 'assert';
+import { deepStrictEqual, throws } from 'node:assert';
 import * as fc from 'fast-check';
 import { describe, should } from 'micro-should';
 import * as items from '../index.js';
@@ -31,7 +31,8 @@ describe('utils', () => {
         if (hex.length % 2 !== 0) return;
         deepStrictEqual(hex, bytesToHex(hexToBytes(hex)));
         deepStrictEqual(hex, bytesToHex(hexToBytes(hex.toUpperCase())));
-        deepStrictEqual(hexToBytes(hex), Uint8Array.from(Buffer.from(hex, 'hex')));
+        if (typeof Buffer !== 'undefined')
+          deepStrictEqual(hexToBytes(hex), Uint8Array.from(Buffer.from(hex, 'hex')));
       })
     )
   );
@@ -53,7 +54,7 @@ describe('utils', () => {
   should('concatBytes random', () =>
     fc.assert(
       fc.property(fc.uint8Array(), fc.uint8Array(), fc.uint8Array(), (a, b, c) => {
-        const expected = Uint8Array.from(Buffer.concat([a, b, c]));
+        const expected = Uint8Array.from([...a, ...b, ...c]);
         deepStrictEqual(concatBytes(a.slice(), b.slice(), c.slice()), expected);
       })
     )
@@ -93,8 +94,4 @@ describe('utils math', () => {
   });
 });
 
-// ESM is broken.
-import url from 'node:url';
-if (import.meta.url === url.pathToFileURL(process.argv[1]).href) {
-  should.run();
-}
+should.runWhen(import.meta.url);

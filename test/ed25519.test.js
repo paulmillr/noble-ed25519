@@ -1,3 +1,4 @@
+import { json } from './utils.js';
 import { deepStrictEqual, strictEqual, throws } from 'node:assert';
 import { readFileSync } from 'node:fs';
 import { bytesToHex, concatBytes, hexToBytes, utf8ToBytes, randomBytes } from '@noble/hashes/utils';
@@ -5,10 +6,10 @@ import * as fc from 'fast-check';
 import { describe, should } from 'micro-should';
 import { ed25519 as ed, ED25519_TORSION_SUBGROUP, numberToBytesLE } from './ed25519.helpers.js';
 // Old vectors allow to test sign() because they include private key
-import { default as ed25519vectors_OLD } from './ed25519/ed25519_test_OLD.json' with { type: 'json' };
-import { default as ed25519vectors } from './wycheproof/ed25519_test.json' with { type: 'json' };
-import { default as zip215 } from './ed25519/zip215.json' with { type: 'json' };
-import { default as edgeCases } from './ed25519/edge-cases.json' with { type: 'json' };
+const ed25519vectors_OLD = json('./ed25519/ed25519_test_OLD.json');
+const ed25519vectors = json('./wycheproof/ed25519_test.json');
+const zip215 = json('./ed25519/zip215.json');
+const edgeCases = json('./ed25519/edge-cases.json');
 
 // Any changes to the file will need to be aware of the fact
 // the file is shared between noble-curves and noble-ed25519.
@@ -290,18 +291,22 @@ describe('ed25519', () => {
     const publicKey = ed.getPublicKey(privateKey);
 
     for (let i = 0; i < 100; i++) {
-      let payload = randomBytes(100);
-      let signature = ed.sign(payload, privateKey);
-      if (!ed.verify(signature, payload, publicKey)) {
+      let pay = randomBytes(100); // payload
+      let sig = ed.sign(pay, privateKey);
+      if (!ed.verify(sig, pay, publicKey))
         throw new Error('Signature verification failed');
-      }
-      const signatureCopy = Buffer.alloc(signature.byteLength);
-      signatureCopy.set(signature, 0); // <-- breaks
-      payload = payload.slice();
-      signature = signature.slice();
+      if (typeof Buffer === 'undefined') {
+        if (!ed.verify(sig.slice(), pay.slice(), publicKey))
+          throw new Error('Signature verification failed');
+      } else {
+        const signatureCopy = Buffer.alloc(sig.byteLength);
+        signatureCopy.set(sig, 0); // <-- breaks
+        pay = pay.slice();
+        sig = sig.slice();
 
-      if (!ed.verify(signatureCopy, payload, publicKey))
-        throw new Error('Copied signature verification failed');
+        if (!ed.verify(signatureCopy, pay, publicKey))
+          throw new Error('Copied signature verification failed');
+      }
     }
   });
 
@@ -327,7 +332,7 @@ describe('ed25519', () => {
       throws(() => {
         deepStrictEqual(ed.verify(sig, 'deadbeef', Point.BASE), false);
       });
-      deepStrictEqual(ed.verify(sig, 'deadbeef', Point.BASE.toRawBytes()), false);
+      deepStrictEqual(ed.verify(sig, 'be'.repeat(64), Point.BASE.toRawBytes()), false);
     });
   });
 
@@ -461,8 +466,4 @@ describe('ed25519', () => {
   });
 });
 
-// ESM is broken.
-import url from 'node:url';
-if (import.meta.url === url.pathToFileURL(process.argv[1]).href) {
-  should.run();
-}
+should.runWhen(import.meta.url);
