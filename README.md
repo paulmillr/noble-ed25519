@@ -32,7 +32,9 @@ Curves are drop-in replacement and have more features: Common.js, ristretto255, 
 
 > `npm install @noble/ed25519`
 
-> `deno add @noble/ed25519`
+> `deno add jsr:@noble/ed25519`
+
+> `deno doc jsr:@noble/ed25519` # command-line documentation
 
 We support all major platforms and runtimes. For node.js <= 18 and React Native, additional polyfills are needed: see below.
 
