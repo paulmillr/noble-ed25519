@@ -2,15 +2,10 @@
   "name": "build",
   "private": true,
   "version": "1.0.0",
-  "description": "Builds minified file",
-  "main": "noble-ed25519.js",
-  "scripts": {
-    "terser": "terser --ecma 2020 -m -c < ../../index.js"
-  },
-  "keywords": [],
-  "author": "",
-  "license": "MIT",
+  "main": "input.js",
+  "type": "module",
   "devDependencies": {
-    "terser": "5.29.2"
+    "@noble/ed25519": "file:../..",
+    "esbuild": "0.24.2"
   }
 }
