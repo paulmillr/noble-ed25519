@@ -39,8 +39,7 @@ Curves are drop-in replacement and have more features: Common.js, ristretto255, 
 We support all major platforms and runtimes. For node.js <= 18 and React Native, additional polyfills are needed: see below.
 
 ```js
-import * as ed from '@noble/ed25519';
-// import * as ed from "https://unpkg.com/@noble/ed25519"; // Unpkg
+import * as ed from "@noble/ed25519";
 (async () => {
   // Uint8Arrays or hex strings are accepted:
   // Uint8Array.from([0xde, 0xad, 0xbe, 0xef]) is equal to 'deadbeef'
@@ -57,19 +56,19 @@ Additional polyfills for some environments:
 ```ts
 // 1. Enable synchronous methods.
 // Only async methods are available by default, to keep the library dependency-free.
-import { sha512 } from '@noble/hashes/sha512';
+import { sha512 } from "@noble/hashes/sha512";
 ed.etc.sha512Sync = (...m) => sha512(ed.etc.concatBytes(...m));
 // Sync methods can be used now:
 // ed.getPublicKey(privKey); ed.sign(msg, privKey); ed.verify(signature, msg, pubKey);
 
 // 2. node.js 18 and older, requires polyfilling globalThis.crypto
-import { webcrypto } from 'node:crypto';
+import { webcrypto } from "node:crypto";
 // @ts-ignore
 if (!globalThis.crypto) globalThis.crypto = webcrypto;
 
 // 3. React Native needs crypto.getRandomValues polyfill and sha512
-import 'react-native-get-random-values';
-import { sha512 } from '@noble/hashes/sha512';
+import "react-native-get-random-values";
+import { sha512 } from "@noble/hashes/sha512";
 ed.etc.sha512Sync = (...m) => sha512(ed.etc.concatBytes(...m));
 ed.etc.sha512Async = (...m) => Promise.resolve(ed.etc.sha512Sync(...m));
 ```
@@ -280,9 +279,9 @@ Other changes for upgrading from @noble/ed25519 1.7 to 2.0:
 
 ## Contributing & testing
 
-* `npm install && npm run build && npm test` will build the code and run tests.
-* `npm run bench` will run benchmarks, which may need their deps first (`npm run bench:install`)
-* `npm run loc` will count total output size, important to be less than 4KB
+- `npm install && npm run build && npm test` will build the code and run tests.
+- `npm run bench` will run benchmarks, which may need their deps first (`npm run bench:install`)
+- `npm run loc` will count total output size, important to be less than 4KB
 
 Check out [github.com/paulmillr/guidelines](https://github.com/paulmillr/guidelines)
 for general coding practices and rules.
