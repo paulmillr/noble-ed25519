@@ -55,11 +55,11 @@ class Point {
         const v = M(d * y2 + 1n); // v=dy²+1
         let { isValid, value: x } = uvRatio(u, v); // (uv³)(uv⁷)^(p-5)/8; square root
         if (!isValid)
-            err('bad y coordinate 3'); // not square root: bad point
+            err('bad y coord 3'); // not square root: bad point
         const isXOdd = (x & 1n) === 1n; // adjust sign of x coordinate
         const isLastByteOdd = (lastByte & 0x80) !== 0; // x_0, last bit
         if (!zip215 && x === 0n && isLastByteOdd)
-            err('bad y coord 3'); // x=0 and x_0 = 1
+            err('bad y coord 4'); // x=0 and x_0 = 1
         if (isLastByteOdd !== isXOdd)
             x = M(-x);
         return new Point(x, y, 1n, M(x * y)); // Z=1, T=xy
@@ -395,6 +395,7 @@ const precompute = () => {
     return points; // when precomputes are using base point
 };
 let Gpows = undefined; // precomputes for base point G
+// !! Remove wNAF() call inside of Point#mul(), if you want to disable precomputes.
 const wNAF = (n) => {
     // Compared to other point mult methods,
     const comp = Gpows || (Gpows = precompute()); // stores 2x less points using subtraction
@@ -423,6 +424,6 @@ const wNAF = (n) => {
         }
     }
     return { p, f }; // return both real and fake points for JIT
-}; // !! you can disable precomputes by commenting-out call of the wNAF() inside Point#mul()
-export { CURVE, etc, Point as ExtendedPoint, getPublicKey, getPublicKeyAsync, sign, // Remove the export to easily use in REPL
-signAsync, utils, verify, verifyAsync }; // envs like browser console
+};
+// !! Remove the export to easily use in REPL / browser console
+export { CURVE, etc, Point as ExtendedPoint, getPublicKey, getPublicKeyAsync, sign, signAsync, utils, verify, verifyAsync };

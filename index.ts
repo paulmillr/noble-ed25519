@@ -16,8 +16,8 @@ const _d = 370957059346694393431380835087545651895421138798432190163887855330859
 const CURVE: {
   a: bigint; d: bigint; p: bigint; n: bigint; h: number; Gx: bigint; Gy: bigint;
 } = {
-  a: -1n,                                                       // -1 mod p
-  d: _d,                                                        // -(121665/121666) mod p
+  a: -1n,                                               // -1 mod p
+  d: _d,                                                // -(121665/121666) mod p
   p: P, n: N, h: 8, Gx: Gx, Gy: Gy    // field prime, curve (group) order, cofactor
 };
 /** Alias to Uint8Array. */
@@ -62,10 +62,10 @@ class Point {
     const u = M(y2 - 1n);                               // u=y²-1
     const v = M(d * y2 + 1n);                           // v=dy²+1
     let { isValid, value: x } = uvRatio(u, v);          // (uv³)(uv⁷)^(p-5)/8; square root
-    if (!isValid) err('bad y coordinate 3');            // not square root: bad point
+    if (!isValid) err('bad y coord 3');                 // not square root: bad point
     const isXOdd = (x & 1n) === 1n;                     // adjust sign of x coordinate
     const isLastByteOdd = (lastByte & 0x80) !== 0;      // x_0, last bit
-    if (!zip215 && x === 0n && isLastByteOdd) err('bad y coord 3'); // x=0 and x_0 = 1
+    if (!zip215 && x === 0n && isLastByteOdd) err('bad y coord 4'); // x=0 and x_0 = 1
     if (isLastByteOdd !== isXOdd) x = M(-x);
     return new Point(x, y, 1n, M(x * y));               // Z=1, T=xy
   }
@@ -97,10 +97,10 @@ class Point {
     const { ex: X1, ey: Y1, ez: Z1, et: T1 } = this;    // Cost: 8M + 1*k + 8add + 1*2.
     const { ex: X2, ey: Y2, ez: Z2, et: T2 } = isPoint(other); // doesn't check if other on-curve
     const { a, d } = CURVE; // http://hyperelliptic.org/EFD/g1p/auto-twisted-extended-1.html#addition-add-2008-hwcd-3
-    const A = M(X1 * X2); const B = M(Y1 * Y2); const C = M(T1 * d * T2);
+    const A = M(X1 * X2); const B = M(Y1 * Y2);  const C = M(T1 * d * T2);
     const D = M(Z1 * Z2); const E = M((X1 + Y1) * (X2 + Y2) - A - B);
-    const F = M(D - C); const G = M(D + C); const H = M(B - a * A);
-    const X3 = M(E * F); const Y3 = M(G * H); const T3 = M(E * H); const Z3 = M(F * G);
+    const F = M(D - C);   const G = M(D + C);    const H = M(B - a * A);
+    const X3 = M(E * F);  const Y3 = M(G * H);   const T3 = M(E * H); const Z3 = M(F * G);
     return new Point(X3, Y3, Z3, T3);
   }
   mul(n: bigint, safe = true): Point {                  // Multiply point by scalar n
@@ -322,7 +322,7 @@ const etc = {
   concatBytes: concatB satisfies (...arrs: Bytes[]) => Uint8Array as (...arrs: Bytes[]) => Uint8Array,
   mod: M satisfies (a: bigint, b?: bigint) => bigint as (a: bigint, b?: bigint) => bigint,
   invert: invert as (num: bigint, md: bigint) => bigint,
-  randomBytes: (len = 32): Bytes => {                     // CSPRNG (random number generator)
+  randomBytes: (len = 32): Bytes => {                   // CSPRNG (random number generator)
     const c = cr(); // Can be shimmed in node.js <= 18 to prevent error:
     // import { webcrypto } from 'node:crypto';
     // if (!globalThis.crypto) globalThis.crypto = webcrypto;
@@ -338,7 +338,7 @@ const etc = {
   },
   sha512Sync: undefined as Sha512FnSync,                // Actual logic below
 };
-Object.defineProperties(etc, { sha512Sync: {  // Allow setting it once. Next sets will be ignored
+Object.defineProperties(etc, { sha512Sync: {            // Allow setting it once. Next sets will be ignored
   configurable: false, get() { return _shaS; }, set(f) { if (!_shaS) _shaS = f; },
 } });
 /** ed25519-specific key utilities. */
@@ -362,6 +362,7 @@ const precompute = () => {                              // They give 12x faster 
   return points;                                        // when precomputes are using base point
 }
 let Gpows: Point[] | undefined = undefined;             // precomputes for base point G
+// !! Remove wNAF() call inside of Point#mul(), if you want to disable precomputes.
 const wNAF = (n: bigint): { p: Point; f: Point } => {   // w-ary non-adjacent form (wNAF) method.
                                                         // Compared to other point mult methods,
   const comp = Gpows || (Gpows = precompute());         // stores 2x less points using subtraction
@@ -386,9 +387,9 @@ const wNAF = (n: bigint): { p: Point; f: Point } => {   // w-ary non-adjacent fo
     }
   }
   return { p, f }                                       // return both real and fake points for JIT
-};        // !! you can disable precomputes by commenting-out call of the wNAF() inside Point#mul()
+};
+// !! Remove the export to easily use in REPL / browser console
 export {
-  CURVE, etc, Point as ExtendedPoint, getPublicKey, getPublicKeyAsync, sign, // Remove the export to easily use in REPL
+  CURVE, etc, Point as ExtendedPoint, getPublicKey, getPublicKeyAsync, sign,
   signAsync, utils, verify, verifyAsync
-}; // envs like browser console
-
+};
