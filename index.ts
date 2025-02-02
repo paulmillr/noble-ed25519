@@ -40,7 +40,9 @@ const isPoint = (p: any) => (p instanceof Point ? p : err('Point expected')); //
 export interface AffinePoint { x: bigint, y: bigint }
 /** Point in xyzt extended coordinates. */
 class Point {
-  constructor(readonly ex: bigint, readonly ey: bigint, readonly ez: bigint, readonly et: bigint) {}
+  constructor(readonly ex: bigint, readonly ey: bigint, readonly ez: bigint, readonly et: bigint) {
+    Object.freeze(this);
+  }
   /** Generator / Base point */
   static readonly BASE: Point = new Point(Gx, Gy, 1n, M(Gx * Gy));
   /** Identity / Zero point */
@@ -385,5 +387,8 @@ const wNAF = (n: bigint): { p: Point; f: Point } => {   // w-ary non-adjacent fo
   }
   return { p, f }                                       // return both real and fake points for JIT
 };        // !! you can disable precomputes by commenting-out call of the wNAF() inside Point#mul()
-export { getPublicKey, getPublicKeyAsync, sign, verify, // Remove the export to easily use in REPL
-  signAsync, verifyAsync, CURVE, etc, utils, Point as ExtendedPoint } // envs like browser console
+export {
+  CURVE, etc, Point as ExtendedPoint, getPublicKey, getPublicKeyAsync, sign, // Remove the export to easily use in REPL
+  signAsync, utils, verify, verifyAsync
+}; // envs like browser console
+

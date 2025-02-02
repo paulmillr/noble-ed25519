@@ -35,6 +35,7 @@ class Point {
         this.ey = ey;
         this.ez = ez;
         this.et = et;
+        Object.freeze(this);
     }
     static fromAffine(p) { return new Point(p.x, p.y, 1n, M(p.x * p.y)); }
     /** RFC8032 5.1.3: hex / Uint8Array to Point. */
@@ -423,5 +424,5 @@ const wNAF = (n) => {
     }
     return { p, f }; // return both real and fake points for JIT
 }; // !! you can disable precomputes by commenting-out call of the wNAF() inside Point#mul()
-export { getPublicKey, getPublicKeyAsync, sign, verify, // Remove the export to easily use in REPL
-signAsync, verifyAsync, CURVE, etc, utils, Point as ExtendedPoint }; // envs like browser console
+export { CURVE, etc, Point as ExtendedPoint, getPublicKey, getPublicKeyAsync, sign, // Remove the export to easily use in REPL
+signAsync, utils, verify, verifyAsync }; // envs like browser console
