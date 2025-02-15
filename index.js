@@ -258,10 +258,13 @@ const uvRatio = (u, v) => {
     return { isValid: useRoot1 || useRoot2, value: x };
 };
 const modL_LE = (hash) => M(b2n_LE(hash), N); // modulo L; but little-endian
-let _shaS;
 const sha512a = (...m) => etc.sha512Async(...m); // Async SHA512
-const sha512s = (...m) => // Sync SHA512, not set by default
- typeof _shaS === 'function' ? _shaS(...m) : err('etc.sha512Sync not set');
+const sha512s = (...m) => {
+    const fn = etc.sha512Sync;
+    if (typeof fn !== 'function')
+        err('etc.sha512Sync not set');
+    return fn(...m);
+};
 const hash2extK = (hashed) => {
     const head = hashed.slice(0, 32); // slice creates a copy, unlike subarray
     head[0] &= 248; // Clamp bits: 0b1111_1000,
@@ -343,6 +346,10 @@ const verifyAsync = async (s, m, p, opts = dvo) => hashFinish(true, _verify(s, m
 const verify = (s, m, p, opts = dvo) => hashFinish(false, _verify(s, m, p, opts));
 const cr = () => // We support: 1) browsers 2) node.js 19+
  typeof globalThis === 'object' && 'crypto' in globalThis ? globalThis.crypto : undefined;
+const subtle = () => {
+    const c = cr();
+    return c && c.subtle || err('crypto.subtle must be defined');
+};
 /** Math, hex, byte helpers. Not in `utils` because utils share API with noble-curves. */
 const etc = {
     bytesToHex: b2h,
@@ -359,19 +366,12 @@ const etc = {
         return c.getRandomValues(u8n(len));
     },
     sha512Async: async (...messages) => {
-        const c = cr();
-        const s = c && c.subtle;
-        if (!s)
-            err('etc.sha512Async or crypto.subtle must be defined');
+        const s = subtle();
         const m = concatB(...messages);
         return u8n(await s.digest('SHA-512', m.buffer));
     },
     sha512Sync: undefined, // Actual logic below
 };
-Object.defineProperties(etc, { sha512Sync: {
-        configurable: false, get() { return _shaS; }, set(f) { if (!_shaS)
-            _shaS = f; },
-    } });
 /** ed25519-specific key utilities. */
 const utils = {
     getExtendedPublicKeyAsync: getExtendedPublicKeyAsync,

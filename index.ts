@@ -222,10 +222,12 @@ const uvRatio = (u: bigint, v: bigint): { isValid: boolean, value: bigint } => {
 }
 const modL_LE = (hash: Bytes): bigint => M(b2n_LE(hash), N); // modulo L; but little-endian
 export type Sha512FnSync = undefined | ((...messages: Bytes[]) => Bytes);
-let _shaS: Sha512FnSync;
 const sha512a = (...m: Bytes[]) => etc.sha512Async(...m);  // Async SHA512
-const sha512s = (...m: Bytes[]) =>                      // Sync SHA512, not set by default
-  typeof _shaS === 'function' ? _shaS(...m) : err('etc.sha512Sync not set');
+const sha512s = (...m: Bytes[]) => {                       // Sync SHA512, not set by default
+  const fn = etc.sha512Sync;
+  if (typeof fn !== 'function') err('etc.sha512Sync not set');
+  return fn!(...m);
+};    
 type ExtK = { head: Bytes, prefix: Bytes, scalar: bigint, point: Point, pointBytes: Bytes };
 const hash2extK = (hashed: Bytes): ExtK => {            // RFC8032 5.1.5
   const head = hashed.slice(0, 32);                     // slice creates a copy, unlike subarray
@@ -316,6 +318,10 @@ const verify = (s: Hex, m: Hex, p: Hex, opts: VerifOpts = dvo): boolean =>
 declare const globalThis: Record<string, any> | undefined; // Typescript symbol present in browsers
 const cr = () => // We support: 1) browsers 2) node.js 19+
   typeof globalThis === 'object' && 'crypto' in globalThis ? globalThis.crypto : undefined;
+const subtle = () => {
+  const c = cr();
+  return c && c.subtle || err('crypto.subtle must be defined');
+};  
 /** Math, hex, byte helpers. Not in `utils` because utils share API with noble-curves. */
 const etc = {
   bytesToHex: b2h satisfies (b: Bytes) => string as (b: Bytes) => string,
@@ -331,17 +337,12 @@ const etc = {
     return c.getRandomValues(u8n(len));
   },
   sha512Async: async (...messages: Bytes[]): Promise<Bytes> => {
-    const c = cr();
-    const s = c && c.subtle
-    if (!s) err('etc.sha512Async or crypto.subtle must be defined');
+    const s = subtle();
     const m = concatB(...messages);
     return u8n(await s.digest('SHA-512', m.buffer));
   },
   sha512Sync: undefined as Sha512FnSync,                // Actual logic below
 };
-Object.defineProperties(etc, { sha512Sync: {            // Allow setting it once. Next sets will be ignored
-  configurable: false, get() { return _shaS; }, set(f) { if (!_shaS) _shaS = f; },
-} });
 /** ed25519-specific key utilities. */
 const utils = {
   getExtendedPublicKeyAsync: getExtendedPublicKeyAsync as (priv: Hex) => Promise<ExtK>,
