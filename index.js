@@ -24,8 +24,9 @@ const isu8 = (a) => (a instanceof Uint8Array || (ArrayBuffer.isView(a) && a.cons
 const au8 = (a, l) => // is Uint8Array (of specific length)
  !isu8(a) || (typeof l === 'number' && l > 0 && a.length !== l) ?
     err('Uint8Array of valid length expected') : a;
-const u8n = (data) => new Uint8Array(data); // creates Uint8Array
-const toU8 = (a, len) => au8(isS(a) ? h2b(a) : u8n(au8(a)), len); // norm(hex/u8a) to u8a
+const u8n = (len) => new Uint8Array(len); // creates Uint8Array
+const u8fr = (buf) => Uint8Array.from(buf);
+const toU8 = (a, len) => au8(isS(a) ? h2b(a) : u8fr(au8(a)), len); // norm(hex/u8a) to u8a
 const M = (a, b = P) => { let r = a % b; return r >= 0n ? r : b + r; }; // mod division
 const isPoint = (p) => (p instanceof Point ? p : err('Point expected')); // is xyzt point
 /** Point in xyzt extended coordinates. */
@@ -195,7 +196,7 @@ const h2b = (hex) => {
     return array;
 };
 const n2b_32LE = (num) => h2b(padh(num, 32 * 2)).reverse(); // number to bytes LE
-const b2n_LE = (b) => BigInt('0x' + b2h(u8n(au8(b)).reverse())); // bytes LE to num
+const b2n_LE = (b) => BigInt('0x' + b2h(u8fr(au8(b)).reverse())); // bytes LE to num
 const concatB = (...arrs) => {
     const r = u8n(arrs.reduce((sum, a) => sum + au8(a).length, 0)); // create u8a of summed length
     let pad = 0; // walk through each array,
