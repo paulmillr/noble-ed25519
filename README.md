@@ -6,8 +6,7 @@ Fastest 4KB JS implementation of ed25519 signatures.
   FIPS 186-5
 - 🪢 Consensus-friendly, compliant with [ZIP215](https://zips.z.cash/zip-0215)
 - 🔖 SUF-CMA (strong unforgeability under chosen message attacks) and SBS (non-repudiation / exclusive ownership)
-- 📦 Pure ESM, can be imported without transpilers
-- 🪶 4KB gzipped, 400 lines of code
+- 🪶 4KB gzipped, 400 lines of pure ESM, bundler-less code
 
 The module is a sister project of [noble-curves](https://github.com/paulmillr/noble-curves),
 focusing on smaller attack surface & better auditability.
