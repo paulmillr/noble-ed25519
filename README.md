@@ -129,10 +129,6 @@ By default, follows ZIP215 [^1] and can be used in consensus-critical apps [^2].
 `zip215: false` option switches verification criteria to strict
 RFC8032 / FIPS 186-5 and provides non-repudiation with SBS (Strongly Binding Signatures) [^3].
 
-[1]: https://zips.z.cash/zip-0215
-[2]: https://hdevalence.ca/blog/2020-10-04-its-25519am
-[3]: https://eprint.iacr.org/2020/1244
-
 ### utils
 
 A bunch of useful **utilities** are also exposed:
@@ -299,3 +295,9 @@ related to the library.
 ## License
 
 MIT (c) 2019 Paul Miller [(https://paulmillr.com)](https://paulmillr.com), see LICENSE file.
+
+[^1]: https://zips.z.cash/zip-0215
+
+[^2]: https://hdevalence.ca/blog/2020-10-04-its-25519am
+
+[^3]: https://eprint.iacr.org/2020/1244
