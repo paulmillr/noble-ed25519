@@ -125,9 +125,9 @@ function verifyAsync(signature: Hex, message: Hex, publicKey: Hex): Promise<bool
 ```
 
 Verifies EdDSA signature. Has SUF-CMA (strong unforgeability under chosen message attacks).
-By default, follows ZIP215 [1] and can be used in consensus-critical apps [2].
+By default, follows ZIP215 [^1] and can be used in consensus-critical apps [^2].
 `zip215: false` option switches verification criteria to strict
-RFC8032 / FIPS 186-5 and provides non-repudiation with SBS (Strongly Binding Signatures) [3].
+RFC8032 / FIPS 186-5 and provides non-repudiation with SBS (Strongly Binding Signatures) [^3].
 
 [1]: https://zips.z.cash/zip-0215
 [2]: https://hdevalence.ca/blog/2020-10-04-its-25519am
