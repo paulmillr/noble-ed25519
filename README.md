@@ -50,22 +50,29 @@ import * as ed from '@noble/ed25519';
 })();
 ```
 
-Additional polyfills for some environments:
+### Enabling synchronous methods
+
+Only async methods are available by default, to keep the library dependency-free.
+To enable sync methods:
 
 ```ts
-// 1. Enable synchronous methods.
-// Only async methods are available by default, to keep the library dependency-free.
 import { sha512 } from '@noble/hashes/sha512';
 ed.etc.sha512Sync = (...m) => sha512(ed.etc.concatBytes(...m));
 // Sync methods can be used now:
 // ed.getPublicKey(privKey); ed.sign(msg, privKey); ed.verify(signature, msg, pubKey);
+```
 
-// 2. node.js 18 and older, requires polyfilling globalThis.crypto
+### nodejs v18 and others without global crypto
+
+```ts
 import { webcrypto } from 'node:crypto';
 // @ts-ignore
 if (!globalThis.crypto) globalThis.crypto = webcrypto;
+```
 
-// 3. React Native needs crypto.getRandomValues polyfill and sha512
+### React Native: polyfill getRandomValues and sha512
+
+```ts
 import 'react-native-get-random-values';
 import { sha512 } from '@noble/hashes/sha512';
 ed.etc.sha512Sync = (...m) => sha512(ed.etc.concatBytes(...m));
@@ -75,39 +82,47 @@ ed.etc.sha512Async = (...m) => Promise.resolve(ed.etc.sha512Sync(...m));
 ## API
 
 There are 3 main methods: `getPublicKey(privateKey)`, `sign(message, privateKey)`
-and `verify(signature, message, publicKey)`. We accept Hex type everywhere:
-
-```ts
-type Hex = Uint8Array | string;
-```
+and `verify(signature, message, publicKey)` (also their async counterparts).
 
 ### getPublicKey
 
 ```typescript
-function getPublicKey(privateKey: Hex): Uint8Array;
-function getPublicKeyAsync(privateKey: Hex): Promise<Uint8Array>;
+import * as ed from '@noble/ed25519';
+(async () => {
+  const privKeyA = ed.utils.hexToBytes('9d61b19deffd5a60ba844af492ec2cc44449c5697b326919703bac031cae7f60');
+  const pubKeyA = ed.getPublicKey(privKeyA);
+
+  const privKeyB = ed.utils.randomPrivateKey();
+  const pubKeyB = await ed.getPublicKeyAsync(privKeyB);
+
+  const privKey64Byte = ed.etc.concatBytes(privKeyB, pubKeyB);
+  const pubKeyPoint = ed.ExtendedPoint.fromHex(pubKeyB);
+  const pubKeyExt = ed.utils.getExtendedPublicKey(privKeyB);
+})();
 ```
 
 Generates 32-byte public key from 32-byte private key.
 
-- Some libraries have 64-byte private keys. Don't worry, those are just
-  priv+pub concatenated. Slice it: `priv64b.slice(0, 32)`
-- Use `Point.fromPrivateKey(privateKey)` if you want `Point` instance instead
-- Use `Point.fromHex(publicKey)` if you want to convert hex / bytes into Point.
+- Some libraries have 64-byte private keys - those are just priv+pub concatenated
+- Use `ExtendedPoint.fromHex(publicKey)` if you want to convert hex / bytes into Point.
   It will use decompression algorithm 5.1.3 of RFC 8032.
 - Use `utils.getExtendedPublicKey` if you need full SHA512 hash of seed
 
 ### sign
 
 ```ts
-function sign(
-  message: Hex, // message which would be signed
-  privateKey: Hex // 32-byte private key
-): Uint8Array;
-function signAsync(message: Hex, privateKey: Hex): Promise<Uint8Array>;
+import * as ed from '@noble/ed25519';
+(async () => {
+  const privKey = ed.utils.hexToBytes('9d61b19deffd5a60ba844af492ec2cc44449c5697b326919703bac031cae7f60');
+  const message = Uint8Array.from([0xab, 0xbc, 0xcd, 0xde]);
+  const signature = ed.sign(message, privKey);
+
+  const messageB = new TextEncoder().encode('hello noble');
+  const signatureB = await ed.signAsync(messageB, privKey);
+})();
 ```
 
-Generates EdDSA signature. Always deterministic.
+Generates deterministic EdDSA signature.
 
 Assumes unhashed `message`: it would be hashed by ed25519 internally.
 For prehashed ed25519ph, switch to noble-curves.
@@ -115,13 +130,18 @@ For prehashed ed25519ph, switch to noble-curves.
 ### verify
 
 ```ts
-function verify(
-  signature: Hex, // returned by the `sign` function
-  message: Hex, // message that needs to be verified
-  publicKey: Hex // public (not private) key,
-  options = { zip215: true } // ZIP215 or RFC8032 verification type
-): boolean;
-function verifyAsync(signature: Hex, message: Hex, publicKey: Hex): Promise<boolean>;
+import * as ed from '@noble/ed25519';
+(async () => {
+  const privKey = ed.utils.randomPrivateKey();
+  const message = Uint8Array.from([0xab, 0xbc, 0xcd, 0xde]);
+  const pubKey = await ed.getPublicKeyAsync(privKey);
+  const signature = await ed.signAsync(message, privKey);
+
+  const isValidA = ed.verify(signature, message, pubKey);
+
+  const isValidB = await ed.verifyAsync(signature, message, pubKey);
+  const isValidC = ed.verify(signature, message, pubKey, { zip215: false });
+})();
 ```
 
 Verifies EdDSA signature. Has SUF-CMA (strong unforgeability under chosen message attacks).
