@@ -41,7 +41,15 @@ const isPoint = (p: unknown) => (p instanceof Point ? p : err('Point expected'))
 export interface AffinePoint { x: bigint, y: bigint }
 /** Point in xyzt extended coordinates. */
 class Point {
-  constructor(readonly ex: bigint, readonly ey: bigint, readonly ez: bigint, readonly et: bigint) {
+  readonly ex: bigint;
+  readonly ey: bigint;
+  readonly ez: bigint;
+  readonly et: bigint;
+  constructor(ex: bigint, ey: bigint, ez: bigint, et: bigint) {
+    this.ex = ex;
+    this.ey = ey;
+    this.ez = ez;
+    this.et = et;
     Object.freeze(this);
   }
   /** Generator / Base point */
