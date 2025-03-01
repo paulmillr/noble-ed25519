@@ -94,7 +94,6 @@ import * as ed from '@noble/ed25519';
 
   const privKeyB = ed.utils.randomPrivateKey();
   const pubKeyB = await ed.getPublicKeyAsync(privKeyB);
-
   const privKey64Byte = ed.etc.concatBytes(privKeyB, pubKeyB);
   const pubKeyPoint = ed.ExtendedPoint.fromHex(pubKeyB);
   const pubKeyExt = ed.utils.getExtendedPublicKey(privKeyB);
