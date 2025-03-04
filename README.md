@@ -62,14 +62,6 @@ ed.etc.sha512Sync = (...m) => sha512(ed.etc.concatBytes(...m));
 // ed.getPublicKey(privKey); ed.sign(msg, privKey); ed.verify(signature, msg, pubKey);
 ```
 
-### nodejs v18 and others without global crypto
-
-```ts
-import { webcrypto } from 'node:crypto';
-// @ts-ignore
-if (!globalThis.crypto) globalThis.crypto = webcrypto;
-```
-
 ### React Native: polyfill getRandomValues and sha512
 
 ```ts
@@ -79,17 +71,33 @@ ed.etc.sha512Sync = (...m) => sha512(ed.etc.concatBytes(...m));
 ed.etc.sha512Async = (...m) => Promise.resolve(ed.etc.sha512Sync(...m));
 ```
 
+### nodejs v18 and older: polyfill webcrypto
+
+```ts
+import { webcrypto } from 'node:crypto';
+// @ts-ignore
+if (!globalThis.crypto) globalThis.crypto = webcrypto;
+```
+
 ## API
 
-There are 3 main methods: `getPublicKey(privateKey)`, `sign(message, privateKey)`
-and `verify(signature, message, publicKey)` (also their async counterparts).
+There are 3 main methods:
+
+- `getPublicKey(privateKey)` and `getPublicKeyAsync(privateKey)`
+- `sign(message, privateKey)` and `signAsync(message, privateKey)`
+- `verify(signature, message, publicKey)` and `verifyAsync(signature, message, publicKey)`
+
+Functions generally accept Uint8Array.
+There are optional utilities which convert hex strings, utf8 strings or bigints to u8a.
 
 ### getPublicKey
 
 ```typescript
 import * as ed from '@noble/ed25519';
 (async () => {
-  const privKeyA = ed.utils.hexToBytes('9d61b19deffd5a60ba844af492ec2cc44449c5697b326919703bac031cae7f60');
+  const privKeyA = ed.utils.hexToBytes(
+    '9d61b19deffd5a60ba844af492ec2cc44449c5697b326919703bac031cae7f60'
+  );
   const pubKeyA = ed.getPublicKey(privKeyA);
 
   const privKeyB = ed.utils.randomPrivateKey();
@@ -112,7 +120,9 @@ Generates 32-byte public key from 32-byte private key.
 ```ts
 import * as ed from '@noble/ed25519';
 (async () => {
-  const privKey = ed.utils.hexToBytes('9d61b19deffd5a60ba844af492ec2cc44449c5697b326919703bac031cae7f60');
+  const privKey = ed.utils.hexToBytes(
+    '9d61b19deffd5a60ba844af492ec2cc44449c5697b326919703bac031cae7f60'
+  );
   const message = Uint8Array.from([0xab, 0xbc, 0xcd, 0xde]);
   const signature = ed.sign(message, privKey);
 
@@ -223,6 +233,8 @@ Use low-level libraries & languages.
 
 - **Commits** are signed with PGP keys, to prevent forgery. Make sure to verify commit signatures
 - **Releases** are transparent and built on GitHub CI. Make sure to verify [provenance](https://docs.npmjs.com/generating-provenance-statements) logs
+  - Use GitHub CLI to verify single-file builds:
+    `gh attestation verify --owner paulmillr noble-ed25519.js`
 - **Rare releasing** is followed to ensure less re-audit need for end-users
 - **Dependencies** are minimized and locked-down: any dependency could get hacked and users will be downloading malware with every install.
   - We make sure to use as few dependencies as possible
