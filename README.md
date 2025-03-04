@@ -42,7 +42,7 @@ import * as ed from '@noble/ed25519';
 (async () => {
   // Uint8Arrays or hex strings are accepted:
   // Uint8Array.from([0xde, 0xad, 0xbe, 0xef]) is equal to 'deadbeef'
-  const privKey = ed.utils.randomPrivateKey(); // Secure random private key
+  const privKey = ed.utils.randomPrivateKey();
   const message = Uint8Array.from([0xab, 0xbc, 0xcd, 0xde]);
   const pubKey = await ed.getPublicKeyAsync(privKey); // Sync methods below
   const signature = await ed.signAsync(message, privKey);
@@ -59,7 +59,9 @@ To enable sync methods:
 import { sha512 } from '@noble/hashes/sha512';
 ed.etc.sha512Sync = (...m) => sha512(ed.etc.concatBytes(...m));
 // Sync methods can be used now:
-// ed.getPublicKey(privKey); ed.sign(msg, privKey); ed.verify(signature, msg, pubKey);
+// ed.getPublicKey(privKey);
+// ed.sign(msg, privKey);
+// ed.verify(signature, msg, pubKey);
 ```
 
 ### React Native: polyfill getRandomValues and sha512
