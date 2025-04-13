@@ -21,6 +21,7 @@ const CURVE = {
 };
 const err = (m = '') => { throw new Error(m); }; // error helper, messes-up stack trace
 const isS = (s) => typeof s === 'string'; // is string
+const isB = (s) => typeof s === 'bigint'; // is bigint
 const isu8 = (a) => (a instanceof Uint8Array || (ArrayBuffer.isView(a) && a.constructor.name === 'Uint8Array'));
 const au8 = (a, l) => // is Uint8Array (of specific length)
  !isu8(a) || (typeof l === 'number' && l > 0 && a.length !== l) ?
@@ -29,11 +30,7 @@ const u8n = (len) => new Uint8Array(len); // creates Uint8Array
 const u8fr = (buf) => Uint8Array.from(buf);
 const toU8 = (a, len) => au8(isS(a) ? h2b(a) : u8fr(au8(a)), len); // norm(hex/u8a) to u8a
 const M = (a, b = P) => { let r = a % b; return r >= 0n ? r : b + r; }; // mod division
-const arange = (n, min, max = MASK) => {
-    if (typeof n === 'bigint' && min <= n && n < max)
-        return n;
-    return err('invalid number: out of range');
-};
+const arange = (n, min, max = MASK, msg = 'bad number: out of range') => isB(n) && min <= n && n < max ? n : err(msg);
 const apoint = (p) => (p instanceof Point ? p : err('Point expected')); // is xyzt point
 /** Point in xyzt extended coordinates. */
 class Point {

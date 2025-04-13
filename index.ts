@@ -27,6 +27,7 @@ export type Bytes = Uint8Array;
 export type Hex = Bytes | string;
 const err = (m = ''): never => { throw new Error(m); }; // error helper, messes-up stack trace
 const isS = (s: unknown): s is string => typeof s === 'string'; // is string
+const isB = (s: unknown): s is bigint => typeof s === 'bigint'; // is bigint
 const isu8 = (a: unknown): a is Uint8Array => (
   a instanceof Uint8Array || (ArrayBuffer.isView(a) && a.constructor.name === 'Uint8Array')
 );
@@ -37,10 +38,8 @@ const u8n = (len: number) => new Uint8Array(len);       // creates Uint8Array
 const u8fr = (buf: ArrayLike<number>) => Uint8Array.from(buf);
 const toU8 = (a: Hex, len?: number) => au8(isS(a) ? h2b(a) : u8fr(au8(a)), len);  // norm(hex/u8a) to u8a
 const M = (a: bigint, b = P) => { let r = a % b; return r >= 0n ? r : b + r; }; // mod division
-const arange = (n: bigint, min: bigint, max: bigint = MASK): bigint => {
-  if (typeof n === 'bigint' && min <= n && n < max) return n;
-  return err('invalid number: out of range');
-}
+const arange = (n: bigint, min: bigint, max: bigint = MASK, msg = 'bad number: out of range'): bigint =>
+  isB(n) && min <= n && n < max ? n : err(msg);
 const apoint = (p: unknown) => (p instanceof Point ? p : err('Point expected')); // is xyzt point
 /** Point in 2d xy affine coordinates. */
 export interface AffinePoint { x: bigint, y: bigint }
