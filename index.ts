@@ -8,6 +8,7 @@ const N = 2n ** 252n + 27742317777372353535851937790883648493n; // curve's (grou
 const Gx = 0x216936d3cd6e53fec0a4e231fdd6dc5c692cc7609525a7b2c9562d608f25d51an; // base point x
 const Gy = 0x6666666666666666666666666666666666666666666666666666666666666658n; // base point y
 const _d = 37095705934669439343138083508754565189542113879843219016388785533085940283555n;
+const MASK = 2n ** 256n;
 /**
  * ed25519 curve parameters. Equation is −x² + y² = -a + dx²y².
  * Gx and Gy are generator coordinates. p is field order, n is group order.
@@ -36,7 +37,11 @@ const u8n = (len: number) => new Uint8Array(len);       // creates Uint8Array
 const u8fr = (buf: ArrayLike<number>) => Uint8Array.from(buf);
 const toU8 = (a: Hex, len?: number) => au8(isS(a) ? h2b(a) : u8fr(au8(a)), len);  // norm(hex/u8a) to u8a
 const M = (a: bigint, b = P) => { let r = a % b; return r >= 0n ? r : b + r; }; // mod division
-const isPoint = (p: unknown) => (p instanceof Point ? p : err('Point expected')); // is xyzt point
+const arange = (n: bigint, min: bigint, max: bigint = MASK): bigint => {
+  if (typeof n === 'bigint' && min <= n && n < max) return n;
+  return err('invalid number: out of range');
+}
+const apoint = (p: unknown) => (p instanceof Point ? p : err('Point expected')); // is xyzt point
 /** Point in 2d xy affine coordinates. */
 export interface AffinePoint { x: bigint, y: bigint }
 /** Point in xyzt extended coordinates. */
@@ -46,10 +51,10 @@ class Point {
   readonly ez: bigint;
   readonly et: bigint;
   constructor(ex: bigint, ey: bigint, ez: bigint, et: bigint) {
-    this.ex = ex;
-    this.ey = ey;
-    this.ez = ez;
-    this.et = et;
+    this.ex = arange(ex, 0n);
+    this.ey = arange(ey, 0n);
+    this.ez = arange(ez, 1n);
+    this.et = arange(et, 0n);
     Object.freeze(this);
   }
   /** Generator / Base point */
@@ -65,8 +70,9 @@ class Point {
     const lastByte = hex[31];
     normed[31] = lastByte & ~0x80;                      // adjust first LE byte = last BE byte
     const y = b2n_LE(normed);                           // decode as little-endian, convert to num
-    if (zip215 && !(0n <= y && y < 2n ** 256n)) err('bad y coord 1'); // zip215=true  [1..2^256-1]
-    if (!zip215 && !(0n <= y && y < P)) err('bad y coord 2');         // zip215=false [1..P-1]
+    const max = zip215 ? MASK : P;                      // RFC8032 prohibits >= p, ZIP215 doesn't
+    arange(y, 0n, max);                                 // zip215=true:  0 <= y < 2^256
+                                                        // zip215=false: 0 <= y < 2^255-19
     const y2 = M(y * y);                                // y²
     const u = M(y2 - 1n);                               // u=y²-1
     const v = M(d * y2 + 1n);                           // v=dy²+1
@@ -82,7 +88,7 @@ class Point {
   get y(): bigint { return this.toAffine().y; }         // Should be used with care.
   equals(other: Point): boolean {                       // equality check: compare points
     const { ex: X1, ey: Y1, ez: Z1 } = this;
-    const { ex: X2, ey: Y2, ez: Z2 } = isPoint(other);  // isPoint() checks class equality
+    const { ex: X2, ey: Y2, ez: Z2 } = apoint(other);  // isPoint() checks class equality
     const X1Z2 = M(X1 * Z2), X2Z1 = M(X2 * Z1);
     const Y1Z2 = M(Y1 * Z2), Y2Z1 = M(Y2 * Z1);
     return X1Z2 === X2Z1 && Y1Z2 === Y2Z1;
@@ -104,7 +110,7 @@ class Point {
   /** Point addition. Complete formula. */
   add(other: Point): Point {
     const { ex: X1, ey: Y1, ez: Z1, et: T1 } = this;    // Cost: 8M + 1*k + 8add + 1*2.
-    const { ex: X2, ey: Y2, ez: Z2, et: T2 } = isPoint(other); // doesn't check if other on-curve
+    const { ex: X2, ey: Y2, ez: Z2, et: T2 } = apoint(other); // doesn't check if other on-curve
     const { a, d } = CURVE; // http://hyperelliptic.org/EFD/g1p/auto-twisted-extended-1.html#addition-add-2008-hwcd-3
     const A = M(X1 * X2); const B = M(Y1 * Y2);  const C = M(T1 * d * T2);
     const D = M(Z1 * Z2); const E = M((X1 + Y1) * (X2 + Y2) - A - B);
@@ -114,8 +120,8 @@ class Point {
   }
   mul(n: bigint, safe = true): Point {                  // Multiply point by scalar n
     if (n === 0n) return safe === true ? err('cannot multiply by 0') : I;
-    if (!(typeof n === 'bigint' && 0n < n && n < N)) err('invalid scalar, must be < L');
-    if (!safe && this.is0() || n === 1n) return this;   // safe=true bans 0. safe=false allows 0.
+    arange(n, 1n, N);
+    if (n === 1n || (!safe && this.is0())) return this; // safe=true bans 0. safe=false allows 0.
     if (this.equals(G)) return wNAF(n).p;               // use wNAF precomputes for base points
     let p = I, f = G;                                   // init result point & fake point
     for (let d: Point = this; n > 0n; d = d.double(), n >>= 1n) { // double-and-add ladder
