@@ -1,9 +1,9 @@
+import { sha512 } from '@noble/hashes/sha512';
 import * as fc from 'fast-check';
-import * as ed from '../';
 import { readFileSync } from 'fs';
 import { join } from 'path';
+import * as ed from '../';
 import * as zip215 from './zip215.json';
-import { sha512 } from '@noble/hashes/sha512';
 
 const { bytesToHex, hexToBytes } = ed.utils;
 const hex = bytesToHex;
@@ -133,6 +133,10 @@ describe('ed25519', () => {
       for (const num of [0n, 0, -1n, -1, 1.1]) {
         expect(() => ed.Point.BASE.multiply(num)).toThrowError();
       }
+    });
+
+    it('fromHex on " 1"', () => {
+      expect(() => ed.Point.fromHex(' 1'.repeat(32))).toThrowError();
     });
   });
 
