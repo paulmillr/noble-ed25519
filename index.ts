@@ -131,7 +131,7 @@ class ExtendedPoint {
     const M = mod;
     const A = M(X1 * X1);
     const B = M(Y1 * Y1);
-    const C = M(2n * M(Z1 * Z1));
+    const C = M(_2n * M(Z1 * Z1));
     const D = M(a * A);
     const x1y1 = X1 + Y1;
     const E = M(M(x1y1 * x1y1) - A - B);
