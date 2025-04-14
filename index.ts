@@ -641,8 +641,15 @@ class Signature {
 
 export { ExtendedPoint, Point, RistrettoPoint, Signature };
 
+function isBytes(a: unknown): a is Uint8Array {
+  return a instanceof Uint8Array || (ArrayBuffer.isView(a) && a.constructor.name === 'Uint8Array');
+}
+function abytes(item: unknown): void {
+  if (!isBytes(item)) throw new Error('Uint8Array expected');
+}
+
 function concatBytes(...arrays: Uint8Array[]): Uint8Array {
-  if (!arrays.every((a) => a instanceof Uint8Array)) throw new Error('Expected Uint8Array list');
+  arrays.every(abytes);
   if (arrays.length === 1) return arrays[0];
   const length = arrays.reduce((a, arr) => a + arr.length, 0);
   const result = new Uint8Array(length);
@@ -656,30 +663,52 @@ function concatBytes(...arrays: Uint8Array[]): Uint8Array {
 
 // Convert between types
 // ---------------------
-const hexes = Array.from({ length: 256 }, (v, i) => i.toString(16).padStart(2, '0'));
-function bytesToHex(uint8a: Uint8Array): string {
+// Array where index 0xf0 (240) is mapped to string 'f0'
+const hexes = /* @__PURE__ */ Array.from({ length: 256 }, (_, i) =>
+  i.toString(16).padStart(2, '0')
+);
+
+/**
+ * Convert byte array to hex string. Uses built-in function, when available.
+ * @example bytesToHex(Uint8Array.from([0xca, 0xfe, 0x01, 0x23])) // 'cafe0123'
+ */
+export function bytesToHex(bytes: Uint8Array): string {
+  abytes(bytes);
   // pre-caching improves the speed 6x
-  if (!(uint8a instanceof Uint8Array)) throw new Error('Uint8Array expected');
   let hex = '';
-  for (let i = 0; i < uint8a.length; i++) {
-    hex += hexes[uint8a[i]];
+  for (let i = 0; i < bytes.length; i++) {
+    hex += hexes[bytes[i]];
   }
   return hex;
 }
 
-// Caching slows it down 2-3x
-function hexToBytes(hex: string): Uint8Array {
-  if (typeof hex !== 'string') {
-    throw new TypeError('hexToBytes: expected string, got ' + typeof hex);
-  }
-  if (hex.length % 2) throw new Error('hexToBytes: received invalid unpadded hex');
-  const array = new Uint8Array(hex.length / 2);
-  for (let i = 0; i < array.length; i++) {
-    const j = i * 2;
-    const hexByte = hex.slice(j, j + 2);
-    const byte = Number.parseInt(hexByte, 16);
-    if (Number.isNaN(byte) || byte < 0) throw new Error('Invalid byte sequence');
-    array[i] = byte;
+// We use optimized technique to convert hex string to byte array
+const asciis = { _0: 48, _9: 57, A: 65, F: 70, a: 97, f: 102 } as const;
+function asciiToBase16(ch: number): number | undefined {
+  if (ch >= asciis._0 && ch <= asciis._9) return ch - asciis._0; // '2' => 50-48
+  if (ch >= asciis.A && ch <= asciis.F) return ch - (asciis.A - 10); // 'B' => 66-(65-10)
+  if (ch >= asciis.a && ch <= asciis.f) return ch - (asciis.a - 10); // 'b' => 98-(97-10)
+  return;
+}
+
+/**
+ * Convert hex string to byte array. Uses built-in function, when available.
+ * @example hexToBytes('cafe0123') // Uint8Array.from([0xca, 0xfe, 0x01, 0x23])
+ */
+export function hexToBytes(hex: string): Uint8Array {
+  if (typeof hex !== 'string') throw new Error('hex string expected, got ' + typeof hex);
+  const hl = hex.length;
+  const al = hl / 2;
+  if (hl % 2) throw new Error('hex string expected, got unpadded hex of length ' + hl);
+  const array = new Uint8Array(al);
+  for (let ai = 0, hi = 0; ai < al; ai++, hi += 2) {
+    const n1 = asciiToBase16(hex.charCodeAt(hi));
+    const n2 = asciiToBase16(hex.charCodeAt(hi + 1));
+    if (n1 === undefined || n2 === undefined) {
+      const char = hex[hi] + hex[hi + 1];
+      throw new Error('hex string expected, got non-hex character "' + char + '" at index ' + hi);
+    }
+    array[ai] = n1 * 16 + n2; // multiply first octet, e.g. 'a3' => 10*16+3 => 160 + 3 => 163
   }
   return array;
 }
@@ -701,7 +730,7 @@ function edIsNegative(num: bigint) {
 
 // Little Endian
 function bytesToNumberLE(uint8a: Uint8Array): bigint {
-  if (!(uint8a instanceof Uint8Array)) throw new Error('Expected Uint8Array');
+  abytes(uint8a);
   return BigInt('0x' + bytesToHex(Uint8Array.from(uint8a).reverse()));
 }
 
@@ -856,7 +885,7 @@ function equalBytes(b1: Uint8Array, b2: Uint8Array) {
 function ensureBytes(hex: Hex, expectedLength?: number): Uint8Array {
   // Uint8Array.from() instead of hash.slice() because node.js Buffer
   // is instance of Uint8Array, and its slice() creates **mutable** copy
-  const bytes = hex instanceof Uint8Array ? Uint8Array.from(hex) : hexToBytes(hex);
+  const bytes = isBytes(hex) ? Uint8Array.from(hex) : hexToBytes(hex);
   if (typeof expectedLength === 'number' && bytes.length !== expectedLength)
     throw new Error(`Expected ${expectedLength} bytes`);
   return bytes;
