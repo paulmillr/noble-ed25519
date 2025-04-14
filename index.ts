@@ -124,49 +124,45 @@ class ExtendedPoint {
     return new ExtendedPoint(mod(-this.x), this.y, this.z, mod(-this.t));
   }
 
-  // Fast algo for doubling Extended Point
-  // https://hyperelliptic.org/EFD/g1p/auto-twisted-extended.html#doubling-dbl-2008-hwcd
-  // Cost: 4M + 4S + 1*a + 6add + 1*2.
+  /** Point doubling. Complete formula. */
   double(): ExtendedPoint {
-    const { x: X1, y: Y1, z: Z1 } = this;
-    const { a } = CURVE;
-    const A = mod(X1 * X1);
-    const B = mod(Y1 * Y1);
-    const C = mod(_2n * mod(Z1 * Z1));
-    const D = mod(a * A);
+    const { x: X1, y: Y1, z: Z1 } = this; // Cost: 4M + 4S + 1*a + 6add + 1*2
+    const { a } = CURVE; // https://hyperelliptic.org/EFD/g1p/auto-twisted-extended.html#doubling-dbl-2008-hwcd
+    const M = mod;
+    const A = M(X1 * X1);
+    const B = M(Y1 * Y1);
+    const C = M(2n * M(Z1 * Z1));
+    const D = M(a * A);
     const x1y1 = X1 + Y1;
-    const E = mod(mod(x1y1 * x1y1) - A - B);
+    const E = M(M(x1y1 * x1y1) - A - B);
     const G = D + B;
     const F = G - C;
     const H = D - B;
-    const X3 = mod(E * F);
-    const Y3 = mod(G * H);
-    const T3 = mod(E * H);
-    const Z3 = mod(F * G);
+    const X3 = M(E * F);
+    const Y3 = M(G * H);
+    const T3 = M(E * H);
+    const Z3 = M(F * G);
     return new ExtendedPoint(X3, Y3, Z3, T3);
   }
-
-  // Fast algo for adding 2 Extended Points when curve's a=-1.
-  // http://hyperelliptic.org/EFD/g1p/auto-twisted-extended-1.html#addition-add-2008-hwcd-4
-  // Cost: 8M + 8add + 2*2.
-  // Note: It does not check whether the `other` point is valid.
-  add(other: ExtendedPoint) {
+  /** Point addition. Complete formula. */
+  add(other: ExtendedPoint): ExtendedPoint {
+    const { x: X1, y: Y1, z: Z1, t: T1 } = this; // Cost: 8M + 1*k + 8add + 1*2.
     assertExtPoint(other);
-    const { x: X1, y: Y1, z: Z1, t: T1 } = this;
-    const { x: X2, y: Y2, z: Z2, t: T2 } = other;
-    const A = mod((Y1 - X1) * (Y2 + X2));
-    const B = mod((Y1 + X1) * (Y2 - X2));
-    const F = mod(B - A);
-    if (F === _0n) return this.double(); // Same point.
-    const C = mod(Z1 * _2n * T2);
-    const D = mod(T1 * _2n * Z2);
-    const E = D + C;
-    const G = B + A;
-    const H = D - C;
-    const X3 = mod(E * F);
-    const Y3 = mod(G * H);
-    const T3 = mod(E * H);
-    const Z3 = mod(F * G);
+    const { x: X2, y: Y2, z: Z2, t: T2 } = other; // doesn't check if other on-curve
+    const { a, d } = CURVE; // http://hyperelliptic.org/EFD/g1p/auto-twisted-extended-1.html#addition-add-2008-hwcd-3
+    const M = mod;
+    const A = M(X1 * X2);
+    const B = M(Y1 * Y2);
+    const C = M(T1 * d * T2);
+    const D = M(Z1 * Z2);
+    const E = M((X1 + Y1) * (X2 + Y2) - A - B);
+    const F = M(D - C);
+    const G = M(D + C);
+    const H = M(B - a * A);
+    const X3 = M(E * F);
+    const Y3 = M(G * H);
+    const T3 = M(E * H);
+    const Z3 = M(F * G);
     return new ExtendedPoint(X3, Y3, Z3, T3);
   }
 
@@ -643,7 +639,7 @@ class Signature {
   }
 }
 
-export { ExtendedPoint, RistrettoPoint, Point, Signature };
+export { ExtendedPoint, Point, RistrettoPoint, Signature };
 
 function concatBytes(...arrays: Uint8Array[]): Uint8Array {
   if (!arrays.every((a) => a instanceof Uint8Array)) throw new Error('Expected Uint8Array list');
