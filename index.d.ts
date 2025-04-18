@@ -37,6 +37,7 @@ declare class Point {
     static fromHex(hex: Hex, zip215?: boolean): Point;
     get x(): bigint;
     get y(): bigint;
+    assertValidity(): boolean;
     equals(other: Point): boolean;
     is0(): boolean;
     negate(): Point;

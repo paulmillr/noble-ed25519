@@ -85,6 +85,27 @@ class Point {
   }
   get x(): bigint { return this.toAffine().x; }         // .x, .y will call expensive toAffine.
   get y(): bigint { return this.toAffine().y; }         // Should be used with care.
+  assertValidity(): boolean {
+    const { a, d } = CURVE;
+    const p = this;
+    if (p.is0()) throw new Error('bad point: ZERO'); // TODO: optimize, with vars below?
+    // Equation in affine coordinates: ax² + y² = 1 + dx²y²
+    // Equation in projective coordinates (X/Z, Y/Z, Z):  (aX² + Y²)Z² = Z⁴ + dX²Y²
+    const { ex: X, ey: Y, ez: Z, et: T } = p;
+    const X2 = M(X * X); // X²
+    const Y2 = M(Y * Y); // Y²
+    const Z2 = M(Z * Z); // Z²
+    const Z4 = M(Z2 * Z2); // Z⁴
+    const aX2 = M(X2 * a); // aX²
+    const left = M(Z2 * M(aX2 + Y2)); // (aX² + Y²)Z²
+    const right = M(Z4 + M(d * M(X2 * Y2))); // Z⁴ + dX²Y²
+    if (left !== right) throw new Error('bad point: equation left != right (1)');
+    // In Extended coordinates we also have T, which is x*y=T/Z: check X*Y == Z*T
+    const XY = M(X * Y);
+    const ZT = M(Z * T);
+    if (XY !== ZT) throw new Error('bad point: equation left != right (2)');
+    return true;
+  }
   equals(other: Point): boolean {                       // equality check: compare points
     const { ex: X1, ey: Y1, ez: Z1 } = this;
     const { ex: X2, ey: Y2, ez: Z2 } = apoint(other);  // isPoint() checks class equality
@@ -147,12 +168,12 @@ class Point {
   }
   toRawBytes(): Bytes {                                 // Encode to Uint8Array
     const { x, y } = this.toAffine();                   // convert to affine 2d point
+    this.assertValidity();
     const b = n2b_32LE(y);                              // encode number to 32 bytes
     b[31] |= x & 1n ? 0x80 : 0;                         // store sign in first LE byte
     return b;
   }
   toHex(): string { return b2h(this.toRawBytes()); }    // encode to hex string
-
 }
 const { BASE: G, ZERO: I } = Point;                     // Generator, identity points
 const padh = (num: number | bigint, pad: number) => num.toString(16).padStart(pad, '0')
