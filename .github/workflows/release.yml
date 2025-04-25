@@ -4,8 +4,8 @@ on:
     types: [created]
 jobs:
   release-js:
-    name: 'jsbt v0.3.1' # Should match commit below
-    uses: paulmillr/jsbt/.github/workflows/release.yml@c45f03360e0171b138f04568d2fdd35d7bbc0d35
+    name: 'jsbt v0.4.0-pre' # Should match commit below
+    uses: paulmillr/jsbt/.github/workflows/release.yml@fb1b826bd8f609dacb350852b4bc5038b9b86231
     with:
       build-path: test/build
     secrets:
@@ -13,3 +13,4 @@ jobs:
     permissions:
       contents: write
       id-token: write
+      attestations: write
