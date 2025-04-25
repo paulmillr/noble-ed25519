@@ -2,6 +2,17 @@
 /**
  * 4KB JS implementation of ed25519 EDDSA signatures compliant with RFC8032, FIPS 186-5 & ZIP215.
  * @module
+ * @example
+ * ```js
+import * as ed from '@noble/ed25519';
+(async () => {
+  const privKey = ed.utils.randomPrivateKey();
+  const message = Uint8Array.from([0xab, 0xbc, 0xcd, 0xde]);
+  const pubKey = await ed.getPublicKeyAsync(privKey); // Sync methods are also present
+  const signature = await ed.signAsync(message, privKey);
+  const isValid = await ed.verifyAsync(signature, message, pubKey);
+})();
+```
  */
 const P = 2n ** 255n - 19n; // ed25519 is twisted edwards curve
 const N = 2n ** 252n + 27742317777372353535851937790883648493n; // curve's (group) order

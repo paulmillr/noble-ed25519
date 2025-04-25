@@ -55,6 +55,7 @@ declare class Point {
     toRawBytes(): Bytes;
     toHex(): string;
 }
+/** etc.sha512Sync should conform to the interface. */
 export type Sha512FnSync = undefined | ((...messages: Bytes[]) => Bytes);
 type ExtK = {
     head: Bytes;
