@@ -356,7 +356,7 @@ const _verify = (sig, msg, pub, opts = dvo) => {
     msg = toU8(msg); // Message hex str/Bytes
     pub = toU8(pub, 32);
     const { zip215 } = opts; // switch between zip215 and rfc8032 verif
-    let A, R, s, SB, hashable = new Uint8Array();
+    let A, R, s, SB, hashable = Uint8Array.of();
     try {
         A = Point.fromHex(pub, zip215); // public key A decoded
         R = Point.fromHex(sig.slice(0, 32), zip215); // 0 <= R < 2^256: ZIP215 R can be >= P
