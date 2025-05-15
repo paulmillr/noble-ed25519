@@ -1,7 +1,15 @@
-import { deepStrictEqual, throws } from 'node:assert';
-import { should, describe } from 'micro-should';
 import * as fc from 'fast-check';
+import { describe, should } from 'micro-should';
+import { deepStrictEqual, throws } from 'node:assert';
 import * as ed25519 from '../index.js';
+
+function hexa() {
+  const items = '0123456789abcdef';
+  return fc.integer({ min: 0, max: 15 }).map((n) => items[n]);
+}
+function hexaString(constraints = {}) {
+  return fc.string({ ...constraints, unit: hexa() });
+}
 
 const CURVES = { ed25519 };
 const name = 'ed25519';
@@ -255,7 +263,7 @@ describe(name, () => {
   });
   should('.verify() should verify random signatures', () =>
     fc.assert(
-      fc.property(fc.hexaString({ minLength: 64, maxLength: 64 }), (msg) => {
+      fc.property(hexaString({ minLength: 64, maxLength: 64 }), (msg) => {
         const priv = C.utils.randomPrivateKey();
         const pub = C.getPublicKey(priv);
         const sig = C.sign(msg, priv);
@@ -306,7 +314,7 @@ describe(name, () => {
   if (C.Signature) {
     should('Signature serialization roundtrip', () =>
       fc.assert(
-        fc.property(fc.hexaString({ minLength: 64, maxLength: 64 }), (msg) => {
+        fc.property(hexaString({ minLength: 64, maxLength: 64 }), (msg) => {
           const priv = C.utils.randomPrivateKey();
           const sig = C.sign(msg, priv);
           const sigRS = (sig) => ({ s: sig.s, r: sig.r });
@@ -322,7 +330,7 @@ describe(name, () => {
     );
     should('Signature.addRecoveryBit/Signature.recoveryPublicKey', () =>
       fc.assert(
-        fc.property(fc.hexaString({ minLength: 64, maxLength: 64 }), (msg) => {
+        fc.property(hexaString({ minLength: 64, maxLength: 64 }), (msg) => {
           const priv = C.utils.randomPrivateKey();
           const pub = C.getPublicKey(priv);
           const sig = C.sign(msg, priv);
@@ -337,7 +345,7 @@ describe(name, () => {
     );
     should('Signature.normalizeS', () =>
       fc.assert(
-        fc.property(fc.hexaString({ minLength: 64, maxLength: 64 }), (msg) => {
+        fc.property(hexaString({ minLength: 64, maxLength: 64 }), (msg) => {
           const priv = C.utils.randomPrivateKey();
           const pub = C.getPublicKey(priv);
           const sig = C.sign(msg, priv);
