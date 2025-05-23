@@ -18,7 +18,9 @@ const P = 2n ** 255n - 19n;                                     // ed25519 is tw
 const N = 2n ** 252n + 27742317777372353535851937790883648493n; // curve's (group) order
 const Gx = 0x216936d3cd6e53fec0a4e231fdd6dc5c692cc7609525a7b2c9562d608f25d51an; // base point x
 const Gy = 0x6666666666666666666666666666666666666666666666666666666666666658n; // base point y
-const _d = 37095705934669439343138083508754565189542113879843219016388785533085940283555n;
+const _a = P-1n;
+const _d = 0x52036cee2b6ffe738cc740797779e89800700a4d4141d8ab75eb4dca135978a3n; // equation param d
+const h = 8n;
 const MASK = 2n ** 256n;
 /**
  * ed25519 curve parameters. Equation is −x² + y² = -a + dx²y².
@@ -26,11 +28,11 @@ const MASK = 2n ** 256n;
  * h is cofactor.
  */
 const CURVE: {
-  a: bigint; d: bigint; p: bigint; n: bigint; h: number; Gx: bigint; Gy: bigint;
+  a: bigint; d: bigint; p: bigint; n: bigint; h: bigint; Gx: bigint; Gy: bigint;
 } = {
-  a: -1n,                                               // -1 mod p
+  a: _a,                                               // -1 mod p
   d: _d,                                                // -(121665/121666) mod p
-  p: P, n: N, h: 8, Gx: Gx, Gy: Gy    // field prime, curve (group) order, cofactor
+  p: P, n: N, h: h, Gx: Gx, Gy: Gy    // field prime, curve (group) order, cofactor
 };
 /** Alias to Uint8Array. */
 export type Bytes = Uint8Array;
@@ -56,6 +58,8 @@ const apoint = (p: unknown) => (p instanceof Point ? p : err('Point expected'));
 export interface AffinePoint { x: bigint, y: bigint }
 /** Point in xyzt extended coordinates. */
 class Point {
+  static BASE: Point;
+  static ZERO: Point;
   readonly ex: bigint;
   readonly ey: bigint;
   readonly ez: bigint;
@@ -67,14 +71,10 @@ class Point {
     this.et = arange(et, 0n);
     Object.freeze(this);
   }
-  /** Generator / Base point */
-  static readonly BASE: Point = new Point(Gx, Gy, 1n, M(Gx * Gy));
-  /** Identity / Zero point */
-  static readonly ZERO: Point = new Point(0n, 1n, 1n, 0n);
   static fromAffine(p: AffinePoint): Point { return new Point(p.x, p.y, 1n, M(p.x * p.y)); }
   /** RFC8032 5.1.3: hex / Uint8Array to Point. */
   static fromHex(hex: Hex, zip215 = false): Point {
-    const { d } = CURVE;
+    const d = _d;
     hex = toU8(hex, 32);
     const normed = hex.slice();                         // copy the array to not mess it up
     const lastByte = hex[31];
@@ -97,7 +97,8 @@ class Point {
   get x(): bigint { return this.toAffine().x; }         // .x, .y will call expensive toAffine.
   get y(): bigint { return this.toAffine().y; }         // Should be used with care.
   assertValidity(): boolean {
-    const { a, d } = CURVE;
+    const a = _a;
+    const d = _d;
     const p = this;
     if (p.is0()) throw new Error('bad point: ZERO'); // TODO: optimize, with vars below?
     // Equation in affine coordinates: ax² + y² = 1 + dx²y²
@@ -131,7 +132,8 @@ class Point {
   /** Point doubling. Complete formula. */
   double(): Point {
     const { ex: X1, ey: Y1, ez: Z1 } = this;            // Cost: 4M + 4S + 1*a + 6add + 1*2
-    const { a } = CURVE; // https://hyperelliptic.org/EFD/g1p/auto-twisted-extended.html#doubling-dbl-2008-hwcd
+    const a = _a;
+    // https://hyperelliptic.org/EFD/g1p/auto-twisted-extended.html#doubling-dbl-2008-hwcd
     const A = M(X1 * X1); const B = M(Y1 * Y1); const C = M(2n * M(Z1 * Z1));
     const D = M(a * A); const x1y1 = X1 + Y1; const E = M(M(x1y1 * x1y1) - A - B);
     const G = D + B; const F = G - C; const H = D - B;
@@ -142,7 +144,9 @@ class Point {
   add(other: Point): Point {
     const { ex: X1, ey: Y1, ez: Z1, et: T1 } = this;    // Cost: 8M + 1*k + 8add + 1*2.
     const { ex: X2, ey: Y2, ez: Z2, et: T2 } = apoint(other); // doesn't check if other on-curve
-    const { a, d } = CURVE; // http://hyperelliptic.org/EFD/g1p/auto-twisted-extended-1.html#addition-add-2008-hwcd-3
+    const a = _a;
+    const d = _d;
+    // http://hyperelliptic.org/EFD/g1p/auto-twisted-extended-1.html#addition-add-2008-hwcd-3
     const A = M(X1 * X2); const B = M(Y1 * Y2);  const C = M(T1 * d * T2);
     const D = M(Z1 * Z2); const E = M((X1 + Y1) * (X2 + Y2) - A - B);
     const F = M(D - C);   const G = M(D + C);    const H = M(B - a * A);
@@ -162,7 +166,7 @@ class Point {
     return p;
   }
   multiply(scalar: bigint): Point { return this.mul(scalar); } // Aliases for compatibilty
-  clearCofactor(): Point { return this.mul(BigInt(CURVE.h), false); } // multiply by cofactor
+  clearCofactor(): Point { return this.mul(BigInt(h), false); } // multiply by cofactor
   isSmallOrder(): boolean { return this.clearCofactor().is0(); } // check if P is small order
   isTorsionFree(): boolean {                            // multiply by big number CURVE.n
     let p = this.mul(N / 2n, false).double();           // ensures the point is not "bad".
@@ -186,7 +190,13 @@ class Point {
   }
   toHex(): string { return b2h(this.toRawBytes()); }    // encode to hex string
 }
-const { BASE: G, ZERO: I } = Point;                     // Generator, identity points
+/** Generator / base point */
+const G: Point = new Point(Gx, Gy, 1n, M(Gx * Gy));
+/** Identity / zero point */
+const I: Point = new Point(0n, 1n, 1n, 0n);
+// Static aliases
+Point.BASE = G;
+Point.ZERO = I;
 const padh = (num: number | bigint, pad: number) => num.toString(16).padStart(pad, '0')
 const b2h = (b: Bytes): string => Array.from(au8(b)).map(e => padh(e, 2)).join(''); // bytes to hex
 const C = { _0: 48, _9: 57, A: 65, F: 70, a: 97, f: 102 } as const; // ASCII characters
@@ -248,7 +258,7 @@ const pow_2_252_3 = (x: bigint) => {                    // x^(2^252-3) unrolled 
   const pow_p_5_8 = (pow2(b250, 2n) * x) % P; // < To pow to (p+3)/8, multiply it by x.
   return { pow_p_5_8, b2 };
 }
-const RM1 = 19681161376707505956807079304988542015446066515923890162744021073123829784752n; // √-1
+const RM1 = 0x2b8324804fc1df0b2b4d00993dfbd7a72f431806ad2fe478c4ee1b274a0ea0b0n; // √-1
 const uvRatio = (u: bigint, v: bigint): { isValid: boolean, value: bigint } => { // for sqrt comp
   const v3 = M(v * v * v);                              // v³
   const v7 = M(v3 * v3 * v);                            // v⁷

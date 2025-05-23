@@ -8,7 +8,7 @@ declare const CURVE: {
     d: bigint;
     p: bigint;
     n: bigint;
-    h: number;
+    h: bigint;
     Gx: bigint;
     Gy: bigint;
 };
@@ -23,15 +23,13 @@ export interface AffinePoint {
 }
 /** Point in xyzt extended coordinates. */
 declare class Point {
+    static BASE: Point;
+    static ZERO: Point;
     readonly ex: bigint;
     readonly ey: bigint;
     readonly ez: bigint;
     readonly et: bigint;
     constructor(ex: bigint, ey: bigint, ez: bigint, et: bigint);
-    /** Generator / Base point */
-    static readonly BASE: Point;
-    /** Identity / Zero point */
-    static readonly ZERO: Point;
     static fromAffine(p: AffinePoint): Point;
     /** RFC8032 5.1.3: hex / Uint8Array to Point. */
     static fromHex(hex: Hex, zip215?: boolean): Point;
