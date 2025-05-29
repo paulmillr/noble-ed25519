@@ -47,6 +47,12 @@ const arange = (n, min, max = MASK, msg = 'bad number: out of range') => isB(n) 
 const apoint = (p) => (p instanceof Point ? p : err('Point expected')); // is xyzt point
 /** Point in xyzt extended coordinates. */
 class Point {
+    static BASE;
+    static ZERO;
+    ex;
+    ey;
+    ez;
+    et;
     constructor(ex, ey, ez, et) {
         this.ex = arange(ex, 0n);
         this.ey = arange(ey, 0n);
