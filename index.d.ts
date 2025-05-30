@@ -50,8 +50,9 @@ declare class Point {
     isTorsionFree(): boolean;
     /** converts point to 2d xy affine point. (x, y, z, t) ∋ (x=x/z, y=y/z, t=xy). */
     toAffine(): AffinePoint;
-    toRawBytes(): Bytes;
+    toBytes(): Bytes;
     toHex(): string;
+    toRawBytes(): Bytes;
 }
 /** etc.sha512Sync should conform to the interface. */
 export type Sha512FnSync = undefined | ((...messages: Bytes[]) => Bytes);
@@ -78,16 +79,17 @@ export type VerifOpts = {
 declare const verifyAsync: (s: Hex, m: Hex, p: Hex, opts?: VerifOpts) => Promise<boolean>;
 /** Verifies signature on message and public key. To use, set `etc.sha512Sync` first. */
 declare const verify: (s: Hex, m: Hex, p: Hex, opts?: VerifOpts) => boolean;
+declare const rand: (len?: number) => Bytes;
 /** Math, hex, byte helpers. Not in `utils` because utils share API with noble-curves. */
 declare const etc: {
+    sha512Async: (...messages: Bytes[]) => Promise<Bytes>;
+    sha512Sync: Sha512FnSync;
     bytesToHex: (b: Bytes) => string;
     hexToBytes: (hex: string) => Bytes;
     concatBytes: (...arrs: Bytes[]) => Uint8Array;
     mod: (a: bigint, b?: bigint) => bigint;
     invert: (num: bigint, md: bigint) => bigint;
-    randomBytes: (len?: number) => Bytes;
-    sha512Async: (...messages: Bytes[]) => Promise<Bytes>;
-    sha512Sync: Sha512FnSync;
+    randomBytes: typeof rand;
 };
 /** ed25519-specific key utilities. */
 declare const utils: {

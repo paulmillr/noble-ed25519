@@ -201,14 +201,16 @@ class Point {
             err('invalid inverse'); // (z * z^-1) must be 1, otherwise bad math
         return { x: M(x * iz), y: M(y * iz) }; // x = x*z^-1; y = y*z^-1
     }
-    toRawBytes() {
+    toBytes() {
         const { x, y } = this.toAffine(); // convert to affine 2d point
         this.assertValidity();
         const b = n2b_32LE(y); // encode number to 32 bytes
         b[31] |= x & 1n ? 0x80 : 0; // store sign in first LE byte
         return b;
     }
-    toHex() { return b2h(this.toRawBytes()); } // encode to hex string
+    toHex() { return b2h(this.toBytes()); } // encode to hex string
+    // legacy
+    toRawBytes() { return this.toBytes(); }
 }
 /** Generator / base point */
 const G = new Point(Gx, Gy, 1n, M(Gx * Gy));
@@ -324,7 +326,7 @@ const hash2extK = (hashed) => {
     const prefix = hashed.slice(32, 64); // private key "prefix"
     const scalar = modL_LE(head); // modular division over curve order
     const point = G.mul(scalar); // public key point
-    const pointBytes = point.toRawBytes(); // point serialized to Uint8Array
+    const pointBytes = point.toBytes(); // point serialized to Uint8Array
     return { head, prefix, scalar, point, pointBytes };
 };
 // RFC8032 5.1.5; getPublicKey async, sync. Hash priv key and extract point.
@@ -334,15 +336,12 @@ const getExtendedPublicKey = (priv) => hash2extK(sha512s(toU8(priv, 32)));
 const getPublicKeyAsync = (priv) => getExtendedPublicKeyAsync(priv).then(p => p.pointBytes);
 /** Creates 32-byte ed25519 public key from 32-byte private key. To use, set `etc.sha512Sync` first. */
 const getPublicKey = (priv) => getExtendedPublicKey(priv).pointBytes;
-function hashFinish(asynchronous, res) {
-    if (asynchronous)
-        return sha512a(res.hashable).then(res.finish);
-    return res.finish(sha512s(res.hashable));
-}
+const hashFinishA = (res) => sha512a(res.hashable).then(res.finish);
+const hashFinishS = (res) => res.finish(sha512s(res.hashable));
 const _sign = (e, rBytes, msg) => {
     const { pointBytes: P, scalar: s } = e;
     const r = modL_LE(rBytes); // r was created outside, reduce it modulo L
-    const R = G.mul(r).toRawBytes(); // R = [r]B
+    const R = G.mul(r).toBytes(); // R = [r]B
     const hashable = concatB(R, P, msg); // dom2(F, C) || R || A || PH(M)
     const finish = (hashed) => {
         const S = M(r + modL_LE(hashed) * s, N); // S = (r + k * s) mod L; 0 <= s < l
@@ -355,14 +354,14 @@ const signAsync = async (msg, privKey) => {
     const m = toU8(msg); // RFC8032 5.1.6: sign msg with key async
     const e = await getExtendedPublicKeyAsync(privKey); // pub,prfx
     const rBytes = await sha512a(e.prefix, m); // r = SHA512(dom2(F, C) || prefix || PH(M))
-    return hashFinish(true, _sign(e, rBytes, m)); // gen R, k, S, then 64-byte signature
+    return hashFinishA(_sign(e, rBytes, m)); // gen R, k, S, then 64-byte signature
 };
 /** Signs message (NOT message hash) using private key. To use, set `etc.sha512Sync` first. */
 const sign = (msg, privKey) => {
     const m = toU8(msg); // RFC8032 5.1.6: sign msg with key sync
     const e = getExtendedPublicKey(privKey); // pub,prfx
     const rBytes = sha512s(e.prefix, m); // r = SHA512(dom2(F, C) || prefix || PH(M))
-    return hashFinish(false, _sign(e, rBytes, m)); // gen R, k, S, then 64-byte signature
+    return hashFinishS(_sign(e, rBytes, m)); // gen R, k, S, then 64-byte signature
 };
 const dvo = { zip215: true };
 const _verify = (sig, msg, pub, opts = dvo) => {
@@ -376,7 +375,7 @@ const _verify = (sig, msg, pub, opts = dvo) => {
         R = Point.fromHex(sig.slice(0, 32), zip215); // 0 <= R < 2^256: ZIP215 R can be >= P
         s = b2n_LE(sig.slice(32, 64)); // Decode second half as an integer S
         SB = G.mul(s, false); // in the range 0 <= s < L
-        hashable = concatB(R.toRawBytes(), A.toRawBytes(), msg); // dom2(F, C) || R || A || PH(M)
+        hashable = concatB(R.toBytes(), A.toBytes(), msg); // dom2(F, C) || R || A || PH(M)
     }
     catch (error) { }
     const finish = (hashed) => {
@@ -392,42 +391,37 @@ const _verify = (sig, msg, pub, opts = dvo) => {
 };
 // RFC8032 5.1.7: verification async, sync
 /** Verifies signature on message and public key. Async. */
-const verifyAsync = async (s, m, p, opts = dvo) => hashFinish(true, _verify(s, m, p, opts));
+const verifyAsync = async (s, m, p, opts = dvo) => hashFinishA(_verify(s, m, p, opts));
 /** Verifies signature on message and public key. To use, set `etc.sha512Sync` first. */
-const verify = (s, m, p, opts = dvo) => hashFinish(false, _verify(s, m, p, opts));
-const cr = () => // We support: 1) browsers 2) node.js 19+
- typeof globalThis === 'object' && 'crypto' in globalThis ? globalThis.crypto : undefined;
-const subtle = () => {
-    const c = cr();
-    return c && c.subtle || err('crypto.subtle must be defined');
+const verify = (s, m, p, opts = dvo) => hashFinishS(_verify(s, m, p, opts));
+const cr = () => globalThis?.crypto;
+const subtle = () => cr()?.subtle ?? err('crypto.subtle must be defined');
+const rand = (len = 32) => {
+    const c = cr(); // Can be shimmed in node.js <= 18 to prevent error:
+    if (!c?.getRandomValues)
+        err('crypto.getRandomValues must be defined');
+    return c.getRandomValues(u8n(len));
 };
 /** Math, hex, byte helpers. Not in `utils` because utils share API with noble-curves. */
 const etc = {
-    bytesToHex: b2h,
-    hexToBytes: h2b,
-    concatBytes: concatB,
-    mod: M,
-    invert: invert,
-    randomBytes: (len = 32) => {
-        const c = cr(); // Can be shimmed in node.js <= 18 to prevent error:
-        // import { webcrypto } from 'node:crypto';
-        // if (!globalThis.crypto) globalThis.crypto = webcrypto;
-        if (!c || !c.getRandomValues)
-            err('crypto.getRandomValues must be defined');
-        return c.getRandomValues(u8n(len));
-    },
     sha512Async: async (...messages) => {
         const s = subtle();
         const m = concatB(...messages);
         return u8n(await s.digest('SHA-512', m.buffer));
     },
     sha512Sync: undefined, // Actual logic below
+    bytesToHex: b2h,
+    hexToBytes: h2b,
+    concatBytes: concatB,
+    mod: M,
+    invert: invert,
+    randomBytes: rand,
 };
 /** ed25519-specific key utilities. */
 const utils = {
     getExtendedPublicKeyAsync: getExtendedPublicKeyAsync,
     getExtendedPublicKey: getExtendedPublicKey,
-    randomPrivateKey: () => etc.randomBytes(32),
+    randomPrivateKey: () => rand(32),
     precompute: (w = 8, p = G) => { p.multiply(3n); w; return p; }, // no-op
 };
 const W = 8; // Precomputes-related code. W = window size
