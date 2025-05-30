@@ -73,14 +73,6 @@ ed.etc.sha512Sync = (...m) => sha512(ed.etc.concatBytes(...m));
 ed.etc.sha512Async = (...m) => Promise.resolve(ed.etc.sha512Sync(...m));
 ```
 
-### nodejs v18 and older: polyfill webcrypto
-
-```ts
-import { webcrypto } from 'node:crypto';
-// @ts-ignore
-if (!globalThis.crypto) globalThis.crypto = webcrypto;
-```
-
 ## API
 
 There are 3 main methods:
@@ -89,8 +81,7 @@ There are 3 main methods:
 - `sign(message, privateKey)` and `signAsync(message, privateKey)`
 - `verify(signature, message, publicKey)` and `verifyAsync(signature, message, publicKey)`
 
-Functions generally accept Uint8Array.
-There are optional utilities which convert hex strings, utf8 strings or bigints to u8a.
+Functions accept Uint8Array. There are utilities which convert hex strings, utf8 strings or bigints to u8a.
 
 ### getPublicKey
 
@@ -234,9 +225,9 @@ Use low-level libraries & languages.
 ### Supply chain security
 
 - **Commits** are signed with PGP keys, to prevent forgery. Make sure to verify commit signatures
-- **Releases** are transparent and built on GitHub CI. Make sure to verify [provenance](https://docs.npmjs.com/generating-provenance-statements) logs
-  - Use GitHub CLI to verify single-file builds:
-    `gh attestation verify --owner paulmillr noble-ed25519.js`
+- **Releases** are transparent and built on GitHub CI.
+  Check out [attested checksums of single-file builds](https://github.com/paulmillr/noble-ed25519/attestations)
+  and [provenance logs](https://github.com/paulmillr/noble-ed25519/actions/workflows/release.yml)
 - **Rare releasing** is followed to ensure less re-audit need for end-users
 - **Dependencies** are minimized and locked-down: any dependency could get hacked and users will be downloading malware with every install.
   - We make sure to use as few dependencies as possible
