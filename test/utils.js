@@ -4,16 +4,29 @@ import { fileURLToPath } from 'node:url';
 
 const _dirname = dirname(fileURLToPath(import.meta.url));
 
+function readUtf8(path) {
+  return readFileSync(joinPath(_dirname, path), { encoding: 'utf-8' });
+}
+
+
 export function json(path) {
   try {
     // Node.js
-    return JSON.parse(readFileSync(joinPath(_dirname, path), { encoding: 'utf-8' }));
+    return JSON.parse(readUtf8(path));
   } catch {
     // Bundler
     const file = path.replace(/^\.\//, '').replace(/\.json$/, '');
     if (path !== './' + file + '.json') throw new Error('Can not load non-json file');
+    console.log(file);
     return require('./' + file + '.json'); // in this form so that bundler can glob this
   }
+}
+
+export function txt(path, separator = ':') {
+  return readUtf8(path)
+    .trim()
+    .split('\n')
+    .map((l) => l.split(separator));
 }
 
 export const getTypeTests = () => [

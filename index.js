@@ -22,6 +22,8 @@ const _a = P - 1n;
 const _d = 0x52036cee2b6ffe738cc740797779e89800700a4d4141d8ab75eb4dca135978a3n; // equation param d
 const h = 8n;
 const MASK = 2n ** 256n;
+const L = 32;
+const L2 = L * 2;
 /**
  * ed25519 curve parameters. Equation is −x² + y² = -a + dx²y².
  * Gx and Gy are generator coordinates. p is field order, n is group order.
@@ -36,12 +38,12 @@ const err = (m = '') => { throw new Error(m); }; // error helper, messes-up stac
 const isS = (s) => typeof s === 'string'; // is string
 const isB = (s) => typeof s === 'bigint'; // is bigint
 const isu8 = (a) => (a instanceof Uint8Array || (ArrayBuffer.isView(a) && a.constructor.name === 'Uint8Array'));
-const au8 = (a, l) => // is Uint8Array (of specific length)
+const abytes = (a, l) => // is Uint8Array (of specific length)
  !isu8(a) || (typeof l === 'number' && l > 0 && a.length !== l) ?
     err('Uint8Array of valid length expected') : a;
 const u8n = (len) => new Uint8Array(len); // creates Uint8Array
 const u8fr = (buf) => Uint8Array.from(buf);
-const toU8 = (a, len) => au8(isS(a) ? h2b(a) : u8fr(au8(a)), len); // norm(hex/u8a) to u8a
+const toU8 = (a, len) => abytes(isS(a) ? h2b(a) : u8fr(abytes(a)), len); // norm(hex/u8a) to u8a
 const M = (a, b = P) => { let r = a % b; return r >= 0n ? r : b + r; }; // mod division
 const arange = (n, min, max = MASK, msg = 'bad number: out of range') => isB(n) && min <= n && n < max ? n : err(msg);
 const apoint = (p) => (p instanceof Point ? p : err('Point expected')); // is xyzt point
@@ -62,13 +64,13 @@ class Point {
     }
     static fromAffine(p) { return new Point(p.x, p.y, 1n, M(p.x * p.y)); }
     /** RFC8032 5.1.3: hex / Uint8Array to Point. */
-    static fromHex(hex, zip215 = false) {
+    static fromBytes(hex, zip215 = false) {
         const d = _d;
-        hex = toU8(hex, 32);
+        abytes(hex, L);
         const normed = hex.slice(); // copy the array to not mess it up
         const lastByte = hex[31];
         normed[31] = lastByte & ~0x80; // adjust first LE byte = last BE byte
-        const y = b2n_LE(normed); // decode as little-endian, convert to num
+        const y = bytesToNum_LE(normed); // decode as little-endian, convert to num
         const max = zip215 ? MASK : P; // RFC8032 prohibits >= p, ZIP215 doesn't
         arange(y, 0n, max); // zip215=true:  0 <= y < 2^256
         // zip215=false: 0 <= y < 2^255-19
@@ -85,6 +87,9 @@ class Point {
         if (isLastByteOdd !== isXOdd)
             x = M(-x);
         return new Point(x, y, 1n, M(x * y)); // Z=1, T=xy
+    }
+    static fromHex(hex, zip215) {
+        return Point.fromBytes(toU8(hex), zip215);
     }
     get x() { return this.toAffine().x; } // .x, .y will call expensive toAffine.
     get y() { return this.toAffine().y; } // Should be used with care.
@@ -204,11 +209,11 @@ class Point {
     toBytes() {
         const { x, y } = this.toAffine(); // convert to affine 2d point
         this.assertValidity();
-        const b = n2b_32LE(y); // encode number to 32 bytes
+        const b = numToBytes_32LE(y); // encode number to 32 bytes
         b[31] |= x & 1n ? 0x80 : 0; // store sign in first LE byte
         return b;
     }
-    toHex() { return b2h(this.toBytes()); } // encode to hex string
+    toHex() { return bytesToHex(this.toBytes()); } // encode to hex string
     // legacy
     toRawBytes() { return this.toBytes(); }
 }
@@ -220,7 +225,7 @@ const I = new Point(0n, 1n, 1n, 0n);
 Point.BASE = G;
 Point.ZERO = I;
 const padh = (num, pad) => num.toString(16).padStart(pad, '0');
-const b2h = (b) => Array.from(au8(b)).map(e => padh(e, 2)).join(''); // bytes to hex
+const bytesToHex = (b) => Array.from(abytes(b)).map(e => padh(e, 2)).join(''); // bytes to hex
 const C = { _0: 48, _9: 57, A: 65, F: 70, a: 97, f: 102 }; // ASCII characters
 const _ch = (ch) => {
     if (ch >= C._0 && ch <= C._9)
@@ -248,10 +253,10 @@ const h2b = (hex) => {
     }
     return array;
 };
-const n2b_32LE = (num) => h2b(padh(num, 32 * 2)).reverse(); // number to bytes LE
-const b2n_LE = (b) => BigInt('0x' + b2h(u8fr(au8(b)).reverse())); // bytes LE to num
-const concatB = (...arrs) => {
-    const r = u8n(arrs.reduce((sum, a) => sum + au8(a).length, 0)); // create u8a of summed length
+const numToBytes_32LE = (num) => h2b(padh(num, L2)).reverse();
+const bytesToNum_LE = (b) => BigInt('0x' + bytesToHex(u8fr(abytes(b)).reverse()));
+const concatBytes = (...arrs) => {
+    const r = u8n(arrs.reduce((sum, a) => sum + abytes(a).length, 0)); // create u8a of summed length
     let pad = 0; // walk through each array,
     arrs.forEach(a => { r.set(a, pad); pad += a.length; }); // ensure they have proper type
     return r;
@@ -310,7 +315,7 @@ const uvRatio = (u, v) => {
         x = M(-x); // edIsNegative
     return { isValid: useRoot1 || useRoot2, value: x };
 };
-const modL_LE = (hash) => M(b2n_LE(hash), N); // modulo L; but little-endian
+const modL_LE = (hash) => M(bytesToNum_LE(hash), N); // modulo L; but little-endian
 const sha512a = (...m) => etc.sha512Async(...m); // Async SHA512
 const sha512s = (...m) => {
     const fn = etc.sha512Sync;
@@ -319,19 +324,19 @@ const sha512s = (...m) => {
     return fn(...m);
 };
 const hash2extK = (hashed) => {
-    const head = hashed.slice(0, 32); // slice creates a copy, unlike subarray
+    const head = hashed.slice(0, L); // slice creates a copy, unlike subarray
     head[0] &= 248; // Clamp bits: 0b1111_1000,
     head[31] &= 127; // 0b0111_1111,
     head[31] |= 64; // 0b0100_0000
-    const prefix = hashed.slice(32, 64); // private key "prefix"
+    const prefix = hashed.slice(L, L2); // private key "prefix"
     const scalar = modL_LE(head); // modular division over curve order
     const point = G.mul(scalar); // public key point
     const pointBytes = point.toBytes(); // point serialized to Uint8Array
     return { head, prefix, scalar, point, pointBytes };
 };
 // RFC8032 5.1.5; getPublicKey async, sync. Hash priv key and extract point.
-const getExtendedPublicKeyAsync = (priv) => sha512a(toU8(priv, 32)).then(hash2extK);
-const getExtendedPublicKey = (priv) => hash2extK(sha512s(toU8(priv, 32)));
+const getExtendedPublicKeyAsync = (priv) => sha512a(toU8(priv, L)).then(hash2extK);
+const getExtendedPublicKey = (priv) => hash2extK(sha512s(toU8(priv, L)));
 /** Creates 32-byte ed25519 public key from 32-byte private key. Async. */
 const getPublicKeyAsync = (priv) => getExtendedPublicKeyAsync(priv).then(p => p.pointBytes);
 /** Creates 32-byte ed25519 public key from 32-byte private key. To use, set `etc.sha512Sync` first. */
@@ -342,10 +347,10 @@ const _sign = (e, rBytes, msg) => {
     const { pointBytes: P, scalar: s } = e;
     const r = modL_LE(rBytes); // r was created outside, reduce it modulo L
     const R = G.mul(r).toBytes(); // R = [r]B
-    const hashable = concatB(R, P, msg); // dom2(F, C) || R || A || PH(M)
+    const hashable = concatBytes(R, P, msg); // dom2(F, C) || R || A || PH(M)
     const finish = (hashed) => {
         const S = M(r + modL_LE(hashed) * s, N); // S = (r + k * s) mod L; 0 <= s < l
-        return au8(concatB(R, n2b_32LE(S)), 64); // 64-byte sig: 32b R.x + 32b LE(S)
+        return abytes(concatBytes(R, numToBytes_32LE(S)), L2); // 64-byte sig: 32b R.x + 32b LE(S)
     };
     return { hashable, finish };
 };
@@ -365,17 +370,17 @@ const sign = (msg, privKey) => {
 };
 const dvo = { zip215: true };
 const _verify = (sig, msg, pub, opts = dvo) => {
-    sig = toU8(sig, 64); // Signature hex str/Bytes, must be 64 bytes
+    sig = toU8(sig, L2); // Signature hex str/Bytes, must be 64 bytes
     msg = toU8(msg); // Message hex str/Bytes
-    pub = toU8(pub, 32);
+    pub = toU8(pub, L);
     const { zip215 } = opts; // switch between zip215 and rfc8032 verif
     let A, R, s, SB, hashable = Uint8Array.of();
     try {
         A = Point.fromHex(pub, zip215); // public key A decoded
-        R = Point.fromHex(sig.slice(0, 32), zip215); // 0 <= R < 2^256: ZIP215 R can be >= P
-        s = b2n_LE(sig.slice(32, 64)); // Decode second half as an integer S
+        R = Point.fromHex(sig.slice(0, L), zip215); // 0 <= R < 2^256: ZIP215 R can be >= P
+        s = bytesToNum_LE(sig.slice(L, L2)); // Decode second half as an integer S
         SB = G.mul(s, false); // in the range 0 <= s < L
-        hashable = concatB(R.toBytes(), A.toBytes(), msg); // dom2(F, C) || R || A || PH(M)
+        hashable = concatBytes(R.toBytes(), A.toBytes(), msg); // dom2(F, C) || R || A || PH(M)
     }
     catch (error) { }
     const finish = (hashed) => {
@@ -406,13 +411,13 @@ const rand = (len = 32) => {
 const etc = {
     sha512Async: async (...messages) => {
         const s = subtle();
-        const m = concatB(...messages);
+        const m = concatBytes(...messages);
         return u8n(await s.digest('SHA-512', m.buffer));
     },
     sha512Sync: undefined, // Actual logic below
-    bytesToHex: b2h,
+    bytesToHex: bytesToHex,
     hexToBytes: h2b,
-    concatBytes: concatB,
+    concatBytes: concatBytes,
     mod: M,
     invert: invert,
     randomBytes: rand,
@@ -421,7 +426,7 @@ const etc = {
 const utils = {
     getExtendedPublicKeyAsync: getExtendedPublicKeyAsync,
     getExtendedPublicKey: getExtendedPublicKey,
-    randomPrivateKey: () => rand(32),
+    randomPrivateKey: () => rand(L),
     precompute: (w = 8, p = G) => { p.multiply(3n); w; return p; }, // no-op
 };
 const W = 8; // Precomputes-related code. W = window size
@@ -472,4 +477,4 @@ const wNAF = (n) => {
     return { p, f }; // return both real and fake points for JIT
 }; // !! you can disable precomputes by commenting-out call of the wNAF() inside Point#mul()
 // !! Remove the export to easily use in REPL / browser console
-export { CURVE, etc, Point as ExtendedPoint, getPublicKey, getPublicKeyAsync, sign, signAsync, utils, verify, verifyAsync };
+export { CURVE, etc, Point as ExtendedPoint, getPublicKey, getPublicKeyAsync, Point, sign, signAsync, utils, verify, verifyAsync };

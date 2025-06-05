@@ -32,6 +32,7 @@ declare class Point {
     constructor(ex: bigint, ey: bigint, ez: bigint, et: bigint);
     static fromAffine(p: AffinePoint): Point;
     /** RFC8032 5.1.3: hex / Uint8Array to Point. */
+    static fromBytes(hex: Bytes, zip215?: boolean): Point;
     static fromHex(hex: Hex, zip215?: boolean): Point;
     get x(): bigint;
     get y(): bigint;
@@ -98,4 +99,4 @@ declare const utils: {
     randomPrivateKey: () => Bytes;
     precompute: (w?: number, p?: Point) => Point;
 };
-export { CURVE, etc, Point as ExtendedPoint, getPublicKey, getPublicKeyAsync, sign, signAsync, utils, verify, verifyAsync };
+export { CURVE, etc, Point as ExtendedPoint, getPublicKey, getPublicKeyAsync, Point, sign, signAsync, utils, verify, verifyAsync };
