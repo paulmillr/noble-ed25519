@@ -18,7 +18,7 @@ const P = 2n ** 255n - 19n;                                     // ed25519 is tw
 const N = 2n ** 252n + 27742317777372353535851937790883648493n; // curve's (group) order
 const Gx = 0x216936d3cd6e53fec0a4e231fdd6dc5c692cc7609525a7b2c9562d608f25d51an; // base point x
 const Gy = 0x6666666666666666666666666666666666666666666666666666666666666658n; // base point y
-const _a = P-1n;
+const _a = P - 1n;
 const _d = 0x52036cee2b6ffe738cc740797779e89800700a4d4141d8ab75eb4dca135978a3n; // equation param d
 const h = 8n;
 const MASK = 2n ** 256n;
@@ -32,7 +32,7 @@ const L2 = L * 2;
 const CURVE: {
   a: bigint; d: bigint; p: bigint; n: bigint; h: bigint; Gx: bigint; Gy: bigint;
 } = {
-  a: _a,                                               // -1 mod p
+  a: _a,                                                // -1 mod p
   d: _d,                                                // -(121665/121666) mod p
   p: P, n: N, h: h, Gx: Gx, Gy: Gy    // field prime, curve (group) order, cofactor
 };
@@ -41,21 +41,21 @@ export type Bytes = Uint8Array;
 /** Hex-encoded string or Uint8Array. */
 export type Hex = Bytes | string;
 const err = (m = ''): never => { throw new Error(m); }; // error helper, messes-up stack trace
-const isS = (s: unknown): s is string => typeof s === 'string'; // is string
-const isB = (s: unknown): s is bigint => typeof s === 'bigint'; // is bigint
-const isu8 = (a: unknown): a is Uint8Array => (
+const isStr = (s: unknown): s is string => typeof s === 'string'; // is string
+const isBig = (s: unknown): s is bigint => typeof s === 'bigint'; // is bigint
+const isBytes = (a: unknown): a is Uint8Array => (
   a instanceof Uint8Array || (ArrayBuffer.isView(a) && a.constructor.name === 'Uint8Array')
 );
 const abytes = (a: unknown, l?: number): Bytes =>          // is Uint8Array (of specific length)
-  !isu8(a) || (typeof l === 'number' && l > 0 && a.length !== l) ?
+  !isBytes(a) || (typeof l === 'number' && l > 0 && a.length !== l) ?
     err('Uint8Array of valid length expected') : a;
-const u8n = (len: number) => new Uint8Array(len);       // creates Uint8Array
+const u8n = (len: number) => new Uint8Array(len);          // creates Uint8Array
 const u8fr = (buf: ArrayLike<number>) => Uint8Array.from(buf);
 const toU8 = (a: Hex, len?: number) =>
-  abytes(isS(a) ? hexToBytes(a) : u8fr(abytes(a)), len);  // norm(hex/u8a) to u8a
+  abytes(isStr(a) ? hexToBytes(a) : u8fr(abytes(a)), len); // norm(hex/u8a) to u8a
 const M = (a: bigint, b = P) => { let r = a % b; return r >= 0n ? r : b + r; }; // mod division
 const arange = (n: bigint, min: bigint, max: bigint = MASK, msg = 'bad number: out of range'): bigint =>
-  isB(n) && min <= n && n < max ? n : err(msg);
+  isBig(n) && min <= n && n < max ? n : err(msg);
 const apoint = (p: unknown) => (p instanceof Point ? p : err('Point expected')); // is xyzt point
 /** Point in 2d xy affine coordinates. */
 export interface AffinePoint { x: bigint, y: bigint }
@@ -126,7 +126,7 @@ class Point {
   }
   equals(other: Point): boolean {                       // equality check: compare points
     const { ex: X1, ey: Y1, ez: Z1 } = this;
-    const { ex: X2, ey: Y2, ez: Z2 } = apoint(other);  // isPoint() checks class equality
+    const { ex: X2, ey: Y2, ez: Z2 } = apoint(other);   // isPoint() checks class equality
     const X1Z2 = M(X1 * Z2), X2Z1 = M(X2 * Z1);
     const Y1Z2 = M(Y1 * Z2), Y2Z1 = M(Y2 * Z1);
     return X1Z2 === X2Z1 && Y1Z2 === Y2Z1;
@@ -159,7 +159,7 @@ class Point {
     const X3 = M(E * F);  const Y3 = M(G * H);   const T3 = M(E * H); const Z3 = M(F * G);
     return new Point(X3, Y3, Z3, T3);
   }
-  mul(n: bigint, safe = true): Point {                  // Multiply point by scalar n
+  multiply(n: bigint, safe = true): Point {             // Multiply point by scalar n
     if (n === 0n) return safe === true ? err('cannot multiply by 0') : I;
     arange(n, 1n, N);
     if (n === 1n || (!safe && this.is0())) return this; // safe=true bans 0. safe=false allows 0.
@@ -171,11 +171,10 @@ class Point {
     }
     return p;
   }
-  multiply(scalar: bigint): Point { return this.mul(scalar); } // Aliases for compatibilty
-  clearCofactor(): Point { return this.mul(BigInt(h), false); } // multiply by cofactor
+  clearCofactor(): Point { return this.multiply(BigInt(h), false); } // multiply by cofactor
   isSmallOrder(): boolean { return this.clearCofactor().is0(); } // check if P is small order
   isTorsionFree(): boolean {                            // multiply by big number CURVE.n
-    let p = this.mul(N / 2n, false).double();           // ensures the point is not "bad".
+    let p = this.multiply(N / 2n, false).double();      // ensures the point is not "bad".
     if (N % 2n) p = p.add(this); // P^(N+1)             // P*N == (P*(N/2))*2+P
     return p.is0();
   }
@@ -207,7 +206,7 @@ const I: Point = new Point(0n, 1n, 1n, 0n);
 Point.BASE = G;
 Point.ZERO = I;
 const padh = (num: number | bigint, pad: number) => num.toString(16).padStart(pad, '0')
-const bytesToHex = (b: Bytes): string => Array.from(abytes(b)).map(e => padh(e, 2)).join(''); // bytes to hex
+const bytesToHex = (b: Bytes): string => Array.from(abytes(b)).map(e => padh(e, 2)).join('');
 const C = { _0: 48, _9: 57, A: 65, F: 70, a: 97, f: 102 } as const; // ASCII characters
 const _ch = (ch: number): number | undefined => {
   if (ch >= C._0 && ch <= C._9) return ch - C._0;       // '2' => 50-48
@@ -215,9 +214,9 @@ const _ch = (ch: number): number | undefined => {
   if (ch >= C.a && ch <= C.f) return ch - (C.a - 10);   // 'b' => 98-(97-10)
   return;
 };
-const hexToBytes = (hex: string): Bytes => {            // hex to bytes
+const hexToBytes = (hex: string): Bytes => {
   const e = 'hex invalid';
-  if (!isS(hex)) return err(e);
+  if (!isStr(hex)) return err(e);
   const hl = hex.length, al = hl / 2;
   if (hl % 2) return err(e);
   const array = u8n(al);
@@ -288,21 +287,21 @@ const uvRatio = (u: bigint, v: bigint): { isValid: boolean, value: bigint } => {
 const modL_LE = (hash: Bytes): bigint => M(bytesToNum_LE(hash), N); // modulo L; but little-endian
 /** etc.sha512Sync should conform to the interface. */
 export type Sha512FnSync = undefined | ((...messages: Bytes[]) => Bytes);
-const sha512a = (...m: Bytes[]) => etc.sha512Async(...m);  // Async SHA512
-const sha512s = (...m: Bytes[]) => {                       // Sync SHA512, not set by default
+const sha512a = (...m: Bytes[]) => etc.sha512Async(...m);// Async SHA512
+const sha512s = (...m: Bytes[]) => {                     // Sync SHA512, not set by default
   const fn = etc.sha512Sync;
   if (typeof fn !== 'function') err('etc.sha512Sync not set');
   return fn!(...m);
 };
 type ExtK = { head: Bytes, prefix: Bytes, scalar: bigint, point: Point, pointBytes: Bytes };
 const hash2extK = (hashed: Bytes): ExtK => {            // RFC8032 5.1.5
-  const head = hashed.slice(0, L);                     // slice creates a copy, unlike subarray
+  const head = hashed.slice(0, L);                      // slice creates a copy, unlike subarray
   head[0] &= 248;                                       // Clamp bits: 0b1111_1000,
   head[31] &= 127;                                      // 0b0111_1111,
   head[31] |= 64;                                       // 0b0100_0000
-  const prefix = hashed.slice(L, L2);                  // private key "prefix"
+  const prefix = hashed.slice(L, L2);                   // private key "prefix"
   const scalar = modL_LE(head);                         // modular division over curve order
-  const point = G.mul(scalar);                          // public key point
+  const point = G.multiply(scalar);                     // public key point
   const pointBytes = point.toBytes();                   // point serialized to Uint8Array
   return { head, prefix, scalar, point, pointBytes };
 }
@@ -322,7 +321,7 @@ const hashFinishS = <T>(res: Finishable<T>): T => res.finish(sha512s(res.hashabl
 const _sign = (e: ExtK, rBytes: Bytes, msg: Bytes): Finishable<Bytes> => { // sign() shared code
   const { pointBytes: P, scalar: s } = e;
   const r = modL_LE(rBytes);                            // r was created outside, reduce it modulo L
-  const R = G.mul(r).toBytes();                         // R = [r]B
+  const R = G.multiply(r).toBytes();                    // R = [r]B
   const hashable = concatBytes(R, P, msg);              // dom2(F, C) || R || A || PH(M)
   const finish = (hashed: Bytes): Bytes => {            // k = SHA512(dom2(F, C) || R || A || PH(M))
     const S = M(r + modL_LE(hashed) * s, N);            // S = (r + k * s) mod L; 0 <= s < l
@@ -355,16 +354,16 @@ const _verify = (sig: Hex, msg: Hex, pub: Hex, opts: VerifOpts = dvo): Finishabl
   let A: Point, R: Point, s: bigint, SB: Point, hashable = Uint8Array.of();
   try {
     A = Point.fromHex(pub, zip215);                     // public key A decoded
-    R = Point.fromHex(sig.slice(0, L), zip215);        // 0 <= R < 2^256: ZIP215 R can be >= P
-    s = bytesToNum_LE(sig.slice(L, L2));               // Decode second half as an integer S
-    SB = G.mul(s, false);                               // in the range 0 <= s < L
+    R = Point.fromHex(sig.slice(0, L), zip215);         // 0 <= R < 2^256: ZIP215 R can be >= P
+    s = bytesToNum_LE(sig.slice(L, L2));                // Decode second half as an integer S
+    SB = G.multiply(s, false);                          // in the range 0 <= s < L
     hashable = concatBytes(R.toBytes(), A.toBytes(), msg);  // dom2(F, C) || R || A || PH(M)
   } catch (error) {}
   const finish = (hashed: Bytes): boolean => {          // k = SHA512(dom2(F, C) || R || A || PH(M))
     if (SB == null) return false;                       // false if try-catch catched an error
     if (!zip215 && A.isSmallOrder()) return false;      // false for SBS: Strongly Binding Signature
     const k = modL_LE(hashed);                          // decode in little-endian, modulo L
-    const RkA = R.add(A.mul(k, false));                 // [8]R + [8][k]A'
+    const RkA = R.add(A.multiply(k, false));            // [8]R + [8][k]A'
     return RkA.add(SB.negate()).clearCofactor().is0();  // [8][S]B = [8]R + [8][k]A'
   }
   return { hashable, finish };
@@ -380,7 +379,7 @@ const verify = (s: Hex, m: Hex, p: Hex, opts: VerifOpts = dvo): boolean =>
 declare const globalThis: Record<string, any> | undefined; // Typescript symbol present in browsers
 const cr = () => globalThis?.crypto
 const subtle = () => cr()?.subtle ?? err('crypto.subtle must be defined');
-const rand = (len = 32): Bytes => {                   // CSPRNG (random number generator)
+const rand = (len = 32): Bytes => {                     // CSPRNG (random number generator)
   const c = cr(); // Can be shimmed in node.js <= 18 to prevent error:
   if (!c?.getRandomValues) err('crypto.getRandomValues must be defined');
   return c.getRandomValues(u8n(len));

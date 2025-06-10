@@ -35,17 +35,17 @@ const CURVE = {
     p: P, n: N, h: h, Gx: Gx, Gy: Gy // field prime, curve (group) order, cofactor
 };
 const err = (m = '') => { throw new Error(m); }; // error helper, messes-up stack trace
-const isS = (s) => typeof s === 'string'; // is string
-const isB = (s) => typeof s === 'bigint'; // is bigint
-const isu8 = (a) => (a instanceof Uint8Array || (ArrayBuffer.isView(a) && a.constructor.name === 'Uint8Array'));
+const isStr = (s) => typeof s === 'string'; // is string
+const isBig = (s) => typeof s === 'bigint'; // is bigint
+const isBytes = (a) => (a instanceof Uint8Array || (ArrayBuffer.isView(a) && a.constructor.name === 'Uint8Array'));
 const abytes = (a, l) => // is Uint8Array (of specific length)
- !isu8(a) || (typeof l === 'number' && l > 0 && a.length !== l) ?
+ !isBytes(a) || (typeof l === 'number' && l > 0 && a.length !== l) ?
     err('Uint8Array of valid length expected') : a;
 const u8n = (len) => new Uint8Array(len); // creates Uint8Array
 const u8fr = (buf) => Uint8Array.from(buf);
-const toU8 = (a, len) => abytes(isS(a) ? h2b(a) : u8fr(abytes(a)), len); // norm(hex/u8a) to u8a
+const toU8 = (a, len) => abytes(isStr(a) ? hexToBytes(a) : u8fr(abytes(a)), len); // norm(hex/u8a) to u8a
 const M = (a, b = P) => { let r = a % b; return r >= 0n ? r : b + r; }; // mod division
-const arange = (n, min, max = MASK, msg = 'bad number: out of range') => isB(n) && min <= n && n < max ? n : err(msg);
+const arange = (n, min, max = MASK, msg = 'bad number: out of range') => isBig(n) && min <= n && n < max ? n : err(msg);
 const apoint = (p) => (p instanceof Point ? p : err('Point expected')); // is xyzt point
 /** Point in xyzt extended coordinates. */
 class Point {
@@ -170,7 +170,7 @@ class Point {
         const Z3 = M(F * G);
         return new Point(X3, Y3, Z3, T3);
     }
-    mul(n, safe = true) {
+    multiply(n, safe = true) {
         if (n === 0n)
             return safe === true ? err('cannot multiply by 0') : I;
         arange(n, 1n, N);
@@ -187,11 +187,10 @@ class Point {
         }
         return p;
     }
-    multiply(scalar) { return this.mul(scalar); } // Aliases for compatibilty
-    clearCofactor() { return this.mul(BigInt(h), false); } // multiply by cofactor
+    clearCofactor() { return this.multiply(BigInt(h), false); } // multiply by cofactor
     isSmallOrder() { return this.clearCofactor().is0(); } // check if P is small order
     isTorsionFree() {
-        let p = this.mul(N / 2n, false).double(); // ensures the point is not "bad".
+        let p = this.multiply(N / 2n, false).double(); // ensures the point is not "bad".
         if (N % 2n)
             p = p.add(this); // P^(N+1)             // P*N == (P*(N/2))*2+P
         return p.is0();
@@ -225,7 +224,7 @@ const I = new Point(0n, 1n, 1n, 0n);
 Point.BASE = G;
 Point.ZERO = I;
 const padh = (num, pad) => num.toString(16).padStart(pad, '0');
-const bytesToHex = (b) => Array.from(abytes(b)).map(e => padh(e, 2)).join(''); // bytes to hex
+const bytesToHex = (b) => Array.from(abytes(b)).map(e => padh(e, 2)).join('');
 const C = { _0: 48, _9: 57, A: 65, F: 70, a: 97, f: 102 }; // ASCII characters
 const _ch = (ch) => {
     if (ch >= C._0 && ch <= C._9)
@@ -236,9 +235,9 @@ const _ch = (ch) => {
         return ch - (C.a - 10); // 'b' => 98-(97-10)
     return;
 };
-const h2b = (hex) => {
+const hexToBytes = (hex) => {
     const e = 'hex invalid';
-    if (!isS(hex))
+    if (!isStr(hex))
         return err(e);
     const hl = hex.length, al = hl / 2;
     if (hl % 2)
@@ -253,7 +252,7 @@ const h2b = (hex) => {
     }
     return array;
 };
-const numToBytes_32LE = (num) => h2b(padh(num, L2)).reverse();
+const numToBytes_32LE = (num) => hexToBytes(padh(num, L2)).reverse();
 const bytesToNum_LE = (b) => BigInt('0x' + bytesToHex(u8fr(abytes(b)).reverse()));
 const concatBytes = (...arrs) => {
     const r = u8n(arrs.reduce((sum, a) => sum + abytes(a).length, 0)); // create u8a of summed length
@@ -330,7 +329,7 @@ const hash2extK = (hashed) => {
     head[31] |= 64; // 0b0100_0000
     const prefix = hashed.slice(L, L2); // private key "prefix"
     const scalar = modL_LE(head); // modular division over curve order
-    const point = G.mul(scalar); // public key point
+    const point = G.multiply(scalar); // public key point
     const pointBytes = point.toBytes(); // point serialized to Uint8Array
     return { head, prefix, scalar, point, pointBytes };
 };
@@ -346,7 +345,7 @@ const hashFinishS = (res) => res.finish(sha512s(res.hashable));
 const _sign = (e, rBytes, msg) => {
     const { pointBytes: P, scalar: s } = e;
     const r = modL_LE(rBytes); // r was created outside, reduce it modulo L
-    const R = G.mul(r).toBytes(); // R = [r]B
+    const R = G.multiply(r).toBytes(); // R = [r]B
     const hashable = concatBytes(R, P, msg); // dom2(F, C) || R || A || PH(M)
     const finish = (hashed) => {
         const S = M(r + modL_LE(hashed) * s, N); // S = (r + k * s) mod L; 0 <= s < l
@@ -379,7 +378,7 @@ const _verify = (sig, msg, pub, opts = dvo) => {
         A = Point.fromHex(pub, zip215); // public key A decoded
         R = Point.fromHex(sig.slice(0, L), zip215); // 0 <= R < 2^256: ZIP215 R can be >= P
         s = bytesToNum_LE(sig.slice(L, L2)); // Decode second half as an integer S
-        SB = G.mul(s, false); // in the range 0 <= s < L
+        SB = G.multiply(s, false); // in the range 0 <= s < L
         hashable = concatBytes(R.toBytes(), A.toBytes(), msg); // dom2(F, C) || R || A || PH(M)
     }
     catch (error) { }
@@ -389,7 +388,7 @@ const _verify = (sig, msg, pub, opts = dvo) => {
         if (!zip215 && A.isSmallOrder())
             return false; // false for SBS: Strongly Binding Signature
         const k = modL_LE(hashed); // decode in little-endian, modulo L
-        const RkA = R.add(A.mul(k, false)); // [8]R + [8][k]A'
+        const RkA = R.add(A.multiply(k, false)); // [8]R + [8][k]A'
         return RkA.add(SB.negate()).clearCofactor().is0(); // [8][S]B = [8]R + [8][k]A'
     };
     return { hashable, finish };
@@ -416,7 +415,7 @@ const etc = {
     },
     sha512Sync: undefined, // Actual logic below
     bytesToHex: bytesToHex,
-    hexToBytes: h2b,
+    hexToBytes: hexToBytes,
     concatBytes: concatBytes,
     mod: M,
     invert: invert,

@@ -44,8 +44,7 @@ declare class Point {
     double(): Point;
     /** Point addition. Complete formula. */
     add(other: Point): Point;
-    mul(n: bigint, safe?: boolean): Point;
-    multiply(scalar: bigint): Point;
+    multiply(n: bigint, safe?: boolean): Point;
     clearCofactor(): Point;
     isSmallOrder(): boolean;
     isTorsionFree(): boolean;
