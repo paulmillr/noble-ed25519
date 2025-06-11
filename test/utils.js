@@ -8,7 +8,6 @@ function readUtf8(path) {
   return readFileSync(joinPath(_dirname, path), { encoding: 'utf-8' });
 }
 
-
 export function json(path) {
   try {
     // Node.js
