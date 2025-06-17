@@ -138,4 +138,4 @@ declare const utils: {
     randomPrivateKey: () => Bytes;
     precompute: (w?: number, p?: Point) => Point;
 };
-export { ed25519_CURVE as CURVE, etc, Point as ExtendedPoint, getPublicKey, getPublicKeyAsync, Point, sign, signAsync, utils, verify, verifyAsync, };
+export { ed25519_CURVE as CURVE, etc, Point as ExtendedPoint, getPublicKey, getPublicKeyAsync, Point, sign, signAsync, utils, verify, verifyAsync };

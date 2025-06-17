@@ -56,7 +56,7 @@ Only async methods are available by default, to keep the library dependency-free
 To enable sync methods:
 
 ```ts
-import { sha512 } from '@noble/hashes/sha512';
+import { sha512 } from '@noble/hashes/sha2.js';
 ed.etc.sha512Sync = (...m) => sha512(ed.etc.concatBytes(...m));
 // Sync methods can be used now:
 // ed.getPublicKey(privKey);
@@ -68,7 +68,7 @@ ed.etc.sha512Sync = (...m) => sha512(ed.etc.concatBytes(...m));
 
 ```ts
 import 'react-native-get-random-values';
-import { sha512 } from '@noble/hashes/sha512';
+import { sha512 } from '@noble/hashes/sha2.js';
 ed.etc.sha512Sync = (...m) => sha512(ed.etc.concatBytes(...m));
 ed.etc.sha512Async = (...m) => Promise.resolve(ed.etc.sha512Sync(...m));
 ```
@@ -262,12 +262,12 @@ NIST prohibits classical cryptography (RSA, DSA, ECDSA, ECDH) [after 2035](https
 
 ## Speed
 
-Benchmarks done with Apple M2 on macOS 13 with Node.js 20.
+Benchmarks done with Apple M4.
 
-    getPublicKey(utils.randomPrivateKey()) x 9,173 ops/sec @ 109μs/op
-    sign x 4,567 ops/sec @ 218μs/op
-    verify x 994 ops/sec @ 1ms/op
-    Point.fromHex decompression x 16,164 ops/sec @ 61μs/op
+    getPublicKey(utils.randomPrivateKey()) x 11,204 ops/sec @ 89μs/op
+    sign x 5,749 ops/sec @ 173μs/op
+    verify x 1,195 ops/sec @ 836μs/op
+    Point.fromHex decompression x 22,293 ops/sec @ 44μs/op
 
 Compare to alternative implementations:
 
