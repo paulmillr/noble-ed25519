@@ -6,7 +6,7 @@ import {
 } from '@noble/hashes/utils.js';
 import * as fc from 'fast-check';
 import { describe, should } from 'micro-should';
-import { deepStrictEqual as eql, strictEqual, throws } from 'node:assert';
+import { deepStrictEqual as eql, doesNotMatch, strictEqual, throws } from 'node:assert';
 import { ed25519 as ed, ED25519_TORSION_SUBGROUP, numberToBytesLE } from './ed25519.helpers.js';
 import { getTypeTestsNonUi8a, json, txt } from './utils.js';
 
@@ -375,6 +375,19 @@ describe('ed25519', () => {
         } else throw new Error('unknown test result');
       }
     }
+  });
+
+  describe('errors', () => {
+    should('not feature the `err` helper in the stack trace', () => {
+      const invalidPriv = new Uint8Array(33).fill(1);
+      try {
+        ed.getPublicKey(invalidPriv);
+      } catch (error) {
+        doesNotMatch(error.stack, /at err \(/);
+        return;
+      }
+      throw new Error('expected a thrown error');
+    });
   });
 });
 

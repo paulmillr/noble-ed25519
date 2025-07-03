@@ -56,10 +56,16 @@ export type EdwardsOpts = Readonly<{
 
 // ## Helpers
 // ----------
-// error helper, messes-up stack trace
-const err = (m = ''): never => {
-  throw new Error(m);
-};
+function safeCaptureStackTrace(...args: Parameters<typeof Error.captureStackTrace>): void {
+  if ('captureStackTrace' in Error && typeof Error.captureStackTrace === 'function') {
+    Error.captureStackTrace(...args);
+  }
+}
+function err(m = ''): never {
+  const e = new Error(m);
+  safeCaptureStackTrace(e, err);
+  throw e;
+}
 const isBig = (n: unknown): n is bigint => typeof n === 'bigint'; // is big integer
 const isStr = (s: unknown): s is string => typeof s === 'string'; // is string
 const isBytes = (a: unknown): a is Uint8Array =>
