@@ -752,7 +752,7 @@ function invert(number: bigint, modulo: bigint = CURVE.P): bigint {
   if (number === _0n || modulo <= _0n) {
     throw new Error(`invert: expected positive integers, got n=${number} mod=${modulo}`);
   }
-  // Eucledian GCD https://brilliant.org/wiki/extended-euclidean-algorithm/
+  // Euclidean GCD https://brilliant.org/wiki/extended-euclidean-algorithm/
   let a = mod(number, modulo);
   let b = modulo;
   // prettier-ignore
