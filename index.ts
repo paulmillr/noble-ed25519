@@ -1209,7 +1209,7 @@ export const utils = {
 
   /**
    * Can take 40 or more bytes of uniform input e.g. from CSPRNG or KDF
-   * and convert them into private scalar, with the modulo bias being neglible.
+   * and convert them into private scalar, with the modulo bias being negligible.
    * As per FIPS 186 B.4.1.
    * Not needed for ed25519 private keys. Needed if you use scalars directly (rare).
    * @param hash hash output from sha512, or a similar function
