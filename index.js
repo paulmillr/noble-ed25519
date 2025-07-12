@@ -117,7 +117,7 @@ const M = (a, b = P) => {
     return r >= 0n ? r : b + r;
 };
 const modN = (a) => M(a, N);
-/** Modular inversion using eucledian GCD (non-CT). No negative exponent for now. */
+/** Modular inversion using euclidean GCD (non-CT). No negative exponent for now. */
 // prettier-ignore
 const invert = (num, md) => {
     if (num === 0n || md <= 0n)
