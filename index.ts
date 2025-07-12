@@ -939,7 +939,7 @@ function checkPrivateKey(key: PrivKey) {
 
 // Takes 64 bytes
 function getKeyFromHash(hashed: Uint8Array) {
-  // First 32 bytes of 64b uniformingly random input are taken,
+  // First 32 bytes of 64b uniformly random input are taken,
   // clears 3 bits of it to produce a random field element.
   const head = adjustBytes25519(hashed.slice(0, 32));
   // Second 32 bytes is called key prefix (5.1.6)
