@@ -66,14 +66,20 @@ const err = (message = ''): never => {
 };
 const isBig = (n: unknown): n is bigint => typeof n === 'bigint'; // is big integer
 const isStr = (s: unknown): s is string => typeof s === 'string'; // is string
-const isBytes = (a: unknown): a is Uint8Array =>
+const isBytes = (a: unknown): a is Bytes =>
   a instanceof Uint8Array || (ArrayBuffer.isView(a) && a.constructor.name === 'Uint8Array');
 /** Asserts something is Uint8Array. */
-const abytes = (b: Bytes | undefined, ...lengths: number[]): Bytes => {
-  if (!isBytes(b)) return err('Uint8Array expected');
-  if (lengths.length > 0 && !lengths.includes(b.length))
-    err('Uint8Array expected of length ' + lengths + ', got length=' + b.length);
-  return b;
+const abytes = (value: Bytes, length?: number, title: string = ''): Bytes => {
+  const bytes = isBytes(value);
+  const len = value?.length;
+  const needsLen = length !== undefined;
+  if (!bytes || (needsLen && len !== length)) {
+    const prefix = title && `"${title}" `;
+    const ofLen = needsLen ? ` of length ${length}` : '';
+    const got = bytes ? `length=${len}` : `type=${typeof value}`;
+    err(prefix + 'expected Uint8Array' + ofLen + ', got ' + got);
+  }
+  return value;
 };
 /** create Uint8Array */
 const u8n = (len: number) => new Uint8Array(len);
@@ -108,7 +114,7 @@ const hexToBytes = (hex: string): Bytes => {
 };
 declare const globalThis: Record<string, any> | undefined; // Typescript symbol present in browsers
 const cr = () => globalThis?.crypto; // WebCrypto is available in all modern environments
-const subtle = () => cr()?.subtle ?? err('crypto.subtle must be defined, try polyfill');
+const subtle = () => cr()?.subtle ?? err('crypto.subtle must be defined, consider polyfill');
 // prettier-ignore
 const concatBytes = (...arrs: Bytes[]): Bytes => {
   const r = u8n(arrs.reduce((sum, a) => sum + abytes(a).length, 0)); // create u8a of summed length
@@ -155,10 +161,10 @@ const callHash = (name: string) => {
 const hash = (msg: Bytes): Bytes => callHash('sha512')(msg);
 const apoint = (p: unknown) => (p instanceof Point ? p : err('Point expected'));
 /** Point in 2d xy affine coordinates. */
-export interface AffinePoint {
+export type AffinePoint = {
   x: bigint;
   y: bigint;
-}
+};
 // ## End of Helpers
 // -----------------
 
@@ -209,6 +215,15 @@ class Point {
     if (!zip215 && x === 0n && isLastByteOdd) err('bad point: x==0, isLastByteOdd'); // x=0, x_0=1
     if (isLastByteOdd !== isXOdd) x = M(-x);
     return new Point(x, y, 1n, M(x * y)); // Z=1, T=xy
+  }
+  static fromHex(hex: string, zip215?: boolean): Point {
+    return Point.fromBytes(hexToBytes(hex), zip215);
+  }
+  get x(): bigint {
+    return this.toAffine().x;
+  }
+  get y(): bigint {
+    return this.toAffine().y;
   }
   /** Checks if the point is valid and on-curve. */
   assertValidity(): this {
@@ -356,16 +371,6 @@ class Point {
     if (N % 2n) p = p.add(this);
     return p.is0();
   }
-
-  static fromHex(hex: string, zip215?: boolean): Point {
-    return Point.fromBytes(hexToBytes(hex), zip215);
-  }
-  get x(): bigint {
-    return this.toAffine().x;
-  }
-  get y(): bigint {
-    return this.toAffine().y;
-  }
 }
 /** Generator / base point */
 const G: Point = new Point(Gx, Gy, 1n, M(Gx * Gy));
@@ -427,7 +432,6 @@ const uvRatio = (u: bigint, v: bigint): { isValid: boolean, value: bigint } => {
 const modL_LE = (hash: Bytes): bigint => modN(bytesToNumLE(hash)); // modulo L; but little-endian
 /** hashes.sha512 should conform to the interface. */
 // TODO: rename
-export type Sha512FnSync = undefined | ((...messages: Bytes[]) => Bytes);
 const sha512a = (...m: Bytes[]) => hashes.sha512Async(concatBytes(...m)); // Async SHA512
 const sha512s = (...m: Bytes[]) => callHash('sha512')(concatBytes(...m));
 type ExtK = { head: Bytes; prefix: Bytes; scalar: bigint; point: Point; pointBytes: Bytes };
@@ -496,13 +500,13 @@ const sign = (message: Bytes, secretKey: Bytes): Bytes => {
   return hashFinishS(_sign(e, rBytes, m)); // gen R, k, S, then 64-byte signature
 };
 /** Verification options. zip215: true (default) follows ZIP215 spec. false would follow RFC8032. */
-export type VerifOpts = { zip215?: boolean };
-const veriOpts: VerifOpts = { zip215: true };
+export type EdDSAVerifyOpts = { zip215?: boolean };
+const defaultVerifyOpts: EdDSAVerifyOpts = { zip215: true };
 const _verify = (
   sig: Bytes,
   msg: Bytes,
   pub: Bytes,
-  opts: VerifOpts = veriOpts
+  opts: EdDSAVerifyOpts = defaultVerifyOpts
 ): Finishable<boolean> => {
   sig = abytes(sig, L2); // Signature hex str/Bytes, must be 64 bytes
   msg = abytes(msg); // Message hex str/Bytes
@@ -512,7 +516,7 @@ const _verify = (
   let R: Point;
   let s: bigint;
   let SB: Point;
-  let hashable: Uint8Array = Uint8Array.of();
+  let hashable: Bytes = Uint8Array.of();
   try {
     A = Point.fromBytes(pub, zip215); // public key A decoded
     R = Point.fromBytes(sig.slice(0, L), zip215); // 0 <= R < 2^256: ZIP215 R can be >= P
@@ -536,14 +540,14 @@ const verifyAsync = async (
   signature: Bytes,
   message: Bytes,
   publicKey: Bytes,
-  opts: VerifOpts = veriOpts
+  opts: EdDSAVerifyOpts = defaultVerifyOpts
 ): Promise<boolean> => hashFinishA(_verify(signature, message, publicKey, opts));
 /** Verifies signature on message and public key. To use, set `hashes.sha512` first. Follows RFC8032 5.1.7. */
 const verify = (
   signature: Bytes,
   message: Bytes,
   publicKey: Bytes,
-  opts: VerifOpts = veriOpts
+  opts: EdDSAVerifyOpts = defaultVerifyOpts
 ): boolean => hashFinishS(_verify(signature, message, publicKey, opts));
 
 /** Math, hex, byte helpers. Not in `utils` because utils share API with noble-curves. */
@@ -558,12 +562,12 @@ const etc = {
   randomBytes: randomBytes as typeof randomBytes,
 };
 const hashes = {
-  sha512Async: async (...messages: Bytes[]): Promise<Bytes> => {
+  sha512Async: async (message: Bytes): Promise<Bytes> => {
     const s = subtle();
-    const m = concatBytes(...messages);
+    const m = concatBytes(message);
     return u8n(await s.digest('SHA-512', m.buffer));
   },
-  sha512: undefined as Sha512FnSync,
+  sha512: undefined as undefined | ((message: Bytes) => Bytes),
 };
 
 // FIPS 186 B.4.1 compliant key generation produces private keys
