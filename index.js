@@ -7,10 +7,10 @@
  * ```js
 import * as ed from '@noble/ed25519';
 (async () => {
-  const privKey = ed.utils.randomPrivateKey();
+  const secretKey = ed.utils.randomSecretKey();
   const message = Uint8Array.from([0xab, 0xbc, 0xcd, 0xde]);
-  const pubKey = await ed.getPublicKeyAsync(privKey); // Sync methods are also present
-  const signature = await ed.signAsync(message, privKey);
+  const pubKey = await ed.getPublicKeyAsync(secretKey); // Sync methods are also present
+  const signature = await ed.signAsync(message, secretKey);
   const isValid = await ed.verifyAsync(signature, message, pubKey);
 })();
 ```
@@ -33,30 +33,33 @@ const ed25519_CURVE = {
     Gx: 0x216936d3cd6e53fec0a4e231fdd6dc5c692cc7609525a7b2c9562d608f25d51an,
     Gy: 0x6666666666666666666666666666666666666666666666666666666666666658n,
 };
-const { p: P, n: N, Gx, Gy, a: _a, d: _d } = ed25519_CURVE;
-const h = 8n; // cofactor
+const { p: P, n: N, Gx, Gy, a: _a, d: _d, h } = ed25519_CURVE;
 const L = 32; // field / group byte length
 const L2 = 64;
 // Helpers and Precomputes sections are reused between libraries
 // ## Helpers
 // ----------
-function safeCaptureStackTrace(...args) {
+const captureTrace = (...args) => {
     if ('captureStackTrace' in Error && typeof Error.captureStackTrace === 'function') {
         Error.captureStackTrace(...args);
     }
-}
-function err(m = '') {
-    const e = new Error(m);
-    safeCaptureStackTrace(e, err);
+};
+const err = (message = '') => {
+    const e = new Error(message);
+    captureTrace(e, err);
     throw e;
-}
+};
 const isBig = (n) => typeof n === 'bigint'; // is big integer
 const isStr = (s) => typeof s === 'string'; // is string
 const isBytes = (a) => a instanceof Uint8Array || (ArrayBuffer.isView(a) && a.constructor.name === 'Uint8Array');
-/** assert is Uint8Array (of specific length) */
-const abytes = (a, l) => !isBytes(a) || (typeof l === 'number' && l > 0 && a.length !== l)
-    ? err('Uint8Array expected')
-    : a;
+/** Asserts something is Uint8Array. */
+const abytes = (b, ...lengths) => {
+    if (!isBytes(b))
+        return err('Uint8Array expected');
+    if (lengths.length > 0 && !lengths.includes(b.length))
+        err('Uint8Array expected of length ' + lengths + ', got length=' + b.length);
+    return b;
+};
 /** create Uint8Array */
 const u8n = (len) => new Uint8Array(len);
 const u8fr = (buf) => Uint8Array.from(buf);
@@ -93,10 +96,8 @@ const hexToBytes = (hex) => {
     }
     return array;
 };
-/** normalize hex or ui8a to ui8a */
-const toU8 = (a, len) => abytes(isStr(a) ? hexToBytes(a) : u8fr(abytes(a)), len);
 const cr = () => globalThis?.crypto; // WebCrypto is available in all modern environments
-const subtle = () => cr()?.subtle ?? err('crypto.subtle must be defined');
+const subtle = () => cr()?.subtle ?? err('crypto.subtle must be defined, try polyfill');
 // prettier-ignore
 const concatBytes = (...arrs) => {
     const r = u8n(arrs.reduce((sum, a) => sum + abytes(a).length, 0)); // create u8a of summed length
@@ -110,7 +111,7 @@ const randomBytes = (len = L) => {
     return c.getRandomValues(u8n(len));
 };
 const big = BigInt;
-const arange = (n, min, max, msg = 'bad number: out of range') => isBig(n) && min <= n && n < max ? n : err(msg);
+const assertRange = (n, min, max, msg = 'bad number: out of range') => (isBig(n) && min <= n && n < max ? n : err(msg));
 /** modular division */
 const M = (a, b = P) => {
     const r = a % b;
@@ -132,11 +133,12 @@ const invert = (num, md) => {
 };
 const callHash = (name) => {
     // @ts-ignore
-    const fn = etc[name];
+    const fn = hashes[name];
     if (typeof fn !== 'function')
         err('hashes.' + name + ' not set');
     return fn;
 };
+const hash = (msg) => callHash('sha512')(msg);
 const apoint = (p) => (p instanceof Point ? p : err('Point expected'));
 // ## End of Helpers
 // -----------------
@@ -145,17 +147,20 @@ const B256 = 2n ** 256n;
 class Point {
     static BASE;
     static ZERO;
-    ex;
-    ey;
-    ez;
-    et;
-    constructor(ex, ey, ez, et) {
+    X;
+    Y;
+    Z;
+    T;
+    constructor(X, Y, Z, T) {
         const max = B256;
-        this.ex = arange(ex, 0n, max);
-        this.ey = arange(ey, 0n, max);
-        this.ez = arange(ez, 1n, max);
-        this.et = arange(et, 0n, max);
+        this.X = assertRange(X, 0n, max);
+        this.Y = assertRange(Y, 0n, max);
+        this.Z = assertRange(Z, 1n, max);
+        this.T = assertRange(T, 0n, max);
         Object.freeze(this);
+    }
+    static CURVE() {
+        return ed25519_CURVE;
     }
     static fromAffine(p) {
         return new Point(p.x, p.y, 1n, M(p.x * p.y));
@@ -172,7 +177,7 @@ class Point {
         // zip215=true:           0 <= y < 2^256
         // zip215=false, RFC8032: 0 <= y < 2^255-19
         const max = zip215 ? B256 : P;
-        arange(y, 0n, max);
+        assertRange(y, 0n, max);
         const y2 = M(y * y); // y²
         const u = M(y2 - 1n); // u=y²-1
         const v = M(d * y2 + 1n); // v=dy²+1
@@ -193,10 +198,10 @@ class Point {
         const d = _d;
         const p = this;
         if (p.is0())
-            throw new Error('bad point: ZERO'); // TODO: optimize, with vars below?
+            return err('bad point: ZERO'); // TODO: optimize, with vars below?
         // Equation in affine coordinates: ax² + y² = 1 + dx²y²
         // Equation in projective coordinates (X/Z, Y/Z, Z):  (aX² + Y²)Z² = Z⁴ + dX²Y²
-        const { ex: X, ey: Y, ez: Z, et: T } = p;
+        const { X, Y, Z, T } = p;
         const X2 = M(X * X); // X²
         const Y2 = M(Y * Y); // Y²
         const Z2 = M(Z * Z); // Z²
@@ -205,18 +210,18 @@ class Point {
         const left = M(Z2 * M(aX2 + Y2)); // (aX² + Y²)Z²
         const right = M(Z4 + M(d * M(X2 * Y2))); // Z⁴ + dX²Y²
         if (left !== right)
-            throw new Error('bad point: equation left != right (1)');
+            return err('bad point: equation left != right (1)');
         // In Extended coordinates we also have T, which is x*y=T/Z: check X*Y == Z*T
         const XY = M(X * Y);
         const ZT = M(Z * T);
         if (XY !== ZT)
-            throw new Error('bad point: equation left != right (2)');
+            return err('bad point: equation left != right (2)');
         return this;
     }
     /** Equality check: compare points P&Q. */
     equals(other) {
-        const { ex: X1, ey: Y1, ez: Z1 } = this;
-        const { ex: X2, ey: Y2, ez: Z2 } = apoint(other); // checks class equality
+        const { X: X1, Y: Y1, Z: Z1 } = this;
+        const { X: X2, Y: Y2, Z: Z2 } = apoint(other); // checks class equality
         const X1Z2 = M(X1 * Z2);
         const X2Z1 = M(X2 * Z1);
         const Y1Z2 = M(Y1 * Z2);
@@ -228,11 +233,11 @@ class Point {
     }
     /** Flip point over y coordinate. */
     negate() {
-        return new Point(M(-this.ex), this.ey, this.ez, M(-this.et));
+        return new Point(M(-this.X), this.Y, this.Z, M(-this.T));
     }
     /** Point doubling. Complete formula. Cost: `4M + 4S + 1*a + 6add + 1*2`. */
     double() {
-        const { ex: X1, ey: Y1, ez: Z1 } = this;
+        const { X: X1, Y: Y1, Z: Z1 } = this;
         const a = _a;
         // https://hyperelliptic.org/EFD/g1p/auto-twisted-extended.html#doubling-dbl-2008-hwcd
         const A = M(X1 * X1);
@@ -252,8 +257,8 @@ class Point {
     }
     /** Point addition. Complete formula. Cost: `8M + 1*k + 8add + 1*2`. */
     add(other) {
-        const { ex: X1, ey: Y1, ez: Z1, et: T1 } = this;
-        const { ex: X2, ey: Y2, ez: Z2, et: T2 } = apoint(other); // doesn't check if other on-curve
+        const { X: X1, Y: Y1, Z: Z1, T: T1 } = this;
+        const { X: X2, Y: Y2, Z: Z2, T: T2 } = apoint(other); // doesn't check if other on-curve
         const a = _a;
         const d = _d;
         // https://hyperelliptic.org/EFD/g1p/auto-twisted-extended-1.html#addition-add-2008-hwcd-3
@@ -271,6 +276,9 @@ class Point {
         const Z3 = M(F * G);
         return new Point(X3, Y3, Z3, T3);
     }
+    subtract(other) {
+        return this.add(apoint(other).negate());
+    }
     /**
      * Point-by-scalar multiplication. Scalar must be in range 1 <= n < CURVE.n.
      * Uses {@link wNAF} for base point.
@@ -281,7 +289,7 @@ class Point {
     multiply(n, safe = true) {
         if (!safe && (n === 0n || this.is0()))
             return I;
-        arange(n, 1n, N);
+        assertRange(n, 1n, N);
         if (n === 1n)
             return this;
         if (this.equals(G))
@@ -299,18 +307,23 @@ class Point {
         }
         return p;
     }
+    multiplyUnsafe(scalar) {
+        return this.multiply(scalar, false);
+    }
     /** Convert point to 2d xy affine point. (X, Y, Z) ∋ (x=X/Z, y=Y/Z) */
     toAffine() {
-        const { ex: x, ey: y, ez: z } = this;
+        const { X, Y, Z } = this;
         // fast-paths for ZERO point OR Z=1
         if (this.equals(I))
             return { x: 0n, y: 1n };
-        const iz = invert(z, P);
+        const iz = invert(Z, P);
         // (Z * Z^-1) must be 1, otherwise bad math
-        if (M(z * iz) !== 1n)
+        if (M(Z * iz) !== 1n)
             err('invalid inverse');
         // x = X*Z^-1; y = Y*Z^-1
-        return { x: M(x * iz), y: M(y * iz) };
+        const x = M(X * iz);
+        const y = M(Y * iz);
+        return { x, y };
     }
     toBytes() {
         const { x, y } = this.assertValidity().toAffine();
@@ -321,7 +334,7 @@ class Point {
     }
     toHex() {
         return bytesToHex(this.toBytes());
-    } // encode to hex string
+    }
     clearCofactor() {
         return this.multiply(big(h), false);
     }
@@ -329,23 +342,20 @@ class Point {
         return this.clearCofactor().is0();
     }
     isTorsionFree() {
-        // multiply by big number CURVE.n
-        let p = this.multiply(N / 2n, false).double(); // ensures the point is not "bad".
+        // Multiply by big number N. We can't `mul(N)` because of checks. Instead, we `mul(N/2)*2+1`
+        let p = this.multiply(N / 2n, false).double();
         if (N % 2n)
-            p = p.add(this); // P^(N+1) // P*N == (P*(N/2))*2+P
+            p = p.add(this);
         return p.is0();
     }
     static fromHex(hex, zip215) {
-        return Point.fromBytes(toU8(hex), zip215);
+        return Point.fromBytes(hexToBytes(hex), zip215);
     }
     get x() {
         return this.toAffine().x;
     }
     get y() {
         return this.toAffine().y;
-    }
-    toRawBytes() {
-        return this.toBytes();
     }
 }
 /** Generator / base point */
@@ -355,7 +365,7 @@ const I = new Point(0n, 1n, 1n, 0n);
 // Static aliases
 Point.BASE = G;
 Point.ZERO = I;
-const numTo32bLE = (num) => hexToBytes(padh(arange(num, 0n, B256), L2)).reverse();
+const numTo32bLE = (num) => hexToBytes(padh(assertRange(num, 0n, B256), L2)).reverse();
 const bytesToNumLE = (b) => big('0x' + bytesToHex(u8fr(abytes(b)).reverse()));
 const pow2 = (x, power) => {
     // pow2(x, 4) == x^(2^4)
@@ -406,8 +416,8 @@ const uvRatio = (u, v) => {
 };
 // N == L, just weird naming
 const modL_LE = (hash) => modN(bytesToNumLE(hash)); // modulo L; but little-endian
-const sha512a = (...m) => etc.sha512Async(...m); // Async SHA512
-const sha512s = (...m) => callHash('sha512Sync')(...m);
+const sha512a = (...m) => hashes.sha512Async(concatBytes(...m)); // Async SHA512
+const sha512s = (...m) => callHash('sha512')(concatBytes(...m));
 // RFC8032 5.1.5
 const hash2extK = (hashed) => {
     // slice creates a copy, unlike subarray
@@ -415,23 +425,23 @@ const hash2extK = (hashed) => {
     head[0] &= 248; // Clamp bits: 0b1111_1000
     head[31] &= 127; // 0b0111_1111
     head[31] |= 64; // 0b0100_0000
-    const prefix = hashed.slice(L, L2); // private key "prefix"
+    const prefix = hashed.slice(L, L2); // secret key "prefix"
     const scalar = modL_LE(head); // modular division over curve order
     const point = G.multiply(scalar); // public key point
     const pointBytes = point.toBytes(); // point serialized to Uint8Array
     return { head, prefix, scalar, point, pointBytes };
 };
 // RFC8032 5.1.5; getPublicKey async, sync. Hash priv key and extract point.
-const getExtendedPublicKeyAsync = (priv) => sha512a(toU8(priv, L)).then(hash2extK);
-const getExtendedPublicKey = (priv) => hash2extK(sha512s(toU8(priv, L)));
-/** Creates 32-byte ed25519 public key from 32-byte private key. Async. */
-const getPublicKeyAsync = (priv) => getExtendedPublicKeyAsync(priv).then((p) => p.pointBytes);
-/** Creates 32-byte ed25519 public key from 32-byte private key. To use, set `etc.sha512Sync` first. */
+const getExtendedPublicKeyAsync = (secretKey) => sha512a(abytes(secretKey, L)).then(hash2extK);
+const getExtendedPublicKey = (secretKey) => hash2extK(sha512s(abytes(secretKey, L)));
+/** Creates 32-byte ed25519 public key from 32-byte secret key. Async. */
+const getPublicKeyAsync = (secretKey) => getExtendedPublicKeyAsync(secretKey).then((p) => p.pointBytes);
+/** Creates 32-byte ed25519 public key from 32-byte secret key. To use, set `hashes.sha512` first. */
 const getPublicKey = (priv) => getExtendedPublicKey(priv).pointBytes;
 const hashFinishA = (res) => sha512a(res.hashable).then(res.finish);
 const hashFinishS = (res) => res.finish(sha512s(res.hashable));
+// Code, shared between sync & async sign
 const _sign = (e, rBytes, msg) => {
-    // sign() shared code
     const { pointBytes: P, scalar: s } = e;
     const r = modL_LE(rBytes); // r was created outside, reduce it modulo L
     const R = G.multiply(r).toBytes(); // R = [r]B
@@ -444,30 +454,30 @@ const _sign = (e, rBytes, msg) => {
     return { hashable, finish };
 };
 /**
- * Signs message (NOT message hash) using private key. Async.
+ * Signs message using secret key. Async.
  * Follows RFC8032 5.1.6.
  */
-const signAsync = async (msg, privKey) => {
-    const m = toU8(msg);
-    const e = await getExtendedPublicKeyAsync(privKey);
+const signAsync = async (message, secretKey) => {
+    const m = abytes(message);
+    const e = await getExtendedPublicKeyAsync(secretKey);
     const rBytes = await sha512a(e.prefix, m); // r = SHA512(dom2(F, C) || prefix || PH(M))
     return hashFinishA(_sign(e, rBytes, m)); // gen R, k, S, then 64-byte signature
 };
 /**
- * Signs message (NOT message hash) using private key. To use, set `hashes.sha512` first.
+ * Signs message using secret key. To use, set `hashes.sha512` first.
  * Follows RFC8032 5.1.6.
  */
-const sign = (msg, privKey) => {
-    const m = toU8(msg);
-    const e = getExtendedPublicKey(privKey);
+const sign = (message, secretKey) => {
+    const m = abytes(message);
+    const e = getExtendedPublicKey(secretKey);
     const rBytes = sha512s(e.prefix, m); // r = SHA512(dom2(F, C) || prefix || PH(M))
     return hashFinishS(_sign(e, rBytes, m)); // gen R, k, S, then 64-byte signature
 };
 const veriOpts = { zip215: true };
 const _verify = (sig, msg, pub, opts = veriOpts) => {
-    sig = toU8(sig, L2); // Signature hex str/Bytes, must be 64 bytes
-    msg = toU8(msg); // Message hex str/Bytes
-    pub = toU8(pub, L);
+    sig = abytes(sig, L2); // Signature hex str/Bytes, must be 64 bytes
+    msg = abytes(msg); // Message hex str/Bytes
+    pub = abytes(pub, L);
     const { zip215 } = opts; // switch between zip215 and rfc8032 verif
     let A;
     let R;
@@ -475,8 +485,8 @@ const _verify = (sig, msg, pub, opts = veriOpts) => {
     let SB;
     let hashable = Uint8Array.of();
     try {
-        A = Point.fromHex(pub, zip215); // public key A decoded
-        R = Point.fromHex(sig.slice(0, L), zip215); // 0 <= R < 2^256: ZIP215 R can be >= P
+        A = Point.fromBytes(pub, zip215); // public key A decoded
+        R = Point.fromBytes(sig.slice(0, L), zip215); // 0 <= R < 2^256: ZIP215 R can be >= P
         s = bytesToNumLE(sig.slice(L, L2)); // Decode second half as an integer S
         SB = G.multiply(s, false); // in the range 0 <= s < L
         hashable = concatBytes(R.toBytes(), A.toBytes(), msg); // dom2(F, C) || R || A || PH(M)
@@ -495,17 +505,11 @@ const _verify = (sig, msg, pub, opts = veriOpts) => {
     return { hashable, finish };
 };
 /** Verifies signature on message and public key. Async. Follows RFC8032 5.1.7. */
-const verifyAsync = async (s, m, p, opts = veriOpts) => hashFinishA(_verify(s, m, p, opts));
+const verifyAsync = async (signature, message, publicKey, opts = veriOpts) => hashFinishA(_verify(signature, message, publicKey, opts));
 /** Verifies signature on message and public key. To use, set `hashes.sha512` first. Follows RFC8032 5.1.7. */
-const verify = (s, m, p, opts = veriOpts) => hashFinishS(_verify(s, m, p, opts));
+const verify = (signature, message, publicKey, opts = veriOpts) => hashFinishS(_verify(signature, message, publicKey, opts));
 /** Math, hex, byte helpers. Not in `utils` because utils share API with noble-curves. */
 const etc = {
-    sha512Async: async (...messages) => {
-        const s = subtle();
-        const m = concatBytes(...messages);
-        return u8n(await s.digest('SHA-512', m.buffer));
-    },
-    sha512Sync: undefined,
     bytesToHex: bytesToHex,
     hexToBytes: hexToBytes,
     concatBytes: concatBytes,
@@ -513,16 +517,32 @@ const etc = {
     invert: invert,
     randomBytes: randomBytes,
 };
+const hashes = {
+    sha512Async: async (...messages) => {
+        const s = subtle();
+        const m = concatBytes(...messages);
+        return u8n(await s.digest('SHA-512', m.buffer));
+    },
+    sha512: undefined,
+};
+// FIPS 186 B.4.1 compliant key generation produces private keys
+// with modulo bias being neglible. takes >N+16 bytes, returns (hash mod n-1)+1
+const randomSecretKey = (seed = randomBytes(L)) => seed;
+const keygen = (seed) => {
+    const secretKey = randomSecretKey(seed);
+    const publicKey = getPublicKey(secretKey);
+    return { secretKey, publicKey };
+};
+const keygenAsync = async (seed) => {
+    const secretKey = randomSecretKey(seed);
+    const publicKey = await getPublicKeyAsync(secretKey);
+    return { secretKey, publicKey };
+};
 /** ed25519-specific key utilities. */
 const utils = {
     getExtendedPublicKeyAsync: getExtendedPublicKeyAsync,
     getExtendedPublicKey: getExtendedPublicKey,
-    randomPrivateKey: () => randomBytes(L),
-    precompute: (w = 8, p = G) => {
-        p.multiply(3n);
-        w;
-        return p;
-    }, // no-op
+    randomSecretKey: randomSecretKey,
 };
 // ## Precomputes
 // --------------
@@ -600,4 +620,4 @@ const wNAF = (n) => {
     return { p, f }; // return both real and fake points for JIT
 };
 // !! Remove the export to easily use in REPL / browser console
-export { ed25519_CURVE as CURVE, etc, Point as ExtendedPoint, getPublicKey, getPublicKeyAsync, Point, sign, signAsync, utils, verify, verifyAsync };
+export { etc, getPublicKey, getPublicKeyAsync, hash, hashes, keygen, keygenAsync, Point, sign, signAsync, utils, verify, verifyAsync };

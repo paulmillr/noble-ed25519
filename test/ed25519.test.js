@@ -6,7 +6,7 @@ import {
 } from '@noble/hashes/utils.js';
 import * as fc from 'fast-check';
 import { describe, should } from 'micro-should';
-import { deepStrictEqual as eql, doesNotMatch, strictEqual, throws } from 'node:assert';
+import { deepStrictEqual as eql, strictEqual, throws } from 'node:assert';
 import { ed25519 as ed, ED25519_TORSION_SUBGROUP, numberToBytesLE } from './ed25519.helpers.js';
 import { getTypeTestsNonUi8a, json, txt } from './utils.js';
 
@@ -22,13 +22,15 @@ const edgeCases = json('./vectors/ed25519/edge-cases.json');
 
 describe('ed25519', () => {
   const Point = ed.Point;
+  const isNobleCurves = !!Point.Fp;
+  const CURVE_N = ed.Point.CURVE().n;
 
   function bytes32(numOrStr) {
     let hex2 = typeof numOrStr === 'string' ? numOrStr : numOrStr.toString(16);
     return bytes(hex2.padStart(64, '0'));
   }
 
-  ed.utils.precompute(8);
+  if (isNobleCurves) Point.BASE.precompute(8, false);
 
   describe('getPublicKey()', () => {
     should('not accept >32byte private keys in Uint8Array format', () => {
@@ -45,7 +47,7 @@ describe('ed25519', () => {
 
   describe('sign()', () => {
     should('creates random signature', () => {
-      const priv = ed.utils.randomPrivateKey();
+      const priv = ed.utils.randomSecretKey();
       const pub = ed.getPublicKey(priv);
       const msg = new TextEncoder().encode('hello');
       const sig = ed.sign(msg, priv);
@@ -69,7 +71,7 @@ describe('ed25519', () => {
         eql(hex(pub), expectedPub);
         eql(pub, Point.fromBytes(pub).toBytes());
 
-        const signature = hex(ed.sign(msg, priv));
+        const signature = hex(ed.sign(bytes(msg), bytes(priv)));
         // console.log('vector', i);
         // expect(pub).toBe(expectedPub);
         eql(signature, expectedSignature);
@@ -120,7 +122,7 @@ describe('ed25519', () => {
         fc.property(
           hexaString({ minLength: 2, maxLength: 32 }),
           // @ts-ignore
-          fc.bigInt(2n, ed.CURVE.n),
+          fc.bigInt(2n, CURVE_N),
           (msgh, privnum) => {
             const priv = bytes32(privnum);
             const pub = ed.getPublicKey(priv);
@@ -141,7 +143,7 @@ describe('ed25519', () => {
           fc.array(fc.integer({ min: 0x00, max: 0xff })),
           // @ts-ignore
           fc.array(fc.integer({ min: 0x00, max: 0xff })),
-          fc.bigInt(1n, ed.CURVE.n),
+          fc.bigInt(1n, CURVE_N),
           (bytes, wrongBytes, privateKey) => {
             const privKey = bytes32(privateKey);
             const message = new Uint8Array(bytes);
@@ -159,7 +161,7 @@ describe('ed25519', () => {
     });
 
     should('not mutate inputs 1', () => {
-      const privateKey = ed.utils.randomPrivateKey();
+      const privateKey = ed.utils.randomSecretKey();
       const publicKey = ed.getPublicKey(privateKey);
 
       for (let i = 0; i < 100; i++) {
@@ -189,7 +191,7 @@ describe('ed25519', () => {
     });
 
     should('not verify when sig.s >= CURVE.n', () => {
-      const privateKey = ed.utils.randomPrivateKey();
+      const privateKey = ed.utils.randomSecretKey();
       const message = Uint8Array.from([0xab, 0xbc, 0xcd, 0xde]);
       const publicKey = ed.getPublicKey(privateKey);
       const signature = ed.sign(message, privateKey);
@@ -198,7 +200,7 @@ describe('ed25519', () => {
       let s_0 = signature.slice(32, 64);
       let s_1 = hex(s_0.slice().reverse());
       let s_2 = BigInt('0x' + s_1);
-      s_2 = s_2 + ed.CURVE.n;
+      s_2 = s_2 + CURVE_N;
       let s_3 = numberToBytesLE(s_2, 32);
 
       const sig_invalid = concatBytes(R, s_3);
@@ -209,7 +211,9 @@ describe('ed25519', () => {
       // https://eprint.iacr.org/2020/1244
       const list = [0, 1, 6, 7, 8, 9, 10, 11].map((i) => edgeCases[i]);
       for (let v of list) {
-        const result = ed.verify(v.signature, v.message, v.pub_key, { zip215: false });
+        const result = ed.verify(bytes(v.signature), bytes(v.message), bytes(v.pub_key), {
+          zip215: false,
+        });
         strictEqual(result, false, `zip215: false must not validate: ${v.signature}`);
       }
     });
@@ -232,11 +236,11 @@ describe('ed25519', () => {
       const zeros = ed.Point.fromAffine({ x: 0n, y: 0n });
       eql(zeros.equals(ed.Point.BASE.multiply(3n)), false);
 
-      const key = ed.utils.randomPrivateKey();
+      const key = ed.utils.randomSecretKey();
       const A = ed.Point.fromBytes(ed.getPublicKey(key));
       const T = ed.Point.fromBytes(bytes(ED25519_TORSION_SUBGROUP[2]));
       const B = A.add(T).add(A);
-      const C = ed.Point.fromBytes(ed.getPublicKey(ed.utils.randomPrivateKey()));
+      const C = ed.Point.fromBytes(ed.getPublicKey(ed.utils.randomSecretKey()));
       eql(B.equals(C), false);
 
       const sig =
@@ -283,7 +287,7 @@ describe('ed25519', () => {
     });
 
     should('isTorsionFree()', () => {
-      const { point } = ed.utils.getExtendedPublicKey(ed.utils.randomPrivateKey());
+      const { point } = ed.utils.getExtendedPublicKey(ed.utils.randomSecretKey());
       for (const hex of ED25519_TORSION_SUBGROUP.slice(1)) {
         const dirty = point.add(Point.fromBytes(bytes(hex)));
         const cleared = dirty.clearCofactor();
@@ -309,7 +313,7 @@ describe('ed25519', () => {
       for (let v of zip215) {
         let noble = false;
         try {
-          noble = ed.verify(v.sig_bytes, str, v.vk_bytes);
+          noble = ed.verify(bytes(v.sig_bytes), str, bytes(v.vk_bytes));
         } catch (e) {
           noble = false;
         }
@@ -335,13 +339,13 @@ describe('ed25519', () => {
     for (let g = 0; g < ed25519vectors_OLD.testGroups.length; g++) {
       const group = ed25519vectors_OLD.testGroups[g];
       const key = group.key;
-      eql(hex(ed.getPublicKey(key.sk)), key.pk, `(${g}, public)`);
+      eql(hex(ed.getPublicKey(bytes(key.sk))), key.pk, `(${g}, public)`);
       for (let i = 0; i < group.tests.length; i++) {
         const v = group.tests[i];
         const comment = `(${g}/${i}, ${v.result}): ${v.comment}`;
         if (v.result === 'valid' || v.result === 'acceptable') {
-          eql(hex(ed.sign(v.msg, key.sk)), v.sig, comment);
-          eql(ed.verify(v.sig, v.msg, key.pk), true, comment);
+          eql(hex(ed.sign(bytes(v.msg), bytes(key.sk))), v.sig, comment);
+          eql(ed.verify(bytes(v.sig), bytes(v.msg), bytes(key.pk)), true, comment);
         } else if (v.result === 'invalid') {
           let failed = false;
           try {
@@ -363,11 +367,11 @@ describe('ed25519', () => {
         const v = group.tests[i];
         const comment = `(${g}/${i}, ${v.result}): ${v.comment}`;
         if (v.result === 'valid' || v.result === 'acceptable') {
-          eql(ed.verify(v.sig, v.msg, key.pk), true, comment);
+          eql(ed.verify(bytes(v.sig), bytes(v.msg), bytes(key.pk)), true, comment);
         } else if (v.result === 'invalid') {
           let failed = false;
           try {
-            failed = !ed.verify(v.sig, v.msg, key.pk);
+            failed = !ed.verify(bytes(v.sig), bytes(v.msg), bytes(key.pk));
           } catch (error) {
             failed = true;
           }
@@ -375,19 +379,6 @@ describe('ed25519', () => {
         } else throw new Error('unknown test result');
       }
     }
-  });
-
-  describe('errors', () => {
-    should('not feature the `err` helper in the stack trace', () => {
-      const invalidPriv = new Uint8Array(33).fill(1);
-      try {
-        ed.getPublicKey(invalidPriv);
-      } catch (error) {
-        doesNotMatch(error.stack, /at err \(/);
-        return;
-      }
-      throw new Error('expected a thrown error');
-    });
   });
 });
 

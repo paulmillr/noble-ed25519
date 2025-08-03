@@ -5,7 +5,7 @@ import * as ed from '../index.js';
 // @ts-ignore
 if (!globalThis.crypto) globalThis.crypto = webcrypto; // @ts-ignore
 export * as ed25519 from '../index.js';
-ed.etc.sha512Sync = (...m) => sha512(ed.etc.concatBytes(...m));
+ed.hashes.sha512 = (m) => sha512(m);
 
 export function numberToBytesLE(num, len = 32) {
   return hexToBytes(num.toString(16).padStart(len * 2, '0')).reverse();
