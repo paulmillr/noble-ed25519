@@ -5,10 +5,9 @@ import * as ed from '../index.ts';
 (async () => {
   // warm-up
   await mark('init', 1, async () => {
-    ed.utils.precompute();
-    await ed.getPublicKeyAsync(ed.utils.randomPrivateKey());
+    await ed.getPublicKeyAsync(ed.utils.randomSecretKey());
   });
-  ed.etc.sha512Sync = (...m) => sha512(ed.etc.concatBytes(...m));
+  ed.hashes.sha512 = sha512;
 
   function to64Bytes(numOrStr) {
     let hex = typeof numOrStr === 'string' ? numOrStr : numOrStr.toString(16);
@@ -23,12 +22,8 @@ import * as ed from '../index.ts';
   let pubHex;
   let sigHex;
   let i = 0;
-  await mark('getPublicKey 1 bit', () => {
-    pubHex = ed.getPublicKey(smallPrivs[i++ % smallPrivs.length]);
-  });
-
-  await mark('getPublicKey(utils.randomPrivateKey())', () => {
-    pubHex = ed.getPublicKey(ed.utils.randomPrivateKey());
+  await mark('getPublicKey', () => {
+    pubHex = ed.getPublicKey(ed.utils.randomSecretKey());
   });
 
   await mark('sign', () => {
@@ -37,12 +32,13 @@ import * as ed from '../index.ts';
   await mark('verify', () => {
     return ed.verify(sigHex, msg, pubHex);
   });
-  await mark('Point.fromHex decompression', () => {
-    ed.ExtendedPoint.fromHex(pubHex);
-  });
-
   console.log();
-  await mark('getPublicKeyAsync', () => ed.getPublicKeyAsync(ed.utils.randomPrivateKey()));
+  await mark('getPublicKeyAsync', () => ed.getPublicKeyAsync(ed.utils.randomSecretKey()));
   await mark('signAsync', () => ed.signAsync(msg, priv));
   await mark('verifyAsync', () => ed.verifyAsync(sigHex, msg, pubHex));
+
+  console.log();
+  await mark('Point.fromBytes', () => {
+    ed.Point.fromBytes(pubHex);
+  });
 })();

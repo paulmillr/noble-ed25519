@@ -121,4 +121,4 @@ declare const utils: {
     getExtendedPublicKey: typeof getExtendedPublicKey;
     randomSecretKey: typeof randomSecretKey;
 };
-export { etc, getPublicKey, getPublicKeyAsync, hash, hashes, keygen, keygenAsync, Point, sign, signAsync, utils, verify, verifyAsync };
+export { etc, getPublicKey, getPublicKeyAsync, hash, hashes, keygen, keygenAsync, Point, sign, signAsync, utils, verify, verifyAsync, };

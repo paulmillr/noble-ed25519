@@ -627,4 +627,4 @@ const wNAF = (n) => {
     return { p, f }; // return both real and fake points for JIT
 };
 // !! Remove the export to easily use in REPL / browser console
-export { etc, getPublicKey, getPublicKeyAsync, hash, hashes, keygen, keygenAsync, Point, sign, signAsync, utils, verify, verifyAsync };
+export { etc, getPublicKey, getPublicKeyAsync, hash, hashes, keygen, keygenAsync, Point, sign, signAsync, utils, verify, verifyAsync, };
