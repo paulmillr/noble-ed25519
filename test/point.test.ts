@@ -1,9 +1,9 @@
 import * as fc from 'fast-check';
 import { describe, should } from 'micro-should';
 import { deepStrictEqual as eql, throws } from 'node:assert';
-import * as ed25519 from '../index.js';
-import './ed25519.helpers.js';
-import { getTypeTests } from './utils.js';
+import * as ed25519 from '../index.ts';
+import './ed25519.helpers.ts';
+import { getTypeTests } from './utils.ts';
 const { invert, mod, bytesToHex: hex, hexToBytes } = ed25519.etc;
 
 // prettier-ignore

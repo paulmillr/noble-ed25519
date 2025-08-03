@@ -18,9 +18,9 @@
     "bench": "node test/benchmark.js",
     "lint": "prettier --check 'index.ts' 'test/**/*.{js,ts}'",
     "format": "prettier --write 'index.ts' 'test/**/*.{js,ts}'",
-    "test": "node test/index.js",
-    "test:bun": "bun test/index.js",
-    "test:deno": "deno --allow-env --allow-read test/index.js"
+    "test": "node --experimental-strip-types --disable-warning=ExperimentalWarning test/index.ts",
+    "test:bun": "bun test/index.ts",
+    "test:deno": "deno --allow-env --allow-read test/index.ts"
   },
   "author": "Paul Miller (https://paulmillr.com)",
   "homepage": "https://paulmillr.com/noble/",

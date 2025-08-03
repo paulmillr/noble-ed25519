@@ -1,6 +1,6 @@
 import { sha512 } from '@noble/hashes/sha2.js';
 import mark from 'micro-bmark';
-import * as ed from '../index.js';
+import * as ed from '../index.ts';
 
 (async () => {
   // warm-up

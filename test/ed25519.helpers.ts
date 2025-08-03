@@ -1,10 +1,10 @@
 import { sha512 } from '@noble/hashes/sha2.js';
 import { hexToBytes } from '@noble/hashes/utils.js';
 import { webcrypto } from 'node:crypto';
-import * as ed from '../index.js';
+import * as ed from '../index.ts';
 // @ts-ignore
 if (!globalThis.crypto) globalThis.crypto = webcrypto; // @ts-ignore
-export * as ed25519 from '../index.js';
+export * as ed25519 from '../index.ts';
 ed.hashes.sha512 = (m) => sha512(m);
 
 export function numberToBytesLE(num, len = 32) {
