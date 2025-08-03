@@ -15,10 +15,10 @@ export type EdwardsOpts = Readonly<{
 declare const randomBytes: (len?: number) => Bytes;
 declare const hash: (msg: Bytes) => Bytes;
 /** Point in 2d xy affine coordinates. */
-export interface AffinePoint {
+export type AffinePoint = {
     x: bigint;
     y: bigint;
-}
+};
 /** Point in XYZT extended coordinates. */
 declare class Point {
     static BASE: Point;
@@ -32,6 +32,9 @@ declare class Point {
     static fromAffine(p: AffinePoint): Point;
     /** RFC8032 5.1.3: Uint8Array to Point. */
     static fromBytes(hex: Bytes, zip215?: boolean): Point;
+    static fromHex(hex: string, zip215?: boolean): Point;
+    get x(): bigint;
+    get y(): bigint;
     /** Checks if the point is valid and on-curve. */
     assertValidity(): this;
     /** Equality check: compare points P&Q. */
@@ -60,12 +63,7 @@ declare class Point {
     clearCofactor(): Point;
     isSmallOrder(): boolean;
     isTorsionFree(): boolean;
-    static fromHex(hex: string, zip215?: boolean): Point;
-    get x(): bigint;
-    get y(): bigint;
 }
-/** hashes.sha512 should conform to the interface. */
-export type Sha512FnSync = undefined | ((...messages: Bytes[]) => Bytes);
 type ExtK = {
     head: Bytes;
     prefix: Bytes;
@@ -90,13 +88,13 @@ declare const signAsync: (message: Bytes, secretKey: Bytes) => Promise<Bytes>;
  */
 declare const sign: (message: Bytes, secretKey: Bytes) => Bytes;
 /** Verification options. zip215: true (default) follows ZIP215 spec. false would follow RFC8032. */
-export type VerifOpts = {
+export type EdDSAVerifyOpts = {
     zip215?: boolean;
 };
 /** Verifies signature on message and public key. Async. Follows RFC8032 5.1.7. */
-declare const verifyAsync: (signature: Bytes, message: Bytes, publicKey: Bytes, opts?: VerifOpts) => Promise<boolean>;
+declare const verifyAsync: (signature: Bytes, message: Bytes, publicKey: Bytes, opts?: EdDSAVerifyOpts) => Promise<boolean>;
 /** Verifies signature on message and public key. To use, set `hashes.sha512` first. Follows RFC8032 5.1.7. */
-declare const verify: (signature: Bytes, message: Bytes, publicKey: Bytes, opts?: VerifOpts) => boolean;
+declare const verify: (signature: Bytes, message: Bytes, publicKey: Bytes, opts?: EdDSAVerifyOpts) => boolean;
 /** Math, hex, byte helpers. Not in `utils` because utils share API with noble-curves. */
 declare const etc: {
     bytesToHex: (b: Bytes) => string;
@@ -107,8 +105,8 @@ declare const etc: {
     randomBytes: typeof randomBytes;
 };
 declare const hashes: {
-    sha512Async: (...messages: Bytes[]) => Promise<Bytes>;
-    sha512: Sha512FnSync;
+    sha512Async: (message: Bytes) => Promise<Bytes>;
+    sha512: undefined | ((message: Bytes) => Bytes);
 };
 declare const randomSecretKey: (seed?: Bytes) => Bytes;
 type KeysSecPub = {

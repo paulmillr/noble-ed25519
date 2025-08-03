@@ -53,12 +53,17 @@ const isBig = (n) => typeof n === 'bigint'; // is big integer
 const isStr = (s) => typeof s === 'string'; // is string
 const isBytes = (a) => a instanceof Uint8Array || (ArrayBuffer.isView(a) && a.constructor.name === 'Uint8Array');
 /** Asserts something is Uint8Array. */
-const abytes = (b, ...lengths) => {
-    if (!isBytes(b))
-        return err('Uint8Array expected');
-    if (lengths.length > 0 && !lengths.includes(b.length))
-        err('Uint8Array expected of length ' + lengths + ', got length=' + b.length);
-    return b;
+const abytes = (value, length, title = '') => {
+    const bytes = isBytes(value);
+    const len = value?.length;
+    const needsLen = length !== undefined;
+    if (!bytes || (needsLen && len !== length)) {
+        const prefix = title && `"${title}" `;
+        const ofLen = needsLen ? ` of length ${length}` : '';
+        const got = bytes ? `length=${len}` : `type=${typeof value}`;
+        err(prefix + 'expected Uint8Array' + ofLen + ', got ' + got);
+    }
+    return value;
 };
 /** create Uint8Array */
 const u8n = (len) => new Uint8Array(len);
@@ -97,7 +102,7 @@ const hexToBytes = (hex) => {
     return array;
 };
 const cr = () => globalThis?.crypto; // WebCrypto is available in all modern environments
-const subtle = () => cr()?.subtle ?? err('crypto.subtle must be defined, try polyfill');
+const subtle = () => cr()?.subtle ?? err('crypto.subtle must be defined, consider polyfill');
 // prettier-ignore
 const concatBytes = (...arrs) => {
     const r = u8n(arrs.reduce((sum, a) => sum + abytes(a).length, 0)); // create u8a of summed length
@@ -191,6 +196,15 @@ class Point {
         if (isLastByteOdd !== isXOdd)
             x = M(-x);
         return new Point(x, y, 1n, M(x * y)); // Z=1, T=xy
+    }
+    static fromHex(hex, zip215) {
+        return Point.fromBytes(hexToBytes(hex), zip215);
+    }
+    get x() {
+        return this.toAffine().x;
+    }
+    get y() {
+        return this.toAffine().y;
     }
     /** Checks if the point is valid and on-curve. */
     assertValidity() {
@@ -348,15 +362,6 @@ class Point {
             p = p.add(this);
         return p.is0();
     }
-    static fromHex(hex, zip215) {
-        return Point.fromBytes(hexToBytes(hex), zip215);
-    }
-    get x() {
-        return this.toAffine().x;
-    }
-    get y() {
-        return this.toAffine().y;
-    }
 }
 /** Generator / base point */
 const G = new Point(Gx, Gy, 1n, M(Gx * Gy));
@@ -416,6 +421,8 @@ const uvRatio = (u, v) => {
 };
 // N == L, just weird naming
 const modL_LE = (hash) => modN(bytesToNumLE(hash)); // modulo L; but little-endian
+/** hashes.sha512 should conform to the interface. */
+// TODO: rename
 const sha512a = (...m) => hashes.sha512Async(concatBytes(...m)); // Async SHA512
 const sha512s = (...m) => callHash('sha512')(concatBytes(...m));
 // RFC8032 5.1.5
@@ -473,8 +480,8 @@ const sign = (message, secretKey) => {
     const rBytes = sha512s(e.prefix, m); // r = SHA512(dom2(F, C) || prefix || PH(M))
     return hashFinishS(_sign(e, rBytes, m)); // gen R, k, S, then 64-byte signature
 };
-const veriOpts = { zip215: true };
-const _verify = (sig, msg, pub, opts = veriOpts) => {
+const defaultVerifyOpts = { zip215: true };
+const _verify = (sig, msg, pub, opts = defaultVerifyOpts) => {
     sig = abytes(sig, L2); // Signature hex str/Bytes, must be 64 bytes
     msg = abytes(msg); // Message hex str/Bytes
     pub = abytes(pub, L);
@@ -505,9 +512,9 @@ const _verify = (sig, msg, pub, opts = veriOpts) => {
     return { hashable, finish };
 };
 /** Verifies signature on message and public key. Async. Follows RFC8032 5.1.7. */
-const verifyAsync = async (signature, message, publicKey, opts = veriOpts) => hashFinishA(_verify(signature, message, publicKey, opts));
+const verifyAsync = async (signature, message, publicKey, opts = defaultVerifyOpts) => hashFinishA(_verify(signature, message, publicKey, opts));
 /** Verifies signature on message and public key. To use, set `hashes.sha512` first. Follows RFC8032 5.1.7. */
-const verify = (signature, message, publicKey, opts = veriOpts) => hashFinishS(_verify(signature, message, publicKey, opts));
+const verify = (signature, message, publicKey, opts = defaultVerifyOpts) => hashFinishS(_verify(signature, message, publicKey, opts));
 /** Math, hex, byte helpers. Not in `utils` because utils share API with noble-curves. */
 const etc = {
     bytesToHex: bytesToHex,
@@ -518,9 +525,9 @@ const etc = {
     randomBytes: randomBytes,
 };
 const hashes = {
-    sha512Async: async (...messages) => {
+    sha512Async: async (message) => {
         const s = subtle();
-        const m = concatBytes(...messages);
+        const m = concatBytes(message);
         return u8n(await s.digest('SHA-512', m.buffer));
     },
     sha512: undefined,
