@@ -1,6 +1,6 @@
 /*! noble-ed25519 - MIT License (c) 2019 Paul Miller (paulmillr.com) */
 /**
- * 4KB JS implementation of ed25519 EdDSA signatures.
+ * 5KB JS implementation of ed25519 EdDSA signatures.
  * Compliant with RFC8032, FIPS 186-5 & ZIP215.
  * @module
  * @example
@@ -681,5 +681,6 @@ export {
   signAsync,
   utils,
   verify,
-  verifyAsync,
+  verifyAsync
 };
+

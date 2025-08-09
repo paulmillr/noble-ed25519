@@ -25,7 +25,7 @@ Curves are drop-in replacement and have more features: ristretto255, x25519 / cu
   [curves](https://github.com/paulmillr/noble-curves),
   [hashes](https://github.com/paulmillr/noble-hashes),
   [post-quantum](https://github.com/paulmillr/noble-post-quantum),
-  4kb [secp256k1](https://github.com/paulmillr/noble-secp256k1) /
+  5KB [secp256k1](https://github.com/paulmillr/noble-secp256k1) /
   [ed25519](https://github.com/paulmillr/noble-ed25519)
 
 ## Usage
