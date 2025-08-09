@@ -1,16 +1,17 @@
 # noble-ed25519
 
-Fastest 4KB JS implementation of ed25519 signatures.
+Fastest 5KB JS implementation of ed25519 signatures.
 
-- ✍️ [EDDSA](https://en.wikipedia.org/wiki/EdDSA) signatures compliant with [RFC8032](https://tools.ietf.org/html/rfc8032),
-  FIPS 186-5
+- ✍️ [EDDSA](https://en.wikipedia.org/wiki/EdDSA) signatures compliant with
+  [RFC8032](https://tools.ietf.org/html/rfc8032), FIPS 186-5
 - 🪢 Consensus-friendly, compliant with [ZIP215](https://zips.z.cash/zip-0215)
-- 🔖 SUF-CMA (strong unforgeability under chosen message attacks) and SBS (non-repudiation / exclusive ownership)
-- 🪶 4KB gzipped, 400 lines of pure ESM, bundler-less code
+- 🔖 SUF-CMA (strong unforgeability under chosen message attacks) and
+  SBS (non-repudiation / exclusive ownership)
+- 🪶 3.66KB (gzipped)
 
 The module is a sister project of [noble-curves](https://github.com/paulmillr/noble-curves),
 focusing on smaller attack surface & better auditability.
-Curves are drop-in replacement and have more features: Common.js, ristretto255, X25519, curve25519, ed25519ph. To upgrade from v1 to v2, see [Upgrading](#upgrading).
+Curves are drop-in replacement and have more features: ristretto255, x25519 / curve25519, ed25519ph, hash-to-curve, oprf. To upgrade from v1 to v2, see [Upgrading](#upgrading).
 
 ### This library belongs to _noble_ cryptography
 
@@ -40,13 +41,11 @@ We support all major platforms and runtimes. For node.js <= 18 and React Native,
 ```js
 import * as ed from '@noble/ed25519';
 (async () => {
-  // Uint8Arrays or hex strings are accepted:
-  // Uint8Array.from([0xde, 0xad, 0xbe, 0xef]) is equal to 'deadbeef'
-  const privKey = ed.utils.randomPrivateKey();
-  const message = Uint8Array.from([0xab, 0xbc, 0xcd, 0xde]);
-  const pubKey = await ed.getPublicKeyAsync(privKey); // Sync methods below
-  const signature = await ed.signAsync(message, privKey);
-  const isValid = await ed.verifyAsync(signature, message, pubKey);
+  const { secretKey, publicKey } = await ed.keygenAsync();
+  // const publicKey = await ed.getPublicKeyAsync(secretKey);
+  const message = new TextEncoder().encode('hello noble');
+  const signature = await ed.signAsync(message, secretKey);
+  const isValid = await ed.verifyAsync(signature, message, publicKey);
 })();
 ```
 
@@ -57,11 +56,12 @@ To enable sync methods:
 
 ```ts
 import { sha512 } from '@noble/hashes/sha2.js';
-ed.etc.sha512Sync = (...m) => sha512(ed.etc.concatBytes(...m));
+ed.etc.sha512 = sha512;
 // Sync methods can be used now:
-// ed.getPublicKey(privKey);
-// ed.sign(msg, privKey);
-// ed.verify(signature, msg, pubKey);
+const { secretKey, publicKey } = ed.keygen();
+// const publicKey = ed.getPublicKey(secretKey);
+const sig = ed.sign(msg, secretKey);
+const isValid = ed.verify(sig, msg, publicKey);
 ```
 
 ### React Native: polyfill getRandomValues and sha512
@@ -69,35 +69,39 @@ ed.etc.sha512Sync = (...m) => sha512(ed.etc.concatBytes(...m));
 ```ts
 import 'react-native-get-random-values';
 import { sha512 } from '@noble/hashes/sha2.js';
-ed.etc.sha512Sync = (...m) => sha512(ed.etc.concatBytes(...m));
-ed.etc.sha512Async = (...m) => Promise.resolve(ed.etc.sha512Sync(...m));
+ed.etc.sha512 = sha512;
+ed.etc.sha512Async = (m: Uint8Array) => Promise.resolve(sha512(m));
 ```
 
 ## API
 
-There are 3 main methods:
+There are 4 main methods, which accept Uint8Array-s:
 
-- `getPublicKey(privateKey)` and `getPublicKeyAsync(privateKey)`
-- `sign(message, privateKey)` and `signAsync(message, privateKey)`
+- `keygen()` and `keygenAsync()`
+- `getPublicKey(secretKey)` and `getPublicKeyAsync(secretKey)`
+- `sign(message, secretKey)` and `signAsync(message, secretKey)`
 - `verify(signature, message, publicKey)` and `verifyAsync(signature, message, publicKey)`
 
-Functions accept Uint8Array. There are utilities which convert hex strings, utf8 strings or bigints to u8a.
+### keygen
+
+```typescript
+import * as ed from '@noble/ed25519';
+(async () => {
+  const keys = ed.keygen(); // needs ed.hashes.sha512
+  const { secretKey, publicKey } = keys
+  const keysA = await ed.keygenAsync();
+})();
+```
 
 ### getPublicKey
 
 ```typescript
 import * as ed from '@noble/ed25519';
 (async () => {
-  const privKeyA = ed.utils.hexToBytes(
-    '9d61b19deffd5a60ba844af492ec2cc44449c5697b326919703bac031cae7f60'
-  );
-  const pubKeyA = ed.getPublicKey(privKeyA);
-
-  const privKeyB = ed.utils.randomPrivateKey();
-  const pubKeyB = await ed.getPublicKeyAsync(privKeyB);
-  const privKey64Byte = ed.etc.concatBytes(privKeyB, pubKeyB);
-  const pubKeyPoint = ed.ExtendedPoint.fromHex(pubKeyB);
-  const pubKeyExt = ed.utils.getExtendedPublicKey(privKeyB);
+  const pubKey = ed.getPublicKey(secretKeyA); // needs ed.hashes.sha512
+  const pubKeyA = await ed.getPublicKeyAsync(secretKeyA);
+  const pubKeyPoint = ed.Point.fromBytes(pubKeyB);
+  const pubKeyExtended = ed.utils.getExtendedPublicKey(secretKeyA);
 })();
 ```
 
@@ -113,20 +117,14 @@ Generates 32-byte public key from 32-byte private key.
 ```ts
 import * as ed from '@noble/ed25519';
 (async () => {
-  const privKey = ed.utils.hexToBytes(
-    '9d61b19deffd5a60ba844af492ec2cc44449c5697b326919703bac031cae7f60'
-  );
-  const message = Uint8Array.from([0xab, 0xbc, 0xcd, 0xde]);
-  const signature = ed.sign(message, privKey);
-
-  const messageB = new TextEncoder().encode('hello noble');
-  const signatureB = await ed.signAsync(messageB, privKey);
+  const { secretKey, publicKey } = ed.keygen();
+  const message = new TextEncoder().encode('hello noble');
+  const signature = ed.sign(message, secretKey);
+  const signatureA = await ed.signAsync(message, secretKey);
 })();
 ```
 
-Generates deterministic EdDSA signature.
-
-Assumes unhashed `message`: it would be hashed by ed25519 internally.
+Generates deterministic EdDSA signature. `message` would be hashed by ed25519 internally.
 For prehashed ed25519ph, switch to noble-curves.
 
 ### verify
@@ -134,15 +132,13 @@ For prehashed ed25519ph, switch to noble-curves.
 ```ts
 import * as ed from '@noble/ed25519';
 (async () => {
-  const privKey = ed.utils.randomPrivateKey();
-  const message = Uint8Array.from([0xab, 0xbc, 0xcd, 0xde]);
-  const pubKey = await ed.getPublicKeyAsync(privKey);
-  const signature = await ed.signAsync(message, privKey);
+  const { secretKey, publicKey } = ed.keygen();
+  const message = new TextEncoder().encode('hello noble');
+  const signature = ed.sign(message, secretKey);
+  const isValid = ed.verify(signature, message, pubKey);
 
-  const isValidA = ed.verify(signature, message, pubKey);
-
-  const isValidB = await ed.verifyAsync(signature, message, pubKey);
-  const isValidC = ed.verify(signature, message, pubKey, { zip215: false });
+  const isValidFips = ed.verify(signature, message, pubKey, { zip215: false });
+  const isValidA = await ed.verifyAsync(signature, message, pubKey);
 })();
 ```
 
@@ -156,48 +152,43 @@ RFC8032 / FIPS 186-5 and provides non-repudiation with SBS (Strongly Binding Sig
 A bunch of useful **utilities** are also exposed:
 
 ```typescript
-const etc: {
-  bytesToHex: (b: Bytes) => string;
-  hexToBytes: (hex: string) => Bytes;
-  concatBytes: (...arrs: Bytes[]) => Uint8Array;
-  mod: (a: bigint, b?: bigint) => bigint;
-  invert: (num: bigint, md?: bigint) => bigint;
-  randomBytes: (len: number) => Bytes;
-  sha512Async: (...messages: Bytes[]) => Promise<Bytes>;
-  sha512Sync: Sha512FnSync;
-};
-const utils: {
-  getExtendedPublicKeyAsync: (priv: Hex) => Promise<ExtK>;
-  getExtendedPublicKey: (priv: Hex) => ExtK;
-  precompute(p: Point, w?: number): Point;
-  randomPrivateKey: () => Bytes; // Uses CSPRNG https://developer.mozilla.org/en-US/docs/Web/API/Crypto/getRandomValues
-};
-
-class ExtendedPoint {
-  // Elliptic curve point in Extended (x, y, z, t) coordinates.
-  constructor(ex: bigint, ey: bigint, ez: bigint, et: bigint);
-  static readonly BASE: Point;
-  static readonly ZERO: Point;
-  static fromAffine(point: AffinePoint): ExtendedPoint;
-  static fromHex(hash: string);
+import * as ed from '@noble/ed25519';
+const { bytesToHex, hexToBytes, concatBytes, mod, invert, randomBytes } = ed.etc;
+const { getExtendedPublicKey, getExtendedPublicKeyAsync, randomSecretKey } = ed.utils;
+const { Point } = ed;
+console.log(Point.CURVE(), Point.BASE);
+/*
+class Point {
+  static BASE: Point;
+  static ZERO: Point;
+  readonly X: bigint;
+  readonly Y: bigint;
+  readonly Z: bigint;
+  readonly T: bigint;
+  constructor(X: bigint, Y: bigint, Z: bigint, T: bigint);
+  static CURVE(): EdwardsOpts;
+  static fromAffine(p: AffinePoint): Point;
+  static fromBytes(hex: Bytes, zip215?: boolean): Point;
+  static fromHex(hex: string, zip215?: boolean): Point;
   get x(): bigint;
   get y(): bigint;
-  // Note: It does not check whether the `other` point is valid point on curve.
-  add(other: ExtendedPoint): ExtendedPoint;
-  equals(other: ExtendedPoint): boolean;
-  isTorsionFree(): boolean; // Multiplies the point by curve order
-  multiply(scalar: bigint): ExtendedPoint;
-  subtract(other: ExtendedPoint): ExtendedPoint;
-  toAffine(): Point;
-  toRawBytes(): Uint8Array;
-  toHex(): string; // Compact representation of a Point
+  assertValidity(): this;
+  equals(other: Point): boolean;
+  is0(): boolean;
+  negate(): Point;
+  double(): Point;
+  add(other: Point): Point;
+  subtract(other: Point): Point;
+  multiply(n: bigint, safe?: boolean): Point;
+  multiplyUnsafe(scalar: bigint): Point;
+  toAffine(): AffinePoint;
+  toBytes(): Bytes;
+  toHex(): string;
+  clearCofactor(): Point;
+  isSmallOrder(): boolean;
+  isTorsionFree(): boolean;
 }
-// Curve params
-ed25519.CURVE.p; // 2 ** 255 - 19
-ed25519.CURVE.n; // 2 ** 252 + 27742317777372353535851937790883648493
-ed25519.ExtendedPoint.BASE; // new ed25519.Point(Gx, Gy) where
-// Gx=15112221349535400772501151409588531511454012693041857206046113283949847762202n
-// Gy=46316835694926478169428394003475163141307993866256225615783033603165251855960n;
+*/
 ```
 
 ## Security
@@ -262,12 +253,20 @@ NIST prohibits classical cryptography (RSA, DSA, ECDSA, ECDH) [after 2035](https
 
 ## Speed
 
-Benchmarks done with Apple M4.
+    npm run bench
 
-    getPublicKey(utils.randomPrivateKey()) x 11,204 ops/sec @ 89μs/op
-    sign x 5,749 ops/sec @ 173μs/op
-    verify x 1,195 ops/sec @ 836μs/op
-    Point.fromHex decompression x 22,293 ops/sec @ 44μs/op
+Benchmarks measured with Apple M4.
+
+    init 11ms
+    keygen x 11,253 ops/sec @ 88μs/op
+    sign x 5,891 ops/sec @ 169μs/op
+    verify x 1,281 ops/sec @ 780μs/op
+
+    keygenAsync x 10,205 ops/sec @ 97μs/op
+    signAsync x 4,985 ops/sec @ 200μs/op
+    verifyAsync x 1,286 ops/sec @ 777μs/op
+
+    Point.fromBytes x 22,811 ops/sec @ 43μs/op
 
 Compare to alternative implementations:
 
@@ -307,7 +306,7 @@ Other changes for upgrading from @noble/ed25519 1.7 to 2.0:
 
 - `npm install && npm run build && npm test` will build the code and run tests.
 - `npm run bench` will run benchmarks, which may need their deps first (`npm run bench:install`)
-- `npm run loc` will count total output size, important to be less than 4KB
+- `npm run build:release` will build single file
 
 Check out [github.com/paulmillr/guidelines](https://github.com/paulmillr/guidelines)
 for general coding practices and rules.

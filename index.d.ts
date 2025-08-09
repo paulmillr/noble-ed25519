@@ -11,8 +11,15 @@ export type EdwardsOpts = Readonly<{
     Gx: bigint;
     Gy: bigint;
 }>;
+declare const bytesToHex: (b: Bytes) => string;
+declare const hexToBytes: (hex: string) => Bytes;
+declare const concatBytes: (...arrs: Bytes[]) => Bytes;
 /** WebCrypto OS-level CSPRNG (random number generator). Will throw when not available. */
 declare const randomBytes: (len?: number) => Bytes;
+/** modular division */
+declare const M: (a: bigint, b?: bigint) => bigint;
+/** Modular inversion using euclidean GCD (non-CT). No negative exponent for now. */
+declare const invert: (num: bigint, md: bigint) => bigint;
 declare const hash: (msg: Bytes) => Bytes;
 /** Point in 2d xy affine coordinates. */
 export type AffinePoint = {
@@ -97,11 +104,11 @@ declare const verifyAsync: (signature: Bytes, message: Bytes, publicKey: Bytes, 
 declare const verify: (signature: Bytes, message: Bytes, publicKey: Bytes, opts?: EdDSAVerifyOpts) => boolean;
 /** Math, hex, byte helpers. Not in `utils` because utils share API with noble-curves. */
 declare const etc: {
-    bytesToHex: (b: Bytes) => string;
-    hexToBytes: (hex: string) => Bytes;
-    concatBytes: (...arrs: Bytes[]) => Uint8Array;
-    mod: (a: bigint, b?: bigint) => bigint;
-    invert: (num: bigint, md: bigint) => bigint;
+    bytesToHex: typeof bytesToHex;
+    hexToBytes: typeof hexToBytes;
+    concatBytes: typeof concatBytes;
+    mod: typeof M;
+    invert: typeof invert;
     randomBytes: typeof randomBytes;
 };
 declare const hashes: {

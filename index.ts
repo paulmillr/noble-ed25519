@@ -135,7 +135,7 @@ const assertRange = (
   msg = 'bad number: out of range'
 ): bigint => (isBig(n) && min <= n && n < max ? n : err(msg));
 /** modular division */
-const M = (a: bigint, b: bigint = P) => {
+const M = (a: bigint, b: bigint = P): bigint => {
   const r = a % b;
   return r >= 0n ? r : b + r;
 };
@@ -552,13 +552,11 @@ const verify = (
 
 /** Math, hex, byte helpers. Not in `utils` because utils share API with noble-curves. */
 const etc = {
-  bytesToHex: bytesToHex satisfies (b: Bytes) => string as (b: Bytes) => string,
-  hexToBytes: hexToBytes satisfies (hex: string) => Bytes as (hex: string) => Bytes,
-  concatBytes: concatBytes satisfies (...arrs: Bytes[]) => Uint8Array as (
-    ...arrs: Bytes[]
-  ) => Uint8Array,
-  mod: M satisfies (a: bigint, b?: bigint) => bigint as (a: bigint, b?: bigint) => bigint,
-  invert: invert as (num: bigint, md: bigint) => bigint,
+  bytesToHex: bytesToHex as typeof bytesToHex,
+  hexToBytes: hexToBytes as typeof hexToBytes,
+  concatBytes: concatBytes as typeof concatBytes,
+  mod: M as typeof M,
+  invert: invert as typeof invert,
   randomBytes: randomBytes as typeof randomBytes,
 };
 const hashes = {
