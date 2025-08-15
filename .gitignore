@@ -1,4 +1,8 @@
-build/
-node_modules/
-coverage/
+node_modules
+*.tgz
+/*.js
+*.js.map
+*.d.ts
+*.d.ts.map
+/test/build
 /test/compiled
