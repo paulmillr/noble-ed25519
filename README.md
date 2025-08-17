@@ -34,8 +34,6 @@ Curves are drop-in replacement and have more features: ristretto255, x25519 / cu
 
 > `deno add jsr:@noble/ed25519`
 
-> `deno doc jsr:@noble/ed25519` # command-line documentation
-
 We support all major platforms and runtimes. For node.js <= 18 and React Native, additional polyfills are needed: see below.
 
 ```js
