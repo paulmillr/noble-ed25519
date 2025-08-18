@@ -1,15 +1,19 @@
 import { sha512 } from '@noble/hashes/sha2.js';
-import mark from 'micro-bmark';
+import mark from '@paulmillr/jsbt/bench.js';
 import * as curve from '../index.ts';
 
 (async () => {
   curve.hashes.sha512 = sha512;
   let keys, sig;
   const msg = new TextEncoder().encode('hello noble');
-  await mark('init', 1, () => {
-    keys = curve.keygen();
-    sig = curve.sign(msg, keys.secretKey);
-  });
+  await mark(
+    'init',
+    () => {
+      keys = curve.keygen();
+      sig = curve.sign(msg, keys.secretKey);
+    },
+    1
+  );
   await mark('keygen', () => curve.keygen());
   await mark('sign', () => curve.sign(msg, keys.secretKey));
   await mark('verify', () => curve.verify(sig, msg, keys.publicKey));

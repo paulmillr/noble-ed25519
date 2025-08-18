@@ -1,5 +1,5 @@
+import { describe, should } from '@paulmillr/jsbt/test.js';
 import * as fc from 'fast-check';
-import { describe, should } from 'micro-should';
 import { deepStrictEqual as eql, throws } from 'node:assert';
 import * as ed25519 from '../index.ts';
 import './ed25519.helpers.ts';
