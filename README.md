@@ -54,7 +54,7 @@ To enable sync methods:
 
 ```ts
 import { sha512 } from '@noble/hashes/sha2.js';
-ed.etc.sha512 = sha512;
+ed.hashes.sha512 = sha512;
 // Sync methods can be used now:
 const { secretKey, publicKey } = ed.keygen();
 // const publicKey = ed.getPublicKey(secretKey);
@@ -67,8 +67,8 @@ const isValid = ed.verify(sig, msg, publicKey);
 ```ts
 import 'react-native-get-random-values';
 import { sha512 } from '@noble/hashes/sha2.js';
-ed.etc.sha512 = sha512;
-ed.etc.sha512Async = (m: Uint8Array) => Promise.resolve(sha512(m));
+ed.hashes.sha512 = sha512;
+ed.hashes.sha512Async = (m: Uint8Array) => Promise.resolve(sha512(m));
 ```
 
 ## API
@@ -275,7 +275,28 @@ Compare to alternative implementations:
 
 ## Upgrading
 
-noble-ed25519 v2 features improved security and smaller attack surface.
+### v2 to v3
+
+v3 brings the package closer to noble-curves v2.
+
+- Most methods now expect Uint8Array, string hex inputs are prohibited
+- Add `keygen`, `keygenAsync` method
+- Node v20.19 is now the minimum required version
+- Various small changes for types and Point class
+- etc: hashes are now set in `hashes` object:
+
+```js
+// before
+ed.etc.sha512 = sha512;
+ed.etc.sha512Async = (m: Uint8Array) => Promise.resolve(sha512(m));
+// after
+ed.hashes.sha512 = sha512;
+ed.hashes.sha512Async = (m: Uint8Array) => Promise.resolve(sha512(m));
+```
+
+### v1 to v2
+
+v2 features improved security and smaller attack surface.
 The goal of v2 is to provide minimum possible JS library which is safe and fast.
 
 That means the library was reduced 4x, to just over 300 lines. In order to
