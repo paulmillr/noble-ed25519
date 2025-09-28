@@ -7,11 +7,11 @@ Fastest 5KB JS implementation of ed25519 signatures.
 - 🪢 Consensus-friendly, compliant with [ZIP215](https://zips.z.cash/zip-0215)
 - 🔖 SUF-CMA (strong unforgeability under chosen message attacks) and
   SBS (non-repudiation / exclusive ownership)
-- 🪶 3.66KB (gzipped)
+- 🪶 3.7KB (gzipped)
 
-The module is a sister project of [noble-curves](https://github.com/paulmillr/noble-curves),
-focusing on smaller attack surface & better auditability.
-Curves are drop-in replacement and have more features: ristretto255, x25519 / curve25519, ed25519ph, hash-to-curve, oprf. To upgrade from v1 to v2, see [Upgrading](#upgrading).
+The module is a sister project of [noble-curves](https://github.com/paulmillr/noble-curves).
+Use noble-ed25519 if you need smaller attack surface & better auditability.
+Switch to noble-curves (drop-in) if you need features like ristretto255, x25519 / curve25519, ed25519ph, hash-to-curve, oprf.
 
 ### This library belongs to _noble_ cryptography
 
@@ -63,6 +63,9 @@ const isValid = ed.verify(sig, msg, publicKey);
 ```
 
 ### React Native: polyfill getRandomValues and sha512
+
+React Native does not provide secure getRandomValues by default.
+This can't be securely polyfilled from our end, so one will need a RN-specific compile-time dep.
 
 ```ts
 import 'react-native-get-random-values';
@@ -287,8 +290,8 @@ v3 brings the package closer to noble-curves v2.
 
 ```js
 // before
-ed.etc.sha512 = sha512;
-ed.etc.sha512Async = (m: Uint8Array) => Promise.resolve(sha512(m));
+ed.etc.sha512Sync = (...m: Uint8Array[]) => sha512(ed.etc.concatBytes(...m));
+ed.etc.sha512Async = (...m: Uint8Array[]) => Promise.resolve(sha512(ed.etc.concatBytes(...m)));
 // after
 ed.hashes.sha512 = sha512;
 ed.hashes.sha512Async = (m: Uint8Array) => Promise.resolve(sha512(m));
