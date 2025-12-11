@@ -150,6 +150,9 @@ By default, follows ZIP215 [^1] and can be used in consensus-critical apps [^2].
 `zip215: false` option switches verification criteria to strict
 RFC8032 / FIPS 186-5 and provides non-repudiation with SBS (Strongly Binding Signatures) [^3].
 
+> [!NOTE]
+> Most other libraries don't have SUF-CMA & SBS - less optimal choice for their security.
+
 ### utils
 
 A bunch of useful **utilities** are also exposed:
