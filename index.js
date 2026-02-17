@@ -117,16 +117,27 @@ const randomBytes = (len = L) => {
 };
 const big = BigInt;
 const assertRange = (n, min, max, msg = 'bad number: out of range') => (isBig(n) && min <= n && n < max ? n : err(msg));
-const B255 = 2n ** 255n;
-const B255_MASK = B255 - 1n;
-// Fast reduction for P = 2^255 - 19.
+const BARRETT_K = 255n;
+const BARRETT_BASE = 2n ** (BARRETT_K + 1n);
+const BARRETT_MASK = BARRETT_BASE - 1n;
+const BARRETT_MU = (2n ** (BARRETT_K * 2n)) / P;
+const BARRETT_LIMIT = BARRETT_BASE * BARRETT_BASE;
+// Barrett reduction for P = 2^255 - 19.
 const modP = (a) => {
     let r = a;
     const isNeg = r < 0n;
     if (isNeg)
         r = -r;
-    while (r >= B255)
-        r = (r & B255_MASK) + 19n * (r >> 255n);
+    if (r >= BARRETT_LIMIT)
+        r %= P;
+    const q1 = r >> (BARRETT_K - 1n);
+    const q2 = q1 * BARRETT_MU;
+    const q3 = q2 >> (BARRETT_K + 1n);
+    const r1 = r & BARRETT_MASK;
+    const r2 = (q3 * P) & BARRETT_MASK;
+    r = r1 - r2;
+    if (r < 0n)
+        r += BARRETT_BASE;
     while (r >= P)
         r -= P;
     return isNeg && r !== 0n ? P - r : r;
