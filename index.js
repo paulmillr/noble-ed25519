@@ -117,35 +117,22 @@ const randomBytes = (len = L) => {
 };
 const big = BigInt;
 const assertRange = (n, min, max, msg = 'bad number: out of range') => (isBig(n) && min <= n && n < max ? n : err(msg));
-const BARRETT_K = 255n;
-const BARRETT_BASE = 2n ** (BARRETT_K + 1n);
-const BARRETT_MASK = BARRETT_BASE - 1n;
-const BARRETT_MU = (2n ** (BARRETT_K * 2n)) / P;
-const BARRETT_LIMIT = BARRETT_BASE * BARRETT_BASE;
-// Barrett reduction for P = 2^255 - 19.
+const B255 = 2n ** 255n;
+const B255_MASK = B255 - 1n;
+// Fast reduction for P = 2^255 - 19.
 const modP = (a) => {
     let r = a;
     const isNeg = r < 0n;
     if (isNeg)
         r = -r;
-    if (r >= BARRETT_LIMIT)
-        r %= P;
-    const q1 = r >> (BARRETT_K - 1n);
-    const q2 = q1 * BARRETT_MU;
-    const q3 = q2 >> (BARRETT_K + 1n);
-    const r1 = r & BARRETT_MASK;
-    const r2 = (q3 * P) & BARRETT_MASK;
-    r = r1 - r2;
-    if (r < 0n)
-        r += BARRETT_BASE;
+    while (r >= B255)
+        r = (r & B255_MASK) + 19n * (r >> 255n);
     while (r >= P)
         r -= P;
     return isNeg && r !== 0n ? P - r : r;
 };
 /** modular division */
 const M = (a, b = P) => {
-    if (b === P)
-        return modP(a);
     const r = a % b;
     return r >= 0n ? r : b + r;
 };
@@ -195,7 +182,7 @@ class Point {
         return ed25519_CURVE;
     }
     static fromAffine(p) {
-        return new Point(p.x, p.y, 1n, M(p.x * p.y));
+        return new Point(p.x, p.y, 1n, modP(p.x * p.y));
     }
     /** RFC8032 5.1.3: Uint8Array to Point. */
     static fromBytes(hex, zip215 = false) {
@@ -210,9 +197,9 @@ class Point {
         // zip215=false, RFC8032: 0 <= y < 2^255-19
         const max = zip215 ? B256 : P;
         assertRange(y, 0n, max);
-        const y2 = M(y * y); // y²
-        const u = M(y2 - 1n); // u=y²-1
-        const v = M(d * y2 + 1n); // v=dy²+1
+        const y2 = modP(y * y); // y²
+        const u = modP(y2 - 1n); // u=y²-1
+        const v = modP(d * y2 + 1n); // v=dy²+1
         let { isValid, value: x } = uvRatio(u, v); // (uv³)(uv⁷)^(p-5)/8; square root
         if (!isValid)
             err('bad point: y not sqrt'); // not square root: bad point
@@ -221,8 +208,8 @@ class Point {
         if (!zip215 && x === 0n && isLastByteOdd)
             err('bad point: x==0, isLastByteOdd'); // x=0, x_0=1
         if (isLastByteOdd !== isXOdd)
-            x = M(-x);
-        return new Point(x, y, 1n, M(x * y)); // Z=1, T=xy
+            x = modP(-x);
+        return new Point(x, y, 1n, modP(x * y)); // Z=1, T=xy
     }
     static fromHex(hex, zip215) {
         return Point.fromBytes(hexToBytes(hex), zip215);
@@ -243,18 +230,18 @@ class Point {
         // Equation in affine coordinates: ax² + y² = 1 + dx²y²
         // Equation in projective coordinates (X/Z, Y/Z, Z):  (aX² + Y²)Z² = Z⁴ + dX²Y²
         const { X, Y, Z, T } = p;
-        const X2 = M(X * X); // X²
-        const Y2 = M(Y * Y); // Y²
-        const Z2 = M(Z * Z); // Z²
-        const Z4 = M(Z2 * Z2); // Z⁴
-        const aX2 = M(X2 * a); // aX²
-        const left = M(Z2 * M(aX2 + Y2)); // (aX² + Y²)Z²
-        const right = M(Z4 + M(d * M(X2 * Y2))); // Z⁴ + dX²Y²
+        const X2 = modP(X * X); // X²
+        const Y2 = modP(Y * Y); // Y²
+        const Z2 = modP(Z * Z); // Z²
+        const Z4 = modP(Z2 * Z2); // Z⁴
+        const aX2 = modP(X2 * a); // aX²
+        const left = modP(Z2 * modP(aX2 + Y2)); // (aX² + Y²)Z²
+        const right = modP(Z4 + modP(d * modP(X2 * Y2))); // Z⁴ + dX²Y²
         if (left !== right)
             return err('bad point: equation left != right (1)');
         // In Extended coordinates we also have T, which is x*y=T/Z: check X*Y == Z*T
-        const XY = M(X * Y);
-        const ZT = M(Z * T);
+        const XY = modP(X * Y);
+        const ZT = modP(Z * T);
         if (XY !== ZT)
             return err('bad point: equation left != right (2)');
         return this;
@@ -263,10 +250,10 @@ class Point {
     equals(other) {
         const { X: X1, Y: Y1, Z: Z1 } = this;
         const { X: X2, Y: Y2, Z: Z2 } = apoint(other); // checks class equality
-        const X1Z2 = M(X1 * Z2);
-        const X2Z1 = M(X2 * Z1);
-        const Y1Z2 = M(Y1 * Z2);
-        const Y2Z1 = M(Y2 * Z1);
+        const X1Z2 = modP(X1 * Z2);
+        const X2Z1 = modP(X2 * Z1);
+        const Y1Z2 = modP(Y1 * Z2);
+        const Y2Z1 = modP(Y2 * Z1);
         return X1Z2 === X2Z1 && Y1Z2 === Y2Z1;
     }
     is0() {
@@ -274,26 +261,26 @@ class Point {
     }
     /** Flip point over y coordinate. */
     negate() {
-        return new Point(M(-this.X), this.Y, this.Z, M(-this.T));
+        return new Point(modP(-this.X), this.Y, this.Z, modP(-this.T));
     }
     /** Point doubling. Complete formula. Cost: `4M + 4S + 1*a + 6add + 1*2`. */
     double() {
         const { X: X1, Y: Y1, Z: Z1 } = this;
         const a = _a;
         // https://hyperelliptic.org/EFD/g1p/auto-twisted-extended.html#doubling-dbl-2008-hwcd
-        const A = M(X1 * X1);
-        const B = M(Y1 * Y1);
-        const C = M(2n * M(Z1 * Z1));
-        const D = M(a * A);
+        const A = modP(X1 * X1);
+        const B = modP(Y1 * Y1);
+        const C = modP(2n * modP(Z1 * Z1));
+        const D = modP(a * A);
         const x1y1 = X1 + Y1;
-        const E = M(M(x1y1 * x1y1) - A - B);
+        const E = modP(modP(x1y1 * x1y1) - A - B);
         const G = D + B;
         const F = G - C;
         const H = D - B;
-        const X3 = M(E * F);
-        const Y3 = M(G * H);
-        const T3 = M(E * H);
-        const Z3 = M(F * G);
+        const X3 = modP(E * F);
+        const Y3 = modP(G * H);
+        const T3 = modP(E * H);
+        const Z3 = modP(F * G);
         return new Point(X3, Y3, Z3, T3);
     }
     /** Point addition. Complete formula. Cost: `8M + 1*k + 8add + 1*2`. */
@@ -303,18 +290,18 @@ class Point {
         const a = _a;
         const d = _d;
         // https://hyperelliptic.org/EFD/g1p/auto-twisted-extended-1.html#addition-add-2008-hwcd-3
-        const A = M(X1 * X2);
-        const B = M(Y1 * Y2);
-        const C = M(T1 * d * T2);
-        const D = M(Z1 * Z2);
-        const E = M((X1 + Y1) * (X2 + Y2) - A - B);
-        const F = M(D - C);
-        const G = M(D + C);
-        const H = M(B - a * A);
-        const X3 = M(E * F);
-        const Y3 = M(G * H);
-        const T3 = M(E * H);
-        const Z3 = M(F * G);
+        const A = modP(X1 * X2);
+        const B = modP(Y1 * Y2);
+        const C = modP(T1 * d * T2);
+        const D = modP(Z1 * Z2);
+        const E = modP((X1 + Y1) * (X2 + Y2) - A - B);
+        const F = modP(D - C);
+        const G = modP(D + C);
+        const H = modP(B - a * A);
+        const X3 = modP(E * F);
+        const Y3 = modP(G * H);
+        const T3 = modP(E * H);
+        const Z3 = modP(F * G);
         return new Point(X3, Y3, Z3, T3);
     }
     subtract(other) {
@@ -359,11 +346,11 @@ class Point {
             return { x: 0n, y: 1n };
         const iz = invert(Z, P);
         // (Z * Z^-1) must be 1, otherwise bad math
-        if (M(Z * iz) !== 1n)
+        if (modP(Z * iz) !== 1n)
             err('invalid inverse');
         // x = X*Z^-1; y = Y*Z^-1
-        const x = M(X * iz);
-        const y = M(Y * iz);
+        const x = modP(X * iz);
+        const y = modP(Y * iz);
         return { x, y };
     }
     toBytes() {
@@ -391,7 +378,7 @@ class Point {
     }
 }
 /** Generator / base point */
-const G = new Point(Gx, Gy, 1n, M(Gx * Gy));
+const G = new Point(Gx, Gy, 1n, modP(Gx * Gy));
 /** Identity / zero point */
 const I = new Point(0n, 1n, 1n, 0n);
 // Static aliases
@@ -428,22 +415,22 @@ const RM1 = 0x2b8324804fc1df0b2b4d00993dfbd7a72f431806ad2fe478c4ee1b274a0ea0b0n;
 // for sqrt comp
 // prettier-ignore
 const uvRatio = (u, v) => {
-    const v3 = M(v * v * v); // v³
-    const v7 = M(v3 * v3 * v); // v⁷
+    const v3 = modP(v * v * v); // v³
+    const v7 = modP(v3 * v3 * v); // v⁷
     const pow = pow_2_252_3(u * v7).pow_p_5_8; // (uv⁷)^(p-5)/8
-    let x = M(u * v3 * pow); // (uv³)(uv⁷)^(p-5)/8
-    const vx2 = M(v * x * x); // vx²
+    let x = modP(u * v3 * pow); // (uv³)(uv⁷)^(p-5)/8
+    const vx2 = modP(v * x * x); // vx²
     const root1 = x; // First root candidate
-    const root2 = M(x * RM1); // Second root candidate; RM1 is √-1
+    const root2 = modP(x * RM1); // Second root candidate; RM1 is √-1
     const useRoot1 = vx2 === u; // If vx² = u (mod p), x is a square root
-    const useRoot2 = vx2 === M(-u); // If vx² = -u, set x <-- x * 2^((p-1)/4)
-    const noRoot = vx2 === M(-u * RM1); // There is no valid root, vx² = -u√-1
+    const useRoot2 = vx2 === modP(-u); // If vx² = -u, set x <-- x * 2^((p-1)/4)
+    const noRoot = vx2 === modP(-u * RM1); // There is no valid root, vx² = -u√-1
     if (useRoot1)
         x = root1;
     if (useRoot2 || noRoot)
         x = root2; // We return root2 anyway, for const-time
-    if ((M(x) & 1n) === 1n)
-        x = M(-x); // edIsNegative
+    if ((modP(x) & 1n) === 1n)
+        x = modP(-x); // edIsNegative
     return { isValid: useRoot1 || useRoot2, value: x };
 };
 // N == L, just weird naming
