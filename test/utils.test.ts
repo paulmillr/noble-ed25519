@@ -4,6 +4,7 @@ import { deepStrictEqual as eql, throws } from 'node:assert';
 import * as items from '../index.ts';
 import { getTypeTests } from './utils.ts';
 const { bytesToHex, concatBytes, hexToBytes, mod, invert } = items.etc;
+const CURVE_P = items.Point.CURVE().p;
 
 function hexa() {
   const items = '0123456789abcdef';
@@ -78,6 +79,9 @@ describe('utils math', () => {
     eql(mod(11n, 10n), 1n);
     eql(mod(-1n, 10n), 9n);
     eql(mod(0n, 10n), 0n);
+    const big = CURVE_P * CURVE_P + 123n;
+    eql(mod(big, CURVE_P), 123n);
+    eql(mod(-big, CURVE_P), CURVE_P - 123n);
   });
   should('invert', () => {
     eql(invert(512n, 1023n), 2n);

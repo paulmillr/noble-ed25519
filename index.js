@@ -117,8 +117,23 @@ const randomBytes = (len = L) => {
 };
 const big = BigInt;
 const assertRange = (n, min, max, msg = 'bad number: out of range') => (isBig(n) && min <= n && n < max ? n : err(msg));
+const P255 = 2n ** 255n;
+const P_MASK = P255 - 1n;
+const modP = (a) => {
+    let r = a;
+    const isNeg = r < 0n;
+    if (isNeg)
+        r = -r;
+    while (r >= P255)
+        r = (r & P_MASK) + 19n * (r >> 255n);
+    while (r >= P)
+        r -= P;
+    return isNeg && r !== 0n ? P - r : r;
+};
 /** modular division */
 const M = (a, b = P) => {
+    if (b === P)
+        return modP(a);
     const r = a % b;
     return r >= 0n ? r : b + r;
 };
