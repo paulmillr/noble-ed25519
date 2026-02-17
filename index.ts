@@ -145,7 +145,7 @@ const modP = (a: bigint): bigint => {
   while (r >= P) r -= P;
   return isNeg && r !== 0n ? P - r : r;
 };
-/** modular division */
+/** modular division (non-P moduli) */
 const M = (a: bigint, b: bigint = P): bigint => {
   const r = a % b;
   return r >= 0n ? r : b + r;

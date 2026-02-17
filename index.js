@@ -131,7 +131,7 @@ const modP = (a) => {
         r -= P;
     return isNeg && r !== 0n ? P - r : r;
 };
-/** modular division */
+/** modular division (non-P moduli) */
 const M = (a, b = P) => {
     const r = a % b;
     return r >= 0n ? r : b + r;

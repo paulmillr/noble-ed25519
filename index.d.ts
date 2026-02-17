@@ -16,7 +16,7 @@ declare const hexToBytes: (hex: string) => Bytes;
 declare const concatBytes: (...arrs: Bytes[]) => Bytes;
 /** WebCrypto OS-level CSPRNG (random number generator). Will throw when not available. */
 declare const randomBytes: (len?: number) => Bytes;
-/** modular division */
+/** modular division (non-P moduli) */
 declare const M: (a: bigint, b?: bigint) => bigint;
 /** Modular inversion using euclidean GCD (non-CT). No negative exponent for now. */
 declare const invert: (num: bigint, md: bigint) => bigint;
