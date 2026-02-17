@@ -141,8 +141,9 @@ const modP = (a: bigint): bigint => {
   let r = a;
   const isNeg = r < 0n;
   if (isNeg) r = -r;
-  while (r >= B255) r = (r & B255_MASK) + 19n * (r >> 255n);
-  while (r >= P) r -= P;
+  r = (r >> 255n) * 19n + (r & B255_MASK);
+  r = (r >> 255n) * 19n + (r & B255_MASK);
+  r %= P;
   return isNeg && r !== 0n ? P - r : r;
 };
 /** modular division (non-P moduli) */
