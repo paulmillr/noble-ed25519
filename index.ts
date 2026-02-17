@@ -141,6 +141,7 @@ const modP = (a: bigint): bigint => {
   let r = a;
   const isNeg = r < 0n;
   if (isNeg) r = -r;
+  // Two folds are enough to shrink inputs before final modulo.
   r = (r >> 255n) * 19n + (r & B255_MASK);
   r = (r >> 255n) * 19n + (r & B255_MASK);
   r %= P;
