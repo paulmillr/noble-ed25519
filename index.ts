@@ -134,13 +134,14 @@ const assertRange = (
   max: bigint,
   msg = 'bad number: out of range'
 ): bigint => (isBig(n) && min <= n && n < max ? n : err(msg));
-const P255 = 2n ** 255n;
-const P_MASK = P255 - 1n;
+const B255 = 2n ** 255n;
+const B255_MASK = B255 - 1n;
+// Fast reduction for P = 2^255 - 19.
 const modP = (a: bigint): bigint => {
   let r = a;
   const isNeg = r < 0n;
   if (isNeg) r = -r;
-  while (r >= P255) r = (r & P_MASK) + 19n * (r >> 255n);
+  while (r >= B255) r = (r & B255_MASK) + 19n * (r >> 255n);
   while (r >= P) r -= P;
   return isNeg && r !== 0n ? P - r : r;
 };
