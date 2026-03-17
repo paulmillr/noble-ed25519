@@ -387,10 +387,9 @@ const I: Point = new Point(0n, 1n, 1n, 0n);
 Point.BASE = G;
 Point.ZERO = I;
 
-export const numTo32bLE = (num: bigint): Bytes =>
+const numTo32bLE = (num: bigint): Bytes =>
   hexToBytes(padh(assertRange(num, 0n, B256), 64)).reverse();
-export const bytesToNumberLE = (b: Bytes): bigint =>
-  big('0x' + bytesToHex(u8fr(abytes(b)).reverse()));
+const bytesToNumberLE = (b: Bytes): bigint => big('0x' + bytesToHex(u8fr(abytes(b)).reverse()));
 
 const pow2 = (x: bigint, power: bigint): bigint => {
   // pow2(x, 4) == x^(2^4)
@@ -517,32 +516,39 @@ const defaultVerifyOpts: EdDSAVerifyOpts = { zip215: true };
 const _verify = (
   sig: Bytes,
   msg: Bytes,
-  pub: Bytes,
-  opts: EdDSAVerifyOpts = defaultVerifyOpts
+  publicKey: Bytes,
+  options: EdDSAVerifyOpts = defaultVerifyOpts
 ): Finishable<boolean> => {
-  sig = abytes(sig, L2); // Signature hex str/Bytes, must be 64 bytes
+  sig = abytes(sig, 64); // Signature hex str/Bytes, must be 64 bytes
   msg = abytes(msg); // Message hex str/Bytes
-  pub = abytes(pub, L);
-  const { zip215 } = opts; // switch between zip215 and rfc8032 verif
-  let A: Point;
-  let R: Point;
-  let s: bigint;
-  let SB: Point;
+  publicKey = abytes(publicKey, L);
+  const { zip215 } = options; // switch between zip215 and rfc8032 verif
+
+  const r = sig.subarray(0, L);
+  const s = bytesToNumberLE(sig.subarray(L, L * 2)); // Decode second half as an integer S;
+  let A: Point, R: Point, SB: Point;
   let hashable: Bytes = Uint8Array.of();
+  let finished = false;
   try {
-    A = Point.fromBytes(pub, zip215); // public key A decoded
-    R = Point.fromBytes(sig.slice(0, L), zip215); // 0 <= R < 2^256: ZIP215 R can be >= P
-    s = bytesToNumLE(sig.slice(L, L2)); // Decode second half as an integer S
-    SB = G.multiply(s, false); // in the range 0 <= s < L
+    // zip215=true is good for consensus-critical apps. =false follows RFC8032 / NIST186-5.
+    // zip215=true:  0 <= y < MASK (2^256 for ed25519)
+    // zip215=false: 0 <= y < P (2^255-19 for ed25519)
+    A = Point.fromBytes(publicKey, zip215);
+    R = Point.fromBytes(r, zip215);
+    SB = G.multiply(s, false); // 0 <= s < l is done inside
     hashable = concatBytes(R.toBytes(), A.toBytes(), msg); // dom2(F, C) || R || A || PH(M)
+    finished = true;
   } catch (error) {}
   const finish = (hashed: Bytes): boolean => {
+    if (!finished) return false;
+    if (!zip215 && A.isSmallOrder()) return false; // zip215 allows public keys of small order
+
     // k = SHA512(dom2(F, C) || R || A || PH(M))
-    if (SB == null) return false; // false if try-catch catched an error
-    if (!zip215 && A.isSmallOrder()) return false; // false for SBS: Strongly Binding Signature
-    const k = modL_LE(hashed); // decode in little-endian, modulo L
-    const RkA = R.add(A.multiply(k, false)); // [8]R + [8][k]A'
-    return RkA.add(SB.negate()).clearCofactor().is0(); // [8][S]B = [8]R + [8][k]A'
+    const k = modL_LE(hashed);
+    const RkA = R.add(A.multiply(k, false));
+    // Extended group equation
+    // [8][S]B = [8]R + [8][k]A'
+    return RkA.subtract(SB).clearCofactor().is0();
   };
   return { hashable, finish };
 };

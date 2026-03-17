@@ -35,7 +35,6 @@ const ed25519_CURVE = {
 };
 const { p: P, n: N, Gx, Gy, a: _a, d: _d, h } = ed25519_CURVE;
 const L = 32; // field / group byte length
-const L2 = 64;
 // Helpers and Precomputes sections are reused between libraries
 // ## Helpers
 // ----------
@@ -122,6 +121,14 @@ const M = (a, b = P) => {
     const r = a % b;
     return r >= 0n ? r : b + r;
 };
+// const P_MASK = (1n << 255n) - 1n;
+const modP = (num) => {
+    return M(num, P);
+    // if (num < 0n) err('negative coordinate');
+    // let r = (num >> 255n) * 19n + (num & P_MASK);
+    // r = (r >> 255n) * 19n + (r & P_MASK);
+    // return r % P;
+};
 const modN = (a) => M(a, N);
 /** Modular inversion using euclidean GCD (non-CT). No negative exponent for now. */
 // prettier-ignore
@@ -168,7 +175,7 @@ class Point {
         return ed25519_CURVE;
     }
     static fromAffine(p) {
-        return new Point(p.x, p.y, 1n, M(p.x * p.y));
+        return new Point(p.x, p.y, 1n, modP(p.x * p.y));
     }
     /** RFC8032 5.1.3: Uint8Array to Point. */
     static fromBytes(hex, zip215 = false) {
@@ -178,14 +185,14 @@ class Point {
         // adjust first LE byte = last BE byte
         const lastByte = hex[31];
         normed[31] = lastByte & ~0x80;
-        const y = bytesToNumLE(normed);
+        const y = bytesToNumberLE(normed);
         // zip215=true:           0 <= y < 2^256
         // zip215=false, RFC8032: 0 <= y < 2^255-19
         const max = zip215 ? B256 : P;
         assertRange(y, 0n, max);
-        const y2 = M(y * y); // y²
+        const y2 = modP(y * y); // y²
         const u = M(y2 - 1n); // u=y²-1
-        const v = M(d * y2 + 1n); // v=dy²+1
+        const v = modP(d * y2 + 1n); // v=dy²+1
         let { isValid, value: x } = uvRatio(u, v); // (uv³)(uv⁷)^(p-5)/8; square root
         if (!isValid)
             err('bad point: y not sqrt'); // not square root: bad point
@@ -195,7 +202,7 @@ class Point {
             err('bad point: x==0, isLastByteOdd'); // x=0, x_0=1
         if (isLastByteOdd !== isXOdd)
             x = M(-x);
-        return new Point(x, y, 1n, M(x * y)); // Z=1, T=xy
+        return new Point(x, y, 1n, modP(x * y)); // Z=1, T=xy
     }
     static fromHex(hex, zip215) {
         return Point.fromBytes(hexToBytes(hex), zip215);
@@ -216,18 +223,18 @@ class Point {
         // Equation in affine coordinates: ax² + y² = 1 + dx²y²
         // Equation in projective coordinates (X/Z, Y/Z, Z):  (aX² + Y²)Z² = Z⁴ + dX²Y²
         const { X, Y, Z, T } = p;
-        const X2 = M(X * X); // X²
-        const Y2 = M(Y * Y); // Y²
-        const Z2 = M(Z * Z); // Z²
-        const Z4 = M(Z2 * Z2); // Z⁴
-        const aX2 = M(X2 * a); // aX²
-        const left = M(Z2 * M(aX2 + Y2)); // (aX² + Y²)Z²
-        const right = M(Z4 + M(d * M(X2 * Y2))); // Z⁴ + dX²Y²
+        const X2 = modP(X * X); // X²
+        const Y2 = modP(Y * Y); // Y²
+        const Z2 = modP(Z * Z); // Z²
+        const Z4 = modP(Z2 * Z2); // Z⁴
+        const aX2 = modP(X2 * a); // aX²
+        const left = modP(Z2 * (aX2 + Y2)); // (aX² + Y²)Z²
+        const right = M(Z4 + modP(d * modP(X2 * Y2))); // Z⁴ + dX²Y²
         if (left !== right)
             return err('bad point: equation left != right (1)');
         // In Extended coordinates we also have T, which is x*y=T/Z: check X*Y == Z*T
-        const XY = M(X * Y);
-        const ZT = M(Z * T);
+        const XY = modP(X * Y);
+        const ZT = modP(Z * T);
         if (XY !== ZT)
             return err('bad point: equation left != right (2)');
         return this;
@@ -236,10 +243,10 @@ class Point {
     equals(other) {
         const { X: X1, Y: Y1, Z: Z1 } = this;
         const { X: X2, Y: Y2, Z: Z2 } = apoint(other); // checks class equality
-        const X1Z2 = M(X1 * Z2);
-        const X2Z1 = M(X2 * Z1);
-        const Y1Z2 = M(Y1 * Z2);
-        const Y2Z1 = M(Y2 * Z1);
+        const X1Z2 = modP(X1 * Z2);
+        const X2Z1 = modP(X2 * Z1);
+        const Y1Z2 = modP(Y1 * Z2);
+        const Y2Z1 = modP(Y2 * Z1);
         return X1Z2 === X2Z1 && Y1Z2 === Y2Z1;
     }
     is0() {
@@ -254,19 +261,19 @@ class Point {
         const { X: X1, Y: Y1, Z: Z1 } = this;
         const a = _a;
         // https://hyperelliptic.org/EFD/g1p/auto-twisted-extended.html#doubling-dbl-2008-hwcd
-        const A = M(X1 * X1);
-        const B = M(Y1 * Y1);
-        const C = M(2n * M(Z1 * Z1));
-        const D = M(a * A);
-        const x1y1 = X1 + Y1;
-        const E = M(M(x1y1 * x1y1) - A - B);
-        const G = D + B;
-        const F = G - C;
-        const H = D - B;
-        const X3 = M(E * F);
-        const Y3 = M(G * H);
-        const T3 = M(E * H);
-        const Z3 = M(F * G);
+        const A = modP(X1 * X1);
+        const B = modP(Y1 * Y1);
+        const C = modP(2n * Z1 * Z1);
+        const D = modP(a * A);
+        const x1y1 = M(X1 + Y1);
+        const E = M(modP(x1y1 * x1y1) - A - B);
+        const G = M(D + B);
+        const F = M(G - C);
+        const H = M(D - B);
+        const X3 = modP(E * F);
+        const Y3 = modP(G * H);
+        const T3 = modP(E * H);
+        const Z3 = modP(F * G);
         return new Point(X3, Y3, Z3, T3);
     }
     /** Point addition. Complete formula. Cost: `8M + 1*k + 8add + 1*2`. */
@@ -276,18 +283,18 @@ class Point {
         const a = _a;
         const d = _d;
         // https://hyperelliptic.org/EFD/g1p/auto-twisted-extended-1.html#addition-add-2008-hwcd-3
-        const A = M(X1 * X2);
-        const B = M(Y1 * Y2);
-        const C = M(T1 * d * T2);
-        const D = M(Z1 * Z2);
-        const E = M((X1 + Y1) * (X2 + Y2) - A - B);
+        const A = modP(X1 * X2);
+        const B = modP(Y1 * Y2);
+        const C = modP(modP(T1 * d) * T2);
+        const D = modP(Z1 * Z2);
+        const E = M(modP(M(X1 + Y1) * M(X2 + Y2)) - A - B);
         const F = M(D - C);
         const G = M(D + C);
-        const H = M(B - a * A);
-        const X3 = M(E * F);
-        const Y3 = M(G * H);
-        const T3 = M(E * H);
-        const Z3 = M(F * G);
+        const H = M(B - modP(a * A));
+        const X3 = modP(E * F);
+        const Y3 = modP(G * H);
+        const T3 = modP(E * H);
+        const Z3 = modP(F * G);
         return new Point(X3, Y3, Z3, T3);
     }
     subtract(other) {
@@ -332,15 +339,15 @@ class Point {
             return { x: 0n, y: 1n };
         const iz = invert(Z, P);
         // (Z * Z^-1) must be 1, otherwise bad math
-        if (M(Z * iz) !== 1n)
+        if (modP(Z * iz) !== 1n)
             err('invalid inverse');
         // x = X*Z^-1; y = Y*Z^-1
-        const x = M(X * iz);
-        const y = M(Y * iz);
+        const x = modP(X * iz);
+        const y = modP(Y * iz);
         return { x, y };
     }
     toBytes() {
-        const { x, y } = this.assertValidity().toAffine();
+        const { x, y } = this.toAffine();
         const b = numTo32bLE(y);
         // store sign in first LE byte
         b[31] |= x & 1n ? 0x80 : 0;
@@ -370,44 +377,43 @@ const I = new Point(0n, 1n, 1n, 0n);
 // Static aliases
 Point.BASE = G;
 Point.ZERO = I;
-const numTo32bLE = (num) => hexToBytes(padh(assertRange(num, 0n, B256), L2)).reverse();
-const bytesToNumLE = (b) => big('0x' + bytesToHex(u8fr(abytes(b)).reverse()));
+const numTo32bLE = (num) => hexToBytes(padh(assertRange(num, 0n, B256), 64)).reverse();
+const bytesToNumberLE = (b) => big('0x' + bytesToHex(u8fr(abytes(b)).reverse()));
 const pow2 = (x, power) => {
     // pow2(x, 4) == x^(2^4)
     let r = x;
     while (power-- > 0n) {
-        r *= r;
-        r %= P;
+        r = modP(r * r);
     }
     return r;
 };
 // prettier-ignore
 const pow_2_252_3 = (x) => {
-    const x2 = (x * x) % P; // x^2,       bits 1
-    const b2 = (x2 * x) % P; // x^3,       bits 11
-    const b4 = (pow2(b2, 2n) * b2) % P; // x^(2^4-1), bits 1111
-    const b5 = (pow2(b4, 1n) * x) % P; // x^(2^5-1), bits 11111
-    const b10 = (pow2(b5, 5n) * b5) % P; // x^(2^10)
-    const b20 = (pow2(b10, 10n) * b10) % P; // x^(2^20)
-    const b40 = (pow2(b20, 20n) * b20) % P; // x^(2^40)
-    const b80 = (pow2(b40, 40n) * b40) % P; // x^(2^80)
-    const b160 = (pow2(b80, 80n) * b80) % P; // x^(2^160)
-    const b240 = (pow2(b160, 80n) * b80) % P; // x^(2^240)
-    const b250 = (pow2(b240, 10n) * b10) % P; // x^(2^250)
-    const pow_p_5_8 = (pow2(b250, 2n) * x) % P; // < To pow to (p+3)/8, multiply it by x.
+    const x2 = modP(x * x); // x^2,       bits 1
+    const b2 = modP(x2 * x); // x^3,       bits 11
+    const b4 = modP(pow2(b2, 2n) * b2); // x^(2^4-1), bits 1111
+    const b5 = modP(pow2(b4, 1n) * x); // x^(2^5-1), bits 11111
+    const b10 = modP(pow2(b5, 5n) * b5); // x^(2^10)
+    const b20 = modP(pow2(b10, 10n) * b10); // x^(2^20)
+    const b40 = modP(pow2(b20, 20n) * b20); // x^(2^40)
+    const b80 = modP(pow2(b40, 40n) * b40); // x^(2^80)
+    const b160 = modP(pow2(b80, 80n) * b80); // x^(2^160)
+    const b240 = modP(pow2(b160, 80n) * b80); // x^(2^240)
+    const b250 = modP(pow2(b240, 10n) * b10); // x^(2^250)
+    const pow_p_5_8 = modP(pow2(b250, 2n) * x); // < To pow to (p+3)/8, multiply it by x.
     return { pow_p_5_8, b2 };
 };
 const RM1 = 0x2b8324804fc1df0b2b4d00993dfbd7a72f431806ad2fe478c4ee1b274a0ea0b0n; // √-1
 // for sqrt comp
 // prettier-ignore
 const uvRatio = (u, v) => {
-    const v3 = M(v * v * v); // v³
-    const v7 = M(v3 * v3 * v); // v⁷
-    const pow = pow_2_252_3(u * v7).pow_p_5_8; // (uv⁷)^(p-5)/8
-    let x = M(u * v3 * pow); // (uv³)(uv⁷)^(p-5)/8
-    const vx2 = M(v * x * x); // vx²
+    const v3 = modP(v * modP(v * v)); // v³
+    const v7 = modP(modP(v3 * v3) * v); // v⁷
+    const pow = pow_2_252_3(modP(u * v7)).pow_p_5_8; // (uv⁷)^(p-5)/8
+    let x = modP(u * modP(v3 * pow)); // (uv³)(uv⁷)^(p-5)/8
+    const vx2 = modP(v * modP(x * x)); // vx²
     const root1 = x; // First root candidate
-    const root2 = M(x * RM1); // Second root candidate; RM1 is √-1
+    const root2 = modP(x * RM1); // Second root candidate; RM1 is √-1
     const useRoot1 = vx2 === u; // If vx² = u (mod p), x is a square root
     const useRoot2 = vx2 === M(-u); // If vx² = -u, set x <-- x * 2^((p-1)/4)
     const noRoot = vx2 === M(-u * RM1); // There is no valid root, vx² = -u√-1
@@ -420,7 +426,7 @@ const uvRatio = (u, v) => {
     return { isValid: useRoot1 || useRoot2, value: x };
 };
 // N == L, just weird naming
-const modL_LE = (hash) => modN(bytesToNumLE(hash)); // modulo L; but little-endian
+const modL_LE = (hash) => modN(bytesToNumberLE(hash)); // modulo L; but little-endian
 /** hashes.sha512 should conform to the interface. */
 // TODO: rename
 const sha512a = (...m) => hashes.sha512Async(concatBytes(...m)); // Async SHA512
@@ -428,11 +434,11 @@ const sha512s = (...m) => callHash('sha512')(concatBytes(...m));
 // RFC8032 5.1.5
 const hash2extK = (hashed) => {
     // slice creates a copy, unlike subarray
-    const head = hashed.slice(0, L);
+    const head = hashed.slice(0, 32);
     head[0] &= 248; // Clamp bits: 0b1111_1000
     head[31] &= 127; // 0b0111_1111
     head[31] |= 64; // 0b0100_0000
-    const prefix = hashed.slice(L, L2); // secret key "prefix"
+    const prefix = hashed.slice(32, 64); // secret key "prefix"
     const scalar = modL_LE(head); // modular division over curve order
     const point = G.multiply(scalar); // public key point
     const pointBytes = point.toBytes(); // point serialized to Uint8Array
@@ -456,7 +462,7 @@ const _sign = (e, rBytes, msg) => {
     const finish = (hashed) => {
         // k = SHA512(dom2(F, C) || R || A || PH(M))
         const S = modN(r + modL_LE(hashed) * s); // S = (r + k * s) mod L; 0 <= s < l
-        return abytes(concatBytes(R, numTo32bLE(S)), L2); // 64-byte sig: 32b R.x + 32b LE(S)
+        return abytes(concatBytes(R, numTo32bLE(S)), 64); // 64-byte sig: 32b R.x + 32b LE(S)
     };
     return { hashable, finish };
 };
@@ -481,33 +487,38 @@ const sign = (message, secretKey) => {
     return hashFinishS(_sign(e, rBytes, m)); // gen R, k, S, then 64-byte signature
 };
 const defaultVerifyOpts = { zip215: true };
-const _verify = (sig, msg, pub, opts = defaultVerifyOpts) => {
-    sig = abytes(sig, L2); // Signature hex str/Bytes, must be 64 bytes
+const _verify = (sig, msg, publicKey, options = defaultVerifyOpts) => {
+    sig = abytes(sig, 64); // Signature hex str/Bytes, must be 64 bytes
     msg = abytes(msg); // Message hex str/Bytes
-    pub = abytes(pub, L);
-    const { zip215 } = opts; // switch between zip215 and rfc8032 verif
-    let A;
-    let R;
-    let s;
-    let SB;
+    publicKey = abytes(publicKey, L);
+    const { zip215 } = options; // switch between zip215 and rfc8032 verif
+    const r = sig.subarray(0, L);
+    const s = bytesToNumberLE(sig.subarray(L, L * 2)); // Decode second half as an integer S;
+    let A, R, SB;
     let hashable = Uint8Array.of();
+    let finished = false;
     try {
-        A = Point.fromBytes(pub, zip215); // public key A decoded
-        R = Point.fromBytes(sig.slice(0, L), zip215); // 0 <= R < 2^256: ZIP215 R can be >= P
-        s = bytesToNumLE(sig.slice(L, L2)); // Decode second half as an integer S
-        SB = G.multiply(s, false); // in the range 0 <= s < L
+        // zip215=true is good for consensus-critical apps. =false follows RFC8032 / NIST186-5.
+        // zip215=true:  0 <= y < MASK (2^256 for ed25519)
+        // zip215=false: 0 <= y < P (2^255-19 for ed25519)
+        A = Point.fromBytes(publicKey, zip215);
+        R = Point.fromBytes(r, zip215);
+        SB = G.multiply(s, false); // 0 <= s < l is done inside
         hashable = concatBytes(R.toBytes(), A.toBytes(), msg); // dom2(F, C) || R || A || PH(M)
+        finished = true;
     }
     catch (error) { }
     const finish = (hashed) => {
-        // k = SHA512(dom2(F, C) || R || A || PH(M))
-        if (SB == null)
-            return false; // false if try-catch catched an error
+        if (!finished)
+            return false;
         if (!zip215 && A.isSmallOrder())
-            return false; // false for SBS: Strongly Binding Signature
-        const k = modL_LE(hashed); // decode in little-endian, modulo L
-        const RkA = R.add(A.multiply(k, false)); // [8]R + [8][k]A'
-        return RkA.add(SB.negate()).clearCofactor().is0(); // [8][S]B = [8]R + [8][k]A'
+            return false; // zip215 allows public keys of small order
+        // k = SHA512(dom2(F, C) || R || A || PH(M))
+        const k = modL_LE(hashed);
+        const RkA = R.add(A.multiply(k, false));
+        // Extended group equation
+        // [8][S]B = [8]R + [8][k]A'
+        return RkA.subtract(SB).clearCofactor().is0();
     };
     return { hashable, finish };
 };

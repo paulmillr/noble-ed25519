@@ -217,6 +217,30 @@ describe('ed25519', () => {
         strictEqual(result, false, `zip215: false must not validate: ${v.signature}`);
       }
     });
+
+    should('handle ZERO points properly', async () => {
+      const modN = (a: bigint, b: bigint = N) => {
+        const r = a % b;
+        return r >= 0n ? r : b + r;
+      };
+      const { secretKey, publicKey } = ed.keygen();
+      const extK = ed.utils.getExtendedPublicKey(secretKey);
+      const aaaaa = extK.scalar; // private scalar
+      const identityR = new Uint8Array(32);
+      identityR[0] = 1; // LE encoding of y=1
+      const emptyHash = ed.hashes.sha512(new Uint8Array());
+      const N = Point.CURVE().n;
+      const k0 = modN(BigInt('0x' + hex(emptyHash.slice().reverse()))); // modL_LE
+      const S_ = modN(k0 * aaaaa); // Step 5: Compute S = k0 * a mod N
+      const S = bytes(S_.toString(16).padStart(64, '0')).reverse();
+      const forgedSig = concatBytes(identityR, S); // Encode S as 32-byte little-endian
+      const msgs = ['a', 'b', 'c'].map((s) => new TextEncoder().encode(s));
+      msgs.push(Uint8Array.of());
+      for (let msg of msgs) {
+        eql(ed.verify(forgedSig, msg, publicKey), false);
+        eql(ed.verify(forgedSig, msg, publicKey, { zip215: false }), false);
+      }
+    });
   });
 
   describe('Point', () => {
