@@ -356,7 +356,7 @@ class Point {
     return { x, y };
   }
   toBytes(): Bytes {
-    const { x, y } = this.assertValidity().toAffine();
+    const { x, y } = this.toAffine();
     const b = numTo32bLE(y);
     // store sign in first LE byte
     b[31] |= x & 1n ? 0x80 : 0;
