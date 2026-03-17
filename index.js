@@ -121,13 +121,14 @@ const M = (a, b = P) => {
     const r = a % b;
     return r >= 0n ? r : b + r;
 };
-// const P_MASK = (1n << 255n) - 1n;
+const P_MASK = (1n << 255n) - 1n;
 const modP = (num) => {
-    return M(num, P);
-    // if (num < 0n) err('negative coordinate');
-    // let r = (num >> 255n) * 19n + (num & P_MASK);
-    // r = (r >> 255n) * 19n + (r & P_MASK);
-    // return r % P;
+    // return M(num, P);
+    if (num < 0n)
+        err('negative coordinate');
+    let r = (num >> 255n) * 19n + (num & P_MASK);
+    r = (r >> 255n) * 19n + (r & P_MASK);
+    return r % P;
 };
 const modN = (a) => M(a, N);
 /** Modular inversion using euclidean GCD (non-CT). No negative exponent for now. */
@@ -638,4 +639,4 @@ const wNAF = (n) => {
     return { p, f }; // return both real and fake points for JIT
 };
 // !! Remove the export to easily use in REPL / browser console
-export { etc, getPublicKey, getPublicKeyAsync, hash, hashes, keygen, keygenAsync, Point, sign, signAsync, utils, verify, verifyAsync, };
+export { etc, getPublicKey, getPublicKeyAsync, hash, hashes, keygen, keygenAsync, Point, sign, signAsync, utils, verify, verifyAsync };
