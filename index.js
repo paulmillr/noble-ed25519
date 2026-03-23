@@ -852,4 +852,3 @@ const wNAF = (n) => {
 };
 // !! Remove the export to easily use in REPL / browser console
 export { etc, getPublicKey, getPublicKeyAsync, hash, hashes, keygen, keygenAsync, Point, sign, signAsync, utils, verify, verifyAsync };
-//# sourceMappingURL=index.js.map

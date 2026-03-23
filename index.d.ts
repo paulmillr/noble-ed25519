@@ -347,4 +347,3 @@ declare const utils: {
     randomSecretKey: typeof randomSecretKey;
 };
 export { etc, getPublicKey, getPublicKeyAsync, hash, hashes, keygen, keygenAsync, Point, sign, signAsync, utils, verify, verifyAsync };
-//# sourceMappingURL=index.d.ts.map
