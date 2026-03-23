@@ -71,6 +71,13 @@ describe('utils', () => {
       })
     )
   );
+  should('validator constructors', () => {
+    throws(() => items.etc.bytesToHex('x' as any), TypeError);
+    throws(() => items.Point.BASE.multiply('x' as any), TypeError);
+    throws(() => items.Point.BASE.multiply(0n), RangeError);
+    throws(() => items.utils.randomSecretKey('x' as any), TypeError);
+    throws(() => items.utils.randomSecretKey(new Uint8Array(31)), RangeError);
+  });
 });
 
 describe('utils math', () => {

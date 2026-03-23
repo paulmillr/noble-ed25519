@@ -54,11 +54,15 @@ import * as ed from '@noble/ed25519';
 Only async methods are available by default, to keep the library dependency-free.
 To enable sync methods:
 
+> `npm install @noble/hashes`
+
 ```ts
+import * as ed from '@noble/ed25519';
 import { sha512 } from '@noble/hashes/sha2.js';
 ed.hashes.sha512 = sha512;
 // Sync methods can be used now:
 const { secretKey, publicKey } = ed.keygen();
+const msg = new TextEncoder().encode('hello noble');
 // const publicKey = ed.getPublicKey(secretKey);
 const sig = ed.sign(msg, secretKey);
 const isValid = ed.verify(sig, msg, publicKey);
@@ -71,6 +75,7 @@ This can't be securely polyfilled from our end, so one will need a RN-specific c
 
 ```ts
 import 'react-native-get-random-values';
+import * as ed from '@noble/ed25519';
 import { sha512 } from '@noble/hashes/sha2.js';
 ed.hashes.sha512 = sha512;
 ed.hashes.sha512Async = (m: Uint8Array) => Promise.resolve(sha512(m));
@@ -89,9 +94,11 @@ There are 4 main methods, which accept Uint8Array-s:
 
 ```typescript
 import * as ed from '@noble/ed25519';
+import { sha512 } from '@noble/hashes/sha2.js';
+ed.hashes.sha512 = sha512;
 (async () => {
-  const keys = ed.keygen(); // needs ed.hashes.sha512
-  const { secretKey, publicKey } = keys
+  const keys = ed.keygen();
+  const { secretKey, publicKey } = keys;
   const keysA = await ed.keygenAsync();
 })();
 ```
@@ -100,10 +107,13 @@ import * as ed from '@noble/ed25519';
 
 ```typescript
 import * as ed from '@noble/ed25519';
+import { sha512 } from '@noble/hashes/sha2.js';
+ed.hashes.sha512 = sha512;
 (async () => {
-  const pubKey = ed.getPublicKey(secretKeyA); // needs ed.hashes.sha512
+  const { secretKey: secretKeyA } = ed.keygen();
+  const pubKey = ed.getPublicKey(secretKeyA);
   const pubKeyA = await ed.getPublicKeyAsync(secretKeyA);
-  const pubKeyPoint = ed.Point.fromBytes(pubKeyB);
+  const pubKeyPoint = ed.Point.fromBytes(pubKey);
   const pubKeyExtended = ed.utils.getExtendedPublicKey(secretKeyA);
 })();
 ```
@@ -119,6 +129,8 @@ Generates 32-byte public key from 32-byte private key.
 
 ```ts
 import * as ed from '@noble/ed25519';
+import { sha512 } from '@noble/hashes/sha2.js';
+ed.hashes.sha512 = sha512;
 (async () => {
   const { secretKey, publicKey } = ed.keygen();
   const message = new TextEncoder().encode('hello noble');
@@ -134,14 +146,16 @@ For prehashed ed25519ph, switch to noble-curves.
 
 ```ts
 import * as ed from '@noble/ed25519';
+import { sha512 } from '@noble/hashes/sha2.js';
+ed.hashes.sha512 = sha512;
 (async () => {
   const { secretKey, publicKey } = ed.keygen();
   const message = new TextEncoder().encode('hello noble');
   const signature = ed.sign(message, secretKey);
-  const isValid = ed.verify(signature, message, pubKey);
+  const isValid = ed.verify(signature, message, publicKey);
 
-  const isValidFips = ed.verify(signature, message, pubKey, { zip215: false });
-  const isValidA = await ed.verifyAsync(signature, message, pubKey);
+  const isValidFips = ed.verify(signature, message, publicKey, { zip215: false });
+  const isValidA = await ed.verifyAsync(signature, message, publicKey);
 })();
 ```
 
@@ -292,7 +306,9 @@ v3 brings the package closer to noble-curves v2.
 - Various small changes for types and Point class
 - etc: hashes are now set in `hashes` object:
 
-```js
+```ts
+import * as ed from '@noble/ed25519';
+import { sha512 } from '@noble/hashes/sha2.js';
 // before
 ed.etc.sha512Sync = (...m: Uint8Array[]) => sha512(ed.etc.concatBytes(...m));
 ed.etc.sha512Async = (...m: Uint8Array[]) => Promise.resolve(sha512(ed.etc.concatBytes(...m)));

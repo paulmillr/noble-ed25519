@@ -40,12 +40,19 @@ export type Bytes = Uint8Array;
 /** Hex-encoded string or Uint8Array. */
 /** Edwards elliptic curve options. */
 export type EdwardsOpts = Readonly<{
+  /** Prime field modulus. */
   p: bigint;
+  /** Group order. */
   n: bigint;
+  /** Curve cofactor. */
   h: bigint;
+  /** Edwards curve parameter `a`. */
   a: bigint;
+  /** Edwards curve parameter `d`. */
   d: bigint;
+  /** Generator x coordinate. */
   Gx: bigint;
+  /** Generator y coordinate. */
   Gy: bigint;
 }>;
 
@@ -53,6 +60,7 @@ export type EdwardsOpts = Readonly<{
 
 // ## Helpers
 // ----------
+// @ts-ignore
 const captureTrace = (...args: Parameters<typeof Error.captureStackTrace>): void => {
   if ('captureStackTrace' in Error && typeof Error.captureStackTrace === 'function') {
     Error.captureStackTrace(...args);
@@ -76,7 +84,8 @@ const abytes = (value: Bytes, length?: number, title: string = ''): Bytes => {
     const prefix = title && `"${title}" `;
     const ofLen = needsLen ? ` of length ${length}` : '';
     const got = bytes ? `length=${len}` : `type=${typeof value}`;
-    err(prefix + 'expected Uint8Array' + ofLen + ', got ' + got);
+    const msg = prefix + 'expected Uint8Array' + ofLen + ', got ' + got;
+    throw bytes ? new RangeError(msg) : new TypeError(msg);
   }
   return value;
 };
@@ -132,7 +141,11 @@ const assertRange = (
   min: bigint,
   max: bigint,
   msg = 'bad number: out of range'
-): bigint => (isBig(n) && min <= n && n < max ? n : err(msg));
+): bigint => {
+  if (!isBig(n)) throw new TypeError(msg);
+  if (min <= n && n < max) return n;
+  throw new RangeError(msg);
+};
 /** modular division */
 const M = (a: bigint, b: bigint = P): bigint => {
   const r = a % b;
@@ -165,18 +178,47 @@ const callHash = (name: string) => {
   if (typeof fn !== 'function') err('hashes.' + name + ' not set');
   return fn;
 };
+/**
+ * SHA-512 helper used by the synchronous API.
+ * @param msg - Message bytes to hash.
+ * @returns 64-byte SHA-512 digest.
+ * @example
+ * Hash message bytes after wiring the synchronous SHA-512 implementation.
+ *
+ * ```ts
+ * import * as ed from '@noble/ed25519';
+ * import { sha512 } from '@noble/hashes/sha2.js';
+ *
+ * ed.hashes.sha512 = sha512;
+ * const digest = ed.hash(new Uint8Array([1, 2, 3]));
+ * ```
+ */
 const hash = (msg: Bytes): Bytes => callHash('sha512')(msg);
 const apoint = (p: unknown) => (p instanceof Point ? p : err('Point expected'));
 /** Point in 2d xy affine coordinates. */
 export type AffinePoint = {
+  /** Affine x coordinate. */
   x: bigint;
+  /** Affine y coordinate. */
   y: bigint;
 };
 // ## End of Helpers
 // -----------------
 
 const B256 = 2n ** 256n;
-/** Point in XYZT extended coordinates. */
+/**
+ * Point in XYZT extended coordinates.
+ * @param X - X coordinate.
+ * @param Y - Y coordinate.
+ * @param Z - Projective Z coordinate.
+ * @param T - Cached cross-product term.
+ * @example
+ * Do point arithmetic with the built-in base point and encode the result as hex.
+ *
+ * ```ts
+ * const hex = Point.BASE.double().toHex();
+ * ```
+ */
 class Point {
   static BASE: Point;
   static ZERO: Point;
@@ -320,8 +362,8 @@ class Point {
    * Point-by-scalar multiplication. Scalar must be in range 1 <= n < CURVE.n.
    * Uses {@link wNAF} for base point.
    * Uses fake point to mitigate side-channel leakage.
-   * @param n scalar by which point is multiplied
-   * @param safe safe mode guards against timing attacks; unsafe mode is faster
+   * @param n - scalar by which point is multiplied
+   * @param safe - safe mode guards against timing attacks; unsafe mode is faster
    */
   multiply(n: bigint, safe = true): Point {
     if (!safe && (n === 0n || this.is0())) return I;
@@ -461,10 +503,43 @@ const hash2extK = (hashed: Bytes): ExtK => {
 const getExtendedPublicKeyAsync = (secretKey: Bytes): Promise<ExtK> =>
   sha512a(abytes(secretKey, L)).then(hash2extK);
 const getExtendedPublicKey = (secretKey: Bytes): ExtK => hash2extK(sha512s(abytes(secretKey, L)));
-/** Creates 32-byte ed25519 public key from 32-byte secret key. Async. */
+/**
+ * Creates 32-byte ed25519 public key from 32-byte secret key. Async.
+ * @param secretKey - 32-byte secret key.
+ * @returns 32-byte public key.
+ * @throws On wrong argument types. {@link TypeError}
+ * @throws On wrong argument ranges or values. {@link RangeError}
+ * @example
+ * Derive the public key bytes for a newly generated signer secret.
+ *
+ * ```ts
+ * import * as ed from '@noble/ed25519';
+ *
+ * const secretKey = ed.utils.randomSecretKey();
+ * const publicKey = await ed.getPublicKeyAsync(secretKey);
+ * ```
+ */
 const getPublicKeyAsync = (secretKey: Bytes): Promise<Bytes> =>
   getExtendedPublicKeyAsync(secretKey).then((p) => p.pointBytes);
-/** Creates 32-byte ed25519 public key from 32-byte secret key. To use, set `hashes.sha512` first. */
+/**
+ * Creates 32-byte ed25519 public key from 32-byte secret key. To use, set `hashes.sha512` first.
+ * @param priv - 32-byte secret key.
+ * @returns 32-byte public key.
+ * @throws If synchronous SHA-512 has not been configured in `hashes`. {@link Error}
+ * @throws On wrong argument types. {@link TypeError}
+ * @throws On wrong argument ranges or values. {@link RangeError}
+ * @example
+ * Derive the public key entirely through the synchronous API.
+ *
+ * ```ts
+ * import * as ed from '@noble/ed25519';
+ * import { sha512 } from '@noble/hashes/sha2.js';
+ *
+ * ed.hashes.sha512 = sha512;
+ * const secretKey = ed.utils.randomSecretKey();
+ * const publicKey = ed.getPublicKey(secretKey);
+ * ```
+ */
 const getPublicKey = (priv: Bytes): Bytes => getExtendedPublicKey(priv).pointBytes;
 type Finishable<T> = {
   // Reduces logic duplication between
@@ -489,6 +564,21 @@ const _sign = (e: ExtK, rBytes: Bytes, msg: Bytes): Finishable<Bytes> => {
 /**
  * Signs message using secret key. Async.
  * Follows RFC8032 5.1.6.
+ * @param message - Message bytes to sign.
+ * @param secretKey - 32-byte secret key.
+ * @returns 64-byte Ed25519 signature.
+ * @throws On wrong argument types. {@link TypeError}
+ * @throws On wrong argument ranges or values. {@link RangeError}
+ * @example
+ * Sign an arbitrary message with a fresh Ed25519 secret key.
+ *
+ * ```ts
+ * import * as ed from '@noble/ed25519';
+ *
+ * const secretKey = ed.utils.randomSecretKey();
+ * const message = new Uint8Array([1, 2, 3]);
+ * const signature = await ed.signAsync(message, secretKey);
+ * ```
  */
 const signAsync = async (message: Bytes, secretKey: Bytes): Promise<Bytes> => {
   const m = abytes(message);
@@ -499,6 +589,23 @@ const signAsync = async (message: Bytes, secretKey: Bytes): Promise<Bytes> => {
 /**
  * Signs message using secret key. To use, set `hashes.sha512` first.
  * Follows RFC8032 5.1.6.
+ * @param message - Message bytes to sign.
+ * @param secretKey - 32-byte secret key.
+ * @returns 64-byte Ed25519 signature.
+ * @throws If synchronous SHA-512 has not been configured in `hashes`. {@link Error}
+ * @throws On wrong argument types. {@link TypeError}
+ * @throws On wrong argument ranges or values. {@link RangeError}
+ * @example
+ * Use the sync API when you've wired a SHA-512 implementation yourself.
+ *
+ * ```ts
+ * import * as ed from '@noble/ed25519';
+ * import { sha512 } from '@noble/hashes/sha2.js';
+ *
+ * ed.hashes.sha512 = sha512;
+ * const secretKey = ed.utils.randomSecretKey();
+ * const signature = ed.sign(new Uint8Array([1, 2, 3]), secretKey);
+ * ```
  */
 const sign = (message: Bytes, secretKey: Bytes): Bytes => {
   const m = abytes(message);
@@ -511,7 +618,10 @@ const sign = (message: Bytes, secretKey: Bytes): Bytes => {
  *
  * Any message with pubkey from `ED25519_TORSION_SUBGROUP` would be valid in sigs under ZIP215.
  */
-export type EdDSAVerifyOpts = { zip215?: boolean };
+export type EdDSAVerifyOpts = {
+  /** Whether to use ZIP215 verification semantics instead of strict RFC8032 handling. */
+  zip215?: boolean;
+};
 const defaultVerifyOpts: EdDSAVerifyOpts = { zip215: true };
 const _verify = (
   sig: Bytes,
@@ -553,14 +663,61 @@ const _verify = (
   return { hashable, finish };
 };
 
-/** Verifies signature on message and public key. Async. Follows RFC8032 5.1.7. */
+/**
+ * Verifies signature on message and public key. Async.
+ * Follows RFC8032 5.1.7.
+ * @param signature - 64-byte signature.
+ * @param message - Signed message bytes.
+ * @param publicKey - 32-byte public key.
+ * @param opts - Verification options. See {@link EdDSAVerifyOpts}.
+ * @returns `true` when the signature is valid.
+ * @throws On wrong argument types. {@link TypeError}
+ * @throws On wrong argument ranges or values. {@link RangeError}
+ * @example
+ * Verify the signature against the same message and derived public key.
+ *
+ * ```ts
+ * import * as ed from '@noble/ed25519';
+ *
+ * const secretKey = ed.utils.randomSecretKey();
+ * const message = new Uint8Array([1, 2, 3]);
+ * const publicKey = await ed.getPublicKeyAsync(secretKey);
+ * const signature = await ed.signAsync(message, secretKey);
+ * const isValid = await ed.verifyAsync(signature, message, publicKey);
+ * ```
+ */
 const verifyAsync = async (
   signature: Bytes,
   message: Bytes,
   publicKey: Bytes,
   opts: EdDSAVerifyOpts = defaultVerifyOpts
 ): Promise<boolean> => hashFinishA(_verify(signature, message, publicKey, opts));
-/** Verifies signature on message and public key. To use, set `hashes.sha512` first. Follows RFC8032 5.1.7. */
+/**
+ * Verifies signature on message and public key using the synchronous hash path.
+ * Follows RFC8032 5.1.7.
+ * @param signature - 64-byte signature.
+ * @param message - Signed message bytes.
+ * @param publicKey - 32-byte public key.
+ * @param opts - Verification options. See {@link EdDSAVerifyOpts}.
+ * @returns `true` when the signature is valid.
+ * @throws If synchronous SHA-512 has not been configured in `hashes`. {@link Error}
+ * @throws On wrong argument types. {@link TypeError}
+ * @throws On wrong argument ranges or values. {@link RangeError}
+ * @example
+ * Verify a signature entirely through the synchronous API.
+ *
+ * ```ts
+ * import * as ed from '@noble/ed25519';
+ * import { sha512 } from '@noble/hashes/sha2.js';
+ *
+ * ed.hashes.sha512 = sha512;
+ * const secretKey = ed.utils.randomSecretKey();
+ * const message = new Uint8Array([1, 2, 3]);
+ * const publicKey = ed.getPublicKey(secretKey);
+ * const signature = ed.sign(message, secretKey);
+ * const isValid = ed.verify(signature, message, publicKey);
+ * ```
+ */
 const verify = (
   signature: Bytes,
   message: Bytes,
@@ -568,7 +725,15 @@ const verify = (
   opts: EdDSAVerifyOpts = defaultVerifyOpts
 ): boolean => hashFinishS(_verify(signature, message, publicKey, opts));
 
-/** Math, hex, byte helpers. Not in `utils` because utils share API with noble-curves. */
+/**
+ * Math, hex, byte helpers. Not in `utils` because utils share API with noble-curves.
+ * @example
+ * Convert bytes to a hex string with the low-level helper namespace.
+ *
+ * ```ts
+ * const hex = etc.bytesToHex(new Uint8Array([1, 2, 3]));
+ * ```
+ */
 const etc = {
   bytesToHex: bytesToHex as typeof bytesToHex,
   hexToBytes: hexToBytes as typeof hexToBytes,
@@ -577,6 +742,19 @@ const etc = {
   invert: invert as typeof invert,
   randomBytes: randomBytes as typeof randomBytes,
 };
+/**
+ * Hash implementations used by the synchronous API.
+ * @example
+ * Provide a SHA-512 implementation before calling synchronous helpers.
+ *
+ * ```ts
+ * import * as ed from '@noble/ed25519';
+ * import { sha512 } from '@noble/hashes/sha2.js';
+ *
+ * ed.hashes.sha512 = sha512;
+ * const { publicKey } = ed.keygen();
+ * ```
+ */
 const hashes = {
   sha512Async: async (message: Bytes): Promise<Bytes> => {
     const s = subtle();
@@ -588,21 +766,65 @@ const hashes = {
 
 // FIPS 186 B.4.1 compliant key generation produces private keys
 // with modulo bias being neglible. takes >N+16 bytes, returns (hash mod n-1)+1
-const randomSecretKey = (seed: Bytes = randomBytes(L)): Bytes => seed;
+const randomSecretKey = (seed: Bytes = randomBytes(L)): Bytes => abytes(seed, L);
 
 type KeysSecPub = { secretKey: Bytes; publicKey: Bytes };
+/**
+ * Generates a secret/public keypair.
+ * @param seed - Optional 32-byte seed.
+ * @returns Keypair with `secretKey` and `publicKey`.
+ * @throws If synchronous SHA-512 has not been configured in `hashes`. {@link Error}
+ * @throws On wrong argument types. {@link TypeError}
+ * @throws On wrong argument ranges or values. {@link RangeError}
+ * @example
+ * Generate a new keypair through the synchronous API after wiring SHA-512.
+ *
+ * ```ts
+ * import * as ed from '@noble/ed25519';
+ * import { sha512 } from '@noble/hashes/sha2.js';
+ *
+ * ed.hashes.sha512 = sha512;
+ * const { secretKey, publicKey } = ed.keygen();
+ * ```
+ */
 const keygen = (seed?: Bytes): KeysSecPub => {
   const secretKey = randomSecretKey(seed);
   const publicKey = getPublicKey(secretKey);
   return { secretKey, publicKey };
 };
+/**
+ * Generates a secret/public keypair asynchronously.
+ * @param seed - Optional 32-byte seed.
+ * @returns Keypair with `secretKey` and `publicKey`.
+ * @throws On wrong argument types. {@link TypeError}
+ * @throws On wrong argument ranges or values. {@link RangeError}
+ * @example
+ * Generate a new keypair through the asynchronous WebCrypto-backed path.
+ *
+ * ```ts
+ * import * as ed from '@noble/ed25519';
+ *
+ * const { secretKey, publicKey } = await ed.keygenAsync();
+ * ```
+ */
 const keygenAsync = async (seed?: Bytes): Promise<KeysSecPub> => {
   const secretKey = randomSecretKey(seed);
   const publicKey = await getPublicKeyAsync(secretKey);
   return { secretKey, publicKey };
 };
 
-/** ed25519-specific key utilities. */
+/**
+ * Ed25519-specific key utilities.
+ * @example
+ * Generate a new Ed25519 secret key and derive the matching public key.
+ *
+ * ```ts
+ * import * as ed from '@noble/ed25519';
+ *
+ * const secretKey = ed.utils.randomSecretKey();
+ * const publicKey = await ed.getPublicKeyAsync(secretKey);
+ * ```
+ */
 const utils = {
   getExtendedPublicKeyAsync: getExtendedPublicKeyAsync as typeof getExtendedPublicKeyAsync,
   getExtendedPublicKey: getExtendedPublicKey as typeof getExtendedPublicKey,
@@ -699,5 +921,6 @@ export {
   signAsync,
   utils,
   verify,
-  verifyAsync,
+  verifyAsync
 };
+
