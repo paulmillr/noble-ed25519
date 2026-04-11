@@ -7,7 +7,7 @@ Fastest 5KB JS implementation of ed25519 signatures.
 - 🪢 Consensus-friendly, compliant with [ZIP215](https://zips.z.cash/zip-0215)
 - 🔖 SUF-CMA (strong unforgeability under chosen message attacks) and
   SBS (non-repudiation / exclusive ownership)
-- 🪶 3.7KB (gzipped)
+- 🪶 3.9KB (gzipped)
 
 The module is a sister project of [noble-curves](https://github.com/paulmillr/noble-curves).
 Use noble-ed25519 if you need smaller attack surface & better auditability.
@@ -270,30 +270,6 @@ Consider switching to newer / hybrid algorithms, such as SPHINCS+. They are avai
 
 NIST prohibits classical cryptography (RSA, DSA, ECDSA, ECDH) [after 2035](https://nvlpubs.nist.gov/nistpubs/ir/2024/NIST.IR.8547.ipd.pdf). Australian ASD prohibits it [after 2030](https://www.cyber.gov.au/resources-business-and-government/essential-cyber-security/ism/cyber-security-guidelines/guidelines-cryptography).
 
-## Speed
-
-    npm run bench
-
-Benchmarks measured with Apple M4.
-
-    init 11ms
-    keygen x 11,253 ops/sec @ 88μs/op
-    sign x 5,891 ops/sec @ 169μs/op
-    verify x 1,281 ops/sec @ 780μs/op
-
-    keygenAsync x 10,205 ops/sec @ 97μs/op
-    signAsync x 4,985 ops/sec @ 200μs/op
-    verifyAsync x 1,286 ops/sec @ 777μs/op
-
-    Point.fromBytes x 22,811 ops/sec @ 43μs/op
-
-Compare to alternative implementations:
-
-    tweetnacl@1.0.3 getPublicKey x 1,808 ops/sec @ 552μs/op ± 1.64%
-    tweetnacl@1.0.3 sign x 651 ops/sec @ 1ms/op
-    ristretto255@0.1.2 getPublicKey x 640 ops/sec @ 1ms/op ± 1.59%
-    sodium-native#sign x 83,654 ops/sec @ 11μs/op
-
 ## Upgrading
 
 ### v2 to v3
@@ -353,6 +329,31 @@ Other changes for upgrading from @noble/ed25519 1.7 to 2.0:
 See [paulmillr.com/noble](https://paulmillr.com/noble/)
 for useful resources, articles, documentation and demos
 related to the library.
+
+## Speed
+
+    npm run bench
+
+Benchmarks measured with Apple M4.
+
+    init 11ms
+    keygen x 14,467 ops/sec @ 69μs/op
+    sign x 7,275 ops/sec @ 137μs/op
+    verify x 2,004 ops/sec @ 498μs/op
+
+    keygenAsync x 12,822 ops/sec @ 77μs/op
+    signAsync x 5,902 ops/sec @ 169μs/op
+    verifyAsync x 1,955 ops/sec @ 511μs/op
+
+    Point.fromBytes x 36,545 ops/sec @ 27μs/op
+
+
+Compare to alternative implementations:
+
+    tweetnacl@1.0.3 getPublicKey x 1,808 ops/sec @ 552μs/op ± 1.64%
+    tweetnacl@1.0.3 sign x 651 ops/sec @ 1ms/op
+    ristretto255@0.1.2 getPublicKey x 640 ops/sec @ 1ms/op ± 1.59%
+    sodium-native#sign x 83,654 ops/sec @ 11μs/op
 
 ## License
 

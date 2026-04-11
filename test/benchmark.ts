@@ -12,7 +12,7 @@ import * as curve from '../index.ts';
       keys = curve.keygen();
       sig = curve.sign(msg, keys.secretKey);
     },
-    1
+    { mode: 'runOnce' }
   );
   await mark('keygen', () => curve.keygen());
   await mark('sign', () => curve.sign(msg, keys.secretKey));
