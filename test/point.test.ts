@@ -1,34 +1,17 @@
-import { describe, should } from '@paulmillr/jsbt/test.js';
 import * as fc from 'fast-check';
+import { describe, should } from '@paulmillr/jsbt/test.js';
 import { deepStrictEqual as eql, throws } from 'node:assert';
-import * as ed25519 from '../index.ts';
-import './ed25519.helpers.ts';
 import { getTypeTests } from './utils.ts';
-const { invert, mod, bytesToHex: hex, hexToBytes } = ed25519.etc;
-
-// prettier-ignore
-const CURVES = {
-  ed25519,
-};
-function getOtherCurve(_currCurveName) {
-  class Point {
-    constructor() {}
-    add() {
-      throw new Error('1');
-    }
-    subtract() {
-      throw new Error('1');
-    }
-    multiply() {
-      throw new Error('1');
-    }
-    multiplyUnsafe() {}
-    static fromAffine() {
-      throw new Error('1');
-    }
-  }
-  return { Point };
-}
+import {
+  CURVES,
+  getOtherCurve,
+  hex,
+  hexToBytes,
+  invert,
+  mod,
+  pippenger,
+  precomputeMSMUnsafe,
+} from './point.helpers.ts';
 
 const NUM_RUNS = 5;
 function hexa() {
@@ -440,21 +423,28 @@ describe('basic curve tests', () => {
             fc.property(FC_HEX, (msgh) => {
               const msg = hexToBytes(msgh);
               const priv = C.utils.randomSecretKey();
-              const sigb = C.sign(msg, priv, { format: 'recovered' });
-              const sig = C.Signature.fromBytes(sigb, 'recovered');
+              const sigb = C.sign(msg, priv);
+              const sig = C.Signature.fromBytes(sigb);
               const sigRS = (sig) => ({ s: sig.s, r: sig.r });
               const hasToHex = !!C.Signature.fromHex;
+
               let f = 'compact';
-              if (hasToHex) eql(sigRS(C.Signature.fromHex(sig.toHex(f), f)), sigRS(sig));
               eql(sigRS(C.Signature.fromBytes(sig.toBytes(f), f)), sigRS(sig));
-              f = 'recovered';
               if (hasToHex) eql(sigRS(C.Signature.fromHex(sig.toHex(f), f)), sigRS(sig));
-              eql(sigRS(C.Signature.fromBytes(sig.toBytes(f), f)), sigRS(sig));
+
+              if (C.Point.CURVE().h <= 2n) {
+                f = 'recovered';
+                const sigrb = C.sign(msg, priv, { format: f });
+                const sigr = C.Signature.fromBytes(sigrb, f);
+                eql(sigRS(C.Signature.fromBytes(sigr.toBytes(f), f)), sigRS(sigr));
+                if (hasToHex) eql(sigRS(C.Signature.fromHex(sigr.toHex(f), f)), sigRS(sigr));
+              }
+
               const isNobleCurves = !!C.Point.Fp;
               if (isNobleCurves) {
                 f = 'der';
-                if (hasToHex) eql(sigRS(C.Signature.fromHex(sig.toHex(f), f)), sigRS(sig));
                 eql(sigRS(C.Signature.fromBytes(sig.toBytes(f), f)), sigRS(sig));
+                if (hasToHex) eql(sigRS(C.Signature.fromHex(sig.toHex(f), f)), sigRS(sig));
               }
             }),
             { numRuns: NUM_RUNS }
@@ -463,9 +453,8 @@ describe('basic curve tests', () => {
         should('Signature.addRecoveryBit/Signature.recoverPublicKey', () =>
           fc.assert(
             fc.property(FC_HEX, (msgh) => {
+              if (C.Point.CURVE().h > 2) return; // unsupported, see k2sig
               const msg = hexToBytes(msgh);
-              // const priv = C.utils.randomSecretKey();
-              // const pub = C.getPublicKey(priv);
               const keys = C.keygen();
               const sigb = C.sign(msg, keys.secretKey, { format: 'recovered' });
               const sig = C.Signature.fromBytes(sigb, 'recovered');

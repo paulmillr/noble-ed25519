@@ -1,7 +1,7 @@
 /*! noble-ed25519 - MIT License (c) 2019 Paul Miller (paulmillr.com) */
 /**
  * 5KB JS implementation of ed25519 EdDSA signatures.
- * Compliant with RFC8032, FIPS 186-5 & ZIP215.
+ * Targets RFC8032, FIPS 186-5, and ZIP215 behavior.
  * @module
  * @example
  * ```js
@@ -16,15 +16,19 @@ import * as ed from '@noble/ed25519';
 ```
  */
 /**
- * Curve params. ed25519 is twisted edwards curve. Equation is −x² + y² = -a + dx²y².
+ * Curve params. edwards25519 uses the RFC equation `-x² + y² = 1 + dx²y²`.
+ * The stored `a` literal below is `p - 1`, i.e. the field-element encoding of RFC `a = -1`.
  * * P = `2n**255n - 19n` // field over which calculations are done
- * * N = `2n**252n + 27742317777372353535851937790883648493n` // group order, amount of curve points
+ * * N = `2n**252n + 27742317777372353535851937790883648493n` // prime-order subgroup order
  * * h = 8 // cofactor
- * * a = `Fp.create(BigInt(-1))` // equation param
+ * * a = `Fp.create(BigInt(-1))` // equation param, stored here as `p - 1`
  * * d = -121665/121666 a.k.a. `Fp.neg(121665 * Fp.inv(121666))` // equation param
  * * Gx, Gy are coordinates of Generator / base point
+ *
+ * Mirror noble-curves: Point.CURVE() exposes shared params, but callers must not be able to mutate
+ * that shared view and desynchronize it from the arithmetic constants captured below.
  */
-const ed25519_CURVE = {
+const ed25519_CURVE = Object.freeze({
     p: 0x7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffedn,
     n: 0x1000000000000000000000000000000014def9dea2f79cd65812631a5cf5d3edn,
     h: 8n,
@@ -32,9 +36,9 @@ const ed25519_CURVE = {
     d: 0x52036cee2b6ffe738cc740797779e89800700a4d4141d8ab75eb4dca135978a3n,
     Gx: 0x216936d3cd6e53fec0a4e231fdd6dc5c692cc7609525a7b2c9562d608f25d51an,
     Gy: 0x6666666666666666666666666666666666666666666666666666666666666658n,
-};
+});
 const { p: P, n: N, Gx, Gy, a: _a, d: _d, h } = ed25519_CURVE;
-const L = 32; // field / group byte length
+const L = 32; // shared 32-byte encoded width for Ed25519 points, scalars, signatures, and keys
 // Helpers and Precomputes sections are reused between libraries
 // ## Helpers
 // ----------
@@ -51,8 +55,18 @@ const err = (message = '') => {
 };
 const isBig = (n) => typeof n === 'bigint'; // is big integer
 const isStr = (s) => typeof s === 'string'; // is string
-const isBytes = (a) => a instanceof Uint8Array || (ArrayBuffer.isView(a) && a.constructor.name === 'Uint8Array');
-/** Asserts something is Uint8Array. */
+// Plain `instanceof Uint8Array` is too strict for some Buffer / proxy / cross-realm cases. The
+// fallback still requires a real ArrayBuffer view so plain JSON-deserialized `{ constructor: ... }`
+// spoofing is rejected, and `BYTES_PER_ELEMENT === 1` keeps the fallback on byte-oriented views.
+const isBytes = (a) => a instanceof Uint8Array ||
+    (ArrayBuffer.isView(a) &&
+        a.constructor.name === 'Uint8Array' &&
+        'BYTES_PER_ELEMENT' in a &&
+        a.BYTES_PER_ELEMENT === 1);
+/**
+ * Asserts something is Bytes, optionally enforces exact length,
+ * and returns the same reference.
+ */
 const abytes = (value, length, title = '') => {
     const bytes = isBytes(value);
     const len = value?.length;
@@ -68,8 +82,11 @@ const abytes = (value, length, title = '') => {
 };
 /** create Uint8Array */
 const u8n = (len) => new Uint8Array(len);
+// Clone helper used before in-place byte edits such as sign-bit clearing or endian reversal.
 const u8fr = (buf) => Uint8Array.from(buf);
+// Left-pad hex to a caller-chosen width. Width enforcement/truncation policy stays with callers.
 const padh = (n, pad) => n.toString(16).padStart(pad, '0');
+// Lowercase hex serializer.
 const bytesToHex = (b) => Array.from(abytes(b))
     .map((e) => padh(e, 2))
     .join('');
@@ -83,6 +100,7 @@ const _ch = (ch) => {
         return ch - (C.a - 10); // 'b' => 98-(97-10)
     return;
 };
+// Accepts both uppercase and lowercase hex; all parse failures intentionally collapse to `hex invalid`.
 const hexToBytes = (hex) => {
     const e = 'hex invalid';
     if (!isStr(hex))
@@ -102,21 +120,28 @@ const hexToBytes = (hex) => {
     }
     return array;
 };
-const cr = () => globalThis?.crypto; // WebCrypto is available in all modern environments
+const cr = () => globalThis?.crypto; // Optional WebCrypto lookup; sync code still handles absence.
+// Async-path capability helper for WebCrypto-backed APIs.
 const subtle = () => cr()?.subtle ?? err('crypto.subtle must be defined, consider polyfill');
 // prettier-ignore
 const concatBytes = (...arrs) => {
-    const r = u8n(arrs.reduce((sum, a) => sum + abytes(a).length, 0)); // create u8a of summed length
+    // Argument order is transcript-significant for hash/signature callers, and input validation here
+    // intentionally reuses `abytes(...)` without making defensive copies of the source chunks.
+    let len = 0;
+    for (const a of arrs)
+        len += abytes(a).length;
+    const r = u8n(len); // create u8a of summed length
     let pad = 0; // walk through each array,
     arrs.forEach(a => { r.set(a, pad); pad += a.length; }); // ensure they have proper type
     return r;
 };
-/** WebCrypto OS-level CSPRNG (random number generator). Will throw when not available. */
+/** WebCrypto OS-level CSPRNG (random number generator). Absence still fails later via `cr()`. */
 const randomBytes = (len = L) => {
     const c = cr();
     return c.getRandomValues(u8n(len));
 };
 const big = BigInt;
+/** Inclusive-lower, exclusive-upper bigint range assertion. */
 const assertRange = (n, min, max, msg = 'bad number: out of range') => {
     if (!isBig(n))
         throw new TypeError(msg);
@@ -124,12 +149,15 @@ const assertRange = (n, min, max, msg = 'bad number: out of range') => {
         return n;
     throw new RangeError(msg);
 };
-/** modular division */
+/** Canonical modular reduction into `[0, b)`. */
 const M = (a, b = P) => {
     const r = a % b;
     return r >= 0n ? r : b + r;
 };
+// Low-255-bit mask used by the `2^255 - 19` fast reduction in `modP(...)`.
 const P_MASK = (1n << 255n) - 1n;
+// Fast reduction for the special prime `2^255 - 19`. This path assumes nonnegative inputs; the
+// generic fallback would simply be `M(num, P)`.
 const modP = (num) => {
     // return M(num, P);
     if (num < 0n)
@@ -138,8 +166,10 @@ const modP = (num) => {
     r = (r >> 255n) * 19n + (r & P_MASK);
     return r % P;
 };
+// Reduce modulo the subgroup order stored in implementation constant `N` (RFC 8032's `L`).
 const modN = (a) => M(a, N);
-/** Modular inversion using euclidean GCD (non-CT). No negative exponent for now. */
+/** Modular inversion using Euclidean GCD (non-CT) instead of the RFC's `x^(p-2)` formulation.
+ * This still sits on secret-dependent paths like point normalization during keygen/signing. */
 // prettier-ignore
 const invert = (num, md) => {
     if (num === 0n || md <= 0n)
@@ -152,6 +182,9 @@ const invert = (num, md) => {
     }
     return b === 1n ? M(x, md) : err('no inverse'); // b is gcd at this point
 };
+// Dynamic lookup keeps sync/async hash providers configurable at runtime. Both exported slots are
+// caller-owned and may be unset; wrapper helpers use this lookup first and then enforce the digest
+// contract instead of trusting provider output.
 const callHash = (name) => {
     // @ts-ignore
     const fn = hashes[name];
@@ -159,6 +192,9 @@ const callHash = (name) => {
         err('hashes.' + name + ' not set');
     return fn;
 };
+// Both provider slots are configurable API surface and may return arbitrary values, so callers must
+// enforce the promised 64-byte SHA-512 digest contract here instead of trusting provider output.
+const checkDigest = (value) => abytes(value, 64, 'digest');
 /**
  * SHA-512 helper used by the synchronous API.
  * @param msg - Message bytes to hash.
@@ -174,10 +210,15 @@ const callHash = (name) => {
  * const digest = ed.hash(new Uint8Array([1, 2, 3]));
  * ```
  */
-const hash = (msg) => callHash('sha512')(msg);
+// Public helper validates the message boundary explicitly; the configured provider is still looked
+// up dynamically and its output is checked with `checkDigest(...)`.
+const hash = (msg) => checkDigest(callHash('sha512')(abytes(msg, undefined, 'message')));
+// Runtime class guard: this is `instanceof Point`, so cross-realm / duplicate-bundle Point objects
+// are rejected even if they are structurally identical.
 const apoint = (p) => (p instanceof Point ? p : err('Point expected'));
 // ## End of Helpers
 // -----------------
+// Exclusive upper bound `2^256` used by 32-byte decode/serialization range checks.
 const B256 = 2n ** 256n;
 /**
  * Point in XYZT extended coordinates.
@@ -199,6 +240,8 @@ class Point {
     Y;
     Z;
     T;
+    // Constructor only bounds-checks and freezes XYZT coordinates; it does not prove the point is
+    // on-curve or that T matches X*Y/Z.
     constructor(X, Y, Z, T) {
         const max = B256;
         this.X = assertRange(X, 0n, max);
@@ -213,7 +256,7 @@ class Point {
     static fromAffine(p) {
         return new Point(p.x, p.y, 1n, modP(p.x * p.y));
     }
-    /** RFC8032 5.1.3: Uint8Array to Point. */
+    /** RFC8032 5.1.3: Bytes to Point. */
     static fromBytes(hex, zip215 = false) {
         const d = _d;
         // Copy array to not mess it up.
@@ -222,8 +265,8 @@ class Point {
         const lastByte = hex[31];
         normed[31] = lastByte & ~0x80;
         const y = bytesToNumberLE(normed);
-        // zip215=true:           0 <= y < 2^256
-        // zip215=false, RFC8032: 0 <= y < 2^255-19
+        // After clearing the sign bit, parsed `y` is always < 2^255. ZIP-215 still accepts the full
+        // post-mask range here, while strict RFC8032 decoding further requires `y < p`.
         const max = zip215 ? B256 : P;
         assertRange(y, 0n, max);
         const y2 = modP(y * y); // y²
@@ -234,6 +277,8 @@ class Point {
             err('bad point: y not sqrt'); // not square root: bad point
         const isXOdd = (x & 1n) === 1n; // adjust sign of x coordinate
         const isLastByteOdd = (lastByte & 0x80) !== 0; // x_0, last bit
+        // ZIP-215-compatible decoding keeps the x=0 / sign-bit=1 encoding accepted; strict RFC 8032
+        // rejects it, but the vendored ZIP-215 compliance vectors include this form in A/R bytes.
         if (!zip215 && x === 0n && isLastByteOdd)
             err('bad point: x==0, isLastByteOdd'); // x=0, x_0=1
         if (isLastByteOdd !== isXOdd)
@@ -254,6 +299,8 @@ class Point {
         const a = _a;
         const d = _d;
         const p = this;
+        // Intentional stricter-than-on-curve policy: reject ZERO by default because many protocols
+        // require a non-zero point, and silently accepting identity points is a common caller mistake.
         if (p.is0())
             return err('bad point: ZERO'); // TODO: optimize, with vars below?
         // Equation in affine coordinates: ax² + y² = 1 + dx²y²
@@ -337,16 +384,21 @@ class Point {
         return this.add(apoint(other).negate());
     }
     /**
-     * Point-by-scalar multiplication. Scalar must be in range 1 <= n < CURVE.n.
+     * Point-by-scalar multiplication. Safe mode requires `1 <= n < CURVE.n`.
+     * Unsafe mode additionally permits `n = 0` and returns the identity point for that case.
      * Uses {@link wNAF} for base point.
      * Uses fake point to mitigate side-channel leakage.
      * @param n - scalar by which point is multiplied
      * @param safe - safe mode guards against timing attacks; unsafe mode is faster
      */
     multiply(n, safe = true) {
-        if (!safe && (n === 0n || this.is0()))
+        // Mirror noble-curves: unsafe mode still validates scalar range first, but intentionally keeps
+        // `n = 0` as the one extra accepted case used by verification-style callers.
+        if (!safe && n === 0n)
             return I;
         assertRange(n, 1n, N);
+        if (!safe && this.is0())
+            return I;
         if (n === 1n)
             return this;
         if (this.equals(G))
@@ -370,7 +422,7 @@ class Point {
     /** Convert point to 2d xy affine point. (X, Y, Z) ∋ (x=X/Z, y=Y/Z) */
     toAffine() {
         const { X, Y, Z } = this;
-        // fast-paths for ZERO point OR Z=1
+        // Fast-path only for the identity point; all other inputs still go through inversion.
         if (this.equals(I))
             return { x: 0n, y: 1n };
         const iz = invert(Z, P);
@@ -414,9 +466,12 @@ const I = new Point(0n, 1n, 1n, 0n);
 Point.BASE = G;
 Point.ZERO = I;
 const numTo32bLE = (num) => hexToBytes(padh(assertRange(num, 0n, B256), 64)).reverse();
+// Caller-enforced width: some sites require 32-byte RFC encodings, while others intentionally feed
+// wider SHA-512 output chunks through the same little-endian parser.
 const bytesToNumberLE = (b) => big('0x' + bytesToHex(u8fr(abytes(b)).reverse()));
 const pow2 = (x, power) => {
     // pow2(x, 4) == x^(2^4)
+    // Negative `power` values are not rejected here and currently leave `x` unchanged.
     let r = x;
     while (power-- > 0n) {
         r = modP(r * r);
@@ -429,18 +484,19 @@ const pow_2_252_3 = (x) => {
     const b2 = modP(x2 * x); // x^3,       bits 11
     const b4 = modP(pow2(b2, 2n) * b2); // x^(2^4-1), bits 1111
     const b5 = modP(pow2(b4, 1n) * x); // x^(2^5-1), bits 11111
-    const b10 = modP(pow2(b5, 5n) * b5); // x^(2^10)
-    const b20 = modP(pow2(b10, 10n) * b10); // x^(2^20)
-    const b40 = modP(pow2(b20, 20n) * b20); // x^(2^40)
-    const b80 = modP(pow2(b40, 40n) * b40); // x^(2^80)
-    const b160 = modP(pow2(b80, 80n) * b80); // x^(2^160)
-    const b240 = modP(pow2(b160, 80n) * b80); // x^(2^240)
-    const b250 = modP(pow2(b240, 10n) * b10); // x^(2^250)
-    const pow_p_5_8 = modP(pow2(b250, 2n) * x); // < To pow to (p+3)/8, multiply it by x.
+    const b10 = modP(pow2(b5, 5n) * b5); // x^(2^10-1)
+    const b20 = modP(pow2(b10, 10n) * b10); // x^(2^20-1)
+    const b40 = modP(pow2(b20, 20n) * b20); // x^(2^40-1)
+    const b80 = modP(pow2(b40, 40n) * b40); // x^(2^80-1)
+    const b160 = modP(pow2(b80, 80n) * b80); // x^(2^160-1)
+    const b240 = modP(pow2(b160, 80n) * b80); // x^(2^240-1)
+    const b250 = modP(pow2(b240, 10n) * b10); // x^(2^250-1)
+    const pow_p_5_8 = modP(pow2(b250, 2n) * x); // x^((p-5)/8), used by RFC8032 point decode
     return { pow_p_5_8, b2 };
 };
-const RM1 = 0x2b8324804fc1df0b2b4d00993dfbd7a72f431806ad2fe478c4ee1b274a0ea0b0n; // √-1
-// for sqrt comp
+const RM1 = 0x2b8324804fc1df0b2b4d00993dfbd7a72f431806ad2fe478c4ee1b274a0ea0b0n; // 2^((p-1)/4) = sqrt(-1)
+// RFC8032 §5.1.3 square-root helper for point decompression. `value` is only meaningful when
+// `isValid` is true; callers are also expected to pass canonical field elements with non-zero `v`.
 // prettier-ignore
 const uvRatio = (u, v) => {
     const v3 = modP(v * modP(v * v)); // v³
@@ -461,13 +517,15 @@ const uvRatio = (u, v) => {
         x = M(-x); // edIsNegative
     return { isValid: useRoot1 || useRoot2, value: x };
 };
-// N == L, just weird naming
+// Implementation `N` is the subgroup order; `L` is only the shared 32-byte encoded width constant.
+// Reduce any little-endian byte string modulo the subgroup order; the `hash` name reflects the
+// common caller shape, not an input restriction.
 const modL_LE = (hash) => modN(bytesToNumberLE(hash)); // modulo L; but little-endian
-/** hashes.sha512 should conform to the interface. */
-// TODO: rename
-const sha512a = (...m) => hashes.sha512Async(concatBytes(...m)); // Async SHA512
-const sha512s = (...m) => callHash('sha512')(concatBytes(...m));
-// RFC8032 5.1.5
+// Both sync and async SHA-512 slots are exported/configurable; use `callHash(...)` for both so
+// missing async overrides fail explicitly, then validate the returned digest type/length.
+const sha512a = (...m) => Promise.resolve(callHash('sha512Async')(concatBytes(...m))).then(checkDigest);
+const sha512s = (...m) => checkDigest(callHash('sha512')(concatBytes(...m)));
+// RFC8032 5.1.5. Split the 64-byte hashed seed into the clamped scalar half and nonce prefix.
 const hash2extK = (hashed) => {
     // slice creates a copy, unlike subarray
     const head = hashed.slice(0, 32);
@@ -475,7 +533,9 @@ const hash2extK = (hashed) => {
     head[31] &= 127; // 0b0111_1111
     head[31] |= 64; // 0b0100_0000
     const prefix = hashed.slice(32, 64); // secret key "prefix"
-    const scalar = modL_LE(head); // modular division over curve order
+    // RFC words this as `[s]B`; reducing the clamped little-endian scalar modulo `N` is equivalent
+    // for base-point multiplication because `G` already has subgroup order `N`.
+    const scalar = modL_LE(head);
     const point = G.multiply(scalar); // public key point
     const pointBytes = point.toBytes(); // point serialized to Uint8Array
     return { head, prefix, scalar, point, pointBytes };
@@ -484,8 +544,8 @@ const hash2extK = (hashed) => {
 const getExtendedPublicKeyAsync = (secretKey) => sha512a(abytes(secretKey, L)).then(hash2extK);
 const getExtendedPublicKey = (secretKey) => hash2extK(sha512s(abytes(secretKey, L)));
 /**
- * Creates 32-byte ed25519 public key from 32-byte secret key. Async.
- * @param secretKey - 32-byte secret key.
+ * Creates a 32-byte Ed25519 public key from the RFC 8032 32-byte secret-key seed. Async.
+ * @param secretKey - 32-byte RFC 8032 secret-key seed, not a 64-byte expanded secret key.
  * @returns 32-byte public key.
  * @throws On wrong argument types. {@link TypeError}
  * @throws On wrong argument ranges or values. {@link RangeError}
@@ -501,8 +561,9 @@ const getExtendedPublicKey = (secretKey) => hash2extK(sha512s(abytes(secretKey, 
  */
 const getPublicKeyAsync = (secretKey) => getExtendedPublicKeyAsync(secretKey).then((p) => p.pointBytes);
 /**
- * Creates 32-byte ed25519 public key from 32-byte secret key. To use, set `hashes.sha512` first.
- * @param priv - 32-byte secret key.
+ * Creates a 32-byte Ed25519 public key from the RFC 8032 32-byte secret-key seed.
+ * To use, set `hashes.sha512` first.
+ * @param priv - 32-byte RFC 8032 secret-key seed, not a 64-byte expanded secret key.
  * @returns 32-byte public key.
  * @throws If synchronous SHA-512 has not been configured in `hashes`. {@link Error}
  * @throws On wrong argument types. {@link TypeError}
@@ -526,12 +587,16 @@ const hashFinishS = (res) => res.finish(sha512s(res.hashable));
 const _sign = (e, rBytes, msg) => {
     const { pointBytes: P, scalar: s } = e;
     const r = modL_LE(rBytes); // r was created outside, reduce it modulo L
+    // RFC 8032 5.1.6 allows r mod L = 0, and SUPERCOP ref10 accepts the resulting identity-point
+    // signature.
+    // We intentionally keep the safe multiply() rejection here so a miswired all-zero SHA-512 provider
+    // fails loudly instead of silently producing a degenerate signature.
     const R = G.multiply(r).toBytes(); // R = [r]B
     const hashable = concatBytes(R, P, msg); // dom2(F, C) || R || A || PH(M)
     const finish = (hashed) => {
         // k = SHA512(dom2(F, C) || R || A || PH(M))
         const S = modN(r + modL_LE(hashed) * s); // S = (r + k * s) mod L; 0 <= s < l
-        return abytes(concatBytes(R, numTo32bLE(S)), 64); // 64-byte sig: 32b R.x + 32b LE(S)
+        return abytes(concatBytes(R, numTo32bLE(S)), 64); // 64-byte sig: 32-byte encoded R point || 32-byte LE(S)
     };
     return { hashable, finish };
 };
@@ -539,7 +604,7 @@ const _sign = (e, rBytes, msg) => {
  * Signs message using secret key. Async.
  * Follows RFC8032 5.1.6.
  * @param message - Message bytes to sign.
- * @param secretKey - 32-byte secret key.
+ * @param secretKey - 32-byte RFC 8032 secret-key seed, not a 64-byte expanded secret key.
  * @returns 64-byte Ed25519 signature.
  * @throws On wrong argument types. {@link TypeError}
  * @throws On wrong argument ranges or values. {@link RangeError}
@@ -564,7 +629,7 @@ const signAsync = async (message, secretKey) => {
  * Signs message using secret key. To use, set `hashes.sha512` first.
  * Follows RFC8032 5.1.6.
  * @param message - Message bytes to sign.
- * @param secretKey - 32-byte secret key.
+ * @param secretKey - 32-byte RFC 8032 secret-key seed, not a 64-byte expanded secret key.
  * @returns 64-byte Ed25519 signature.
  * @throws If synchronous SHA-512 has not been configured in `hashes`. {@link Error}
  * @throws On wrong argument types. {@link TypeError}
@@ -587,12 +652,17 @@ const sign = (message, secretKey) => {
     const rBytes = sha512s(e.prefix, m); // r = SHA512(dom2(F, C) || prefix || PH(M))
     return hashFinishS(_sign(e, rBytes, m)); // gen R, k, S, then 64-byte signature
 };
+// Exported defaults favor ZIP-215 interoperability semantics; callers must opt into the stricter
+// branch with `{ zip215: false }`.
 const defaultVerifyOpts = { zip215: true };
 const _verify = (sig, msg, publicKey, options = defaultVerifyOpts) => {
     sig = abytes(sig, 64); // Signature hex str/Bytes, must be 64 bytes
     msg = abytes(msg); // Message hex str/Bytes
     publicKey = abytes(publicKey, L);
-    const { zip215 } = options; // switch between zip215 and rfc8032 verif
+    // zip215=false keeps the library's stricter branch, which still canonicalizes `R` / `A` before
+    // hashing and rejects small-order public keys earlier than pure RFC8032 text would require.
+    // Preserve the exported ZIP-215 default for `{}` / `{ zip215: undefined }`, not just omitted opts.
+    const { zip215 = true } = options;
     const r = sig.subarray(0, L);
     const s = bytesToNumberLE(sig.subarray(L, L * 2)); // Decode second half as an integer S;
     let A, R, SB;
@@ -605,15 +675,20 @@ const _verify = (sig, msg, publicKey, options = defaultVerifyOpts) => {
         A = Point.fromBytes(publicKey, zip215);
         R = Point.fromBytes(r, zip215);
         SB = G.multiply(s, false); // 0 <= s < l is done inside
-        hashable = concatBytes(R.toBytes(), A.toBytes(), msg); // dom2(F, C) || R || A || PH(M)
+        // ZIP-215 accepts noncanonical / unreduced point encodings, so the challenge hash must use the
+        // exact signature/public-key bytes rather than canonicalized re-encodings of the decoded points.
+        hashable = concatBytes(r, publicKey, msg); // dom2(F, C) || R || A || PH(M)
         finished = true;
     }
     catch (error) { }
     const finish = (hashed) => {
         if (!finished)
             return false;
+        // Policy: strict mode intentionally rejects all small-order public keys, even though the raw RFC
+        // equation text is looser here. This matches libsodium and avoids weak / ambiguous verification
+        // outcomes where unusual low-order public keys can make distinct key/signature combinations verify.
         if (!zip215 && A.isSmallOrder())
-            return false; // zip215 allows public keys of small order
+            return false;
         // k = SHA512(dom2(F, C) || R || A || PH(M))
         const k = modL_LE(hashed);
         const RkA = R.add(A.multiply(k, false));
@@ -624,12 +699,13 @@ const _verify = (sig, msg, publicKey, options = defaultVerifyOpts) => {
     return { hashable, finish };
 };
 /**
- * Verifies signature on message and public key. Async.
- * Follows RFC8032 5.1.7.
+ * Verifies a signature on message and public key. Async.
+ * The implementation is based on RFC8032 5.1.7, but default opts use ZIP-215 semantics; pass
+ * `{ zip215: false }` for the library's stricter branch.
  * @param signature - 64-byte signature.
  * @param message - Signed message bytes.
  * @param publicKey - 32-byte public key.
- * @param opts - Verification options. See {@link EdDSAVerifyOpts}.
+ * @param opts - Verification options. Defaults to ZIP-215 semantics. See {@link EdDSAVerifyOpts}.
  * @returns `true` when the signature is valid.
  * @throws On wrong argument types. {@link TypeError}
  * @throws On wrong argument ranges or values. {@link RangeError}
@@ -648,12 +724,13 @@ const _verify = (sig, msg, publicKey, options = defaultVerifyOpts) => {
  */
 const verifyAsync = async (signature, message, publicKey, opts = defaultVerifyOpts) => hashFinishA(_verify(signature, message, publicKey, opts));
 /**
- * Verifies signature on message and public key using the synchronous hash path.
- * Follows RFC8032 5.1.7.
+ * Verifies a signature on message and public key using the synchronous hash path.
+ * The implementation is based on RFC8032 5.1.7, but default opts use ZIP-215 semantics; pass
+ * `{ zip215: false }` for the library's stricter branch.
  * @param signature - 64-byte signature.
  * @param message - Signed message bytes.
  * @param publicKey - 32-byte public key.
- * @param opts - Verification options. See {@link EdDSAVerifyOpts}.
+ * @param opts - Verification options. Defaults to ZIP-215 semantics. See {@link EdDSAVerifyOpts}.
  * @returns `true` when the signature is valid.
  * @throws If synchronous SHA-512 has not been configured in `hashes`. {@link Error}
  * @throws On wrong argument types. {@link TypeError}
@@ -676,6 +753,8 @@ const verifyAsync = async (signature, message, publicKey, opts = defaultVerifyOp
 const verify = (signature, message, publicKey, opts = defaultVerifyOpts) => hashFinishS(_verify(signature, message, publicKey, opts));
 /**
  * Math, hex, byte helpers. Not in `utils` because utils share API with noble-curves.
+ * Exposes the same low-level field-default `mod` reducer and non-CT `invert` helper used
+ * internally.
  * @example
  * Convert bytes to a hex string with the low-level helper namespace.
  *
@@ -683,16 +762,18 @@ const verify = (signature, message, publicKey, opts = defaultVerifyOpts) => hash
  * const hex = etc.bytesToHex(new Uint8Array([1, 2, 3]));
  * ```
  */
-const etc = {
-    bytesToHex: bytesToHex,
-    hexToBytes: hexToBytes,
-    concatBytes: concatBytes,
+const etc = /* @__PURE__ */ Object.freeze({
+    bytesToHex,
+    hexToBytes,
+    concatBytes,
     mod: M,
     invert: invert,
-    randomBytes: randomBytes,
-};
+    randomBytes,
+});
 /**
- * Hash implementations used by the synchronous API.
+ * Hash implementations used by the synchronous API plus the default async WebCrypto provider.
+ * Both slots are configurable API surface; wrapper helpers revalidate that providers still return
+ * 64-byte SHA-512 digests.
  * @example
  * Provide a SHA-512 implementation before calling synchronous helpers.
  *
@@ -712,12 +793,15 @@ const hashes = {
     },
     sha512: undefined,
 };
-// FIPS 186 B.4.1 compliant key generation produces private keys
-// with modulo bias being neglible. takes >N+16 bytes, returns (hash mod n-1)+1
-const randomSecretKey = (seed = randomBytes(L)) => abytes(seed, L);
+// Returns the final 32-byte Ed25519 secret-key seed verbatim, generating fresh random bytes only
+// when omitted.
+const randomSecretKey = (seed) => {
+    seed = seed === undefined ? randomBytes(L) : seed;
+    return abytes(seed, L);
+};
 /**
  * Generates a secret/public keypair.
- * @param seed - Optional 32-byte seed.
+ * @param seed - Optional 32-byte Ed25519 secret-key seed, returned verbatim as `secretKey`.
  * @returns Keypair with `secretKey` and `publicKey`.
  * @throws If synchronous SHA-512 has not been configured in `hashes`. {@link Error}
  * @throws On wrong argument types. {@link TypeError}
@@ -740,7 +824,7 @@ const keygen = (seed) => {
 };
 /**
  * Generates a secret/public keypair asynchronously.
- * @param seed - Optional 32-byte seed.
+ * @param seed - Optional 32-byte Ed25519 secret-key seed, returned verbatim as `secretKey`.
  * @returns Keypair with `secretKey` and `publicKey`.
  * @throws On wrong argument types. {@link TypeError}
  * @throws On wrong argument ranges or values. {@link RangeError}
@@ -760,6 +844,8 @@ const keygenAsync = async (seed) => {
 };
 /**
  * Ed25519-specific key utilities.
+ * `utils.getExtendedPublicKey*` expose secret-derived internals (`head`, `prefix`, `scalar`, and
+ * point objects), not just public-key bytes.
  * @example
  * Generate a new Ed25519 secret key and derive the matching public key.
  *
@@ -770,17 +856,19 @@ const keygenAsync = async (seed) => {
  * const publicKey = await ed.getPublicKeyAsync(secretKey);
  * ```
  */
-const utils = {
+const utils = /* @__PURE__ */ Object.freeze({
     getExtendedPublicKeyAsync: getExtendedPublicKeyAsync,
     getExtendedPublicKey: getExtendedPublicKey,
     randomSecretKey: randomSecretKey,
-};
+});
 // ## Precomputes
 // --------------
 const W = 8; // W is window size
 const scalarBits = 256;
 const pwindows = Math.ceil(scalarBits / W) + 1; // 33 for W=8, NOT 32 - see wNAF loop
 const pwindowSize = 2 ** (W - 1); // 128 for W=8
+// Layout is grouped by window: each block stores the positive multiples `1*base .. 128*base` for
+// that window, and the extra `+1` window in `pwindows` absorbs carries from signed-digit recoding.
 const precompute = () => {
     const points = [];
     let p = G;
@@ -796,8 +884,8 @@ const precompute = () => {
     }
     return points;
 };
-let Gpows = undefined; // precomputes for base point G
-// const-time negate
+let Gpows = undefined; // shared process-wide cache of base-point precomputes
+// Branch-based negate helper used for JS/JIT mitigation symmetry, not a strict constant-time claim.
 const ctneg = (cnd, p) => {
     const n = p.negate();
     return cnd ? n : p;
@@ -810,6 +898,8 @@ const ctneg = (cnd, p) => {
  *
  * w-ary non-adjacent form (wNAF) precomputation method is 10% slower than windowed method,
  * but takes 2x less RAM. RAM reduction is possible by utilizing `.subtract`.
+ * Returns the real accumulator `p` plus a fake accumulator `f`; callers only care about `p`, while
+ * `f` exists to keep similar work in zero-digit branches as a JS/JIT side-channel mitigation.
  *
  * !! Precomputes can be disabled by commenting-out call of the wNAF() inside Point#multiply().
  */
@@ -848,7 +938,7 @@ const wNAF = (n) => {
     }
     if (n !== 0n)
         err('invalid wnaf');
-    return { p, f }; // return both real and fake points for JIT
+    return { p, f }; // callers only need `p`; `f` is kept for zero-digit mitigation symmetry
 };
 // !! Remove the export to easily use in REPL / browser console
-export { etc, getPublicKey, getPublicKeyAsync, hash, hashes, keygen, keygenAsync, Point, sign, signAsync, utils, verify, verifyAsync };
+export { etc, getPublicKey, getPublicKeyAsync, hash, hashes, keygen, keygenAsync, Point, sign, signAsync, utils, verify, verifyAsync, };

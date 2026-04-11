@@ -24,7 +24,7 @@
     "check:jsdoc": "npx --no @paulmillr/jsbt tsdoc package.json",
     "bench": "node test/benchmark.ts",
     "format": "prettier --write 'index.ts' 'test/**/*.{js,ts}'",
-    "test": "node --experimental-strip-types --disable-warning=ExperimentalWarning test/index.ts",
+    "test": "node test/index.ts",
     "test:bun": "bun test/index.ts",
     "test:deno": "deno --allow-env --allow-read test/index.ts",
     "test:node20": "cd test; npx tsc; node compiled/test/index.js"

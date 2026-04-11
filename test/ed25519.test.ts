@@ -1,3 +1,4 @@
+import { sha512 } from '@noble/hashes/sha2.js';
 import {
   hexToBytes as bytes,
   concatBytes,
@@ -228,7 +229,7 @@ describe('ed25519', () => {
       const aaaaa = extK.scalar; // private scalar
       const identityR = new Uint8Array(32);
       identityR[0] = 1; // LE encoding of y=1
-      const emptyHash = ed.hashes.sha512(new Uint8Array());
+      const emptyHash = sha512(new Uint8Array());
       const N = Point.CURVE().n;
       const k0 = modN(BigInt('0x' + hex(emptyHash.slice().reverse()))); // modL_LE
       const S_ = modN(k0 * aaaaa); // Step 5: Compute S = k0 * a mod N
@@ -241,9 +242,63 @@ describe('ed25519', () => {
         eql(ed.verify(forgedSig, msg, publicKey, { zip215: false }), false);
       }
     });
+
+    should(
+      'passing {} or { zip215: undefined } preserves the exported default ZIP-215 semantics',
+      () => {
+        const vector = zip215.find((v) => v.valid_zip215 && !v.valid_legacy)!;
+        const msg = new TextEncoder().encode('Zcash');
+        const publicKey = bytes(vector.vk_bytes);
+        const signature = bytes(vector.sig_bytes);
+        eql(
+          {
+            omitted: ed.verify(signature, msg, publicKey),
+            empty: ed.verify(signature, msg, publicKey, {}),
+            undef: ed.verify(signature, msg, publicKey, { zip215: undefined }),
+            strict: ed.verify(signature, msg, publicKey, { zip215: false }),
+          },
+          { omitted: true, empty: true, undef: true, strict: false }
+        );
+      }
+    );
+    if (ed.utils.isValidPublicKey) {
+      should('utils.isValidPublicKey preserves the exported ZIP-215 default', () => {
+        const unreduced = numberToBytesLE(ed.Point.CURVE().p + 1n, 32);
+        eql(
+          {
+            omitted: ed.utils.isValidPublicKey(unreduced),
+            undef: ed.utils.isValidPublicKey(unreduced, undefined),
+            zip215: ed.utils.isValidPublicKey(unreduced, true),
+            strict: ed.utils.isValidPublicKey(unreduced, false),
+          },
+          { omitted: true, undef: true, zip215: true, strict: false }
+        );
+      });
+    }
+    if (ed.utils.isValidSecretKey) {
+      should('utils.isValidSecretKey accepts the helper secret-key width', () => {
+        const seed = new Uint8Array(ed.Point.Fp.BYTES);
+        eql(ed.utils.isValidSecretKey(seed), true);
+      });
+    }
+    should(
+      'ZIP-215 verification with noncanonical R hashes the original signature bytes in verify()',
+      () => {
+        const publicKey = bytes('17ffad8068dc0de9935d36636f3ad1b5de6de3413b12388e453b05f2a4c1d3db');
+        const msg = bytes('090807');
+        const signature = bytes(
+          'eeffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7fc07b8c4dcad0ae1a8df5426b3b0578753de96488dbbee400082251e372919f04'
+        );
+        eql(ed.verify(signature, msg, publicKey, { zip215: true }), true);
+      }
+    );
   });
 
   describe('Point', () => {
+    should('subtract rejects non-point objects even if negate() returns a point', () => {
+      throws(() => ed.Point.BASE.subtract({ negate: () => ed.Point.ZERO } as any));
+    });
+
     should('not create point without z, t', () => {
       const t = 81718630521762619991978402609047527194981150691135404693881672112315521837062n;
       const point = Point.fromAffine({ x: t, y: t });
@@ -273,6 +328,31 @@ describe('ed25519', () => {
       const pub = '34fe104df0a1348ef60699b3659b5a31b14a6f8488e14bfa55d2cc310959ae50';
 
       eql(ed.verify(bytes(sig), bytes(msg), bytes(pub)), false);
+    });
+
+    should('Point.ZERO.multiplyUnsafe rejects negative and >= N scalars', () => {
+      throws(() => ed.Point.ZERO.multiplyUnsafe(-1n), /out of range|expected 0 <= sc < curve.n/);
+      throws(
+        () => ed.Point.ZERO.multiplyUnsafe(CURVE_N),
+        /out of range|expected 0 <= sc < curve.n/
+      );
+    });
+
+    should('Point.CURVE does not expose a live mutable view of internal curve parameters', () => {
+      const curve = ed.Point.CURVE() as { p: bigint };
+      const orig = curve.p;
+      let changed = false;
+      let after = orig;
+      try {
+        try {
+          curve.p = 123n;
+        } catch {}
+        after = ed.Point.CURVE().p;
+        changed = after !== orig;
+      } finally {
+        if (changed) curve.p = orig;
+      }
+      eql(after, orig);
     });
 
     describe('#multiply()', () => {
