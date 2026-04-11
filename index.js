@@ -528,11 +528,12 @@ const sha512s = (...m) => checkDigest(callHash('sha512')(concatBytes(...m)));
 // RFC8032 5.1.5. Split the 64-byte hashed seed into the clamped scalar half and nonce prefix.
 const hash2extK = (hashed) => {
     // slice creates a copy, unlike subarray
-    const head = hashed.slice(0, 32);
+    const copy = u8fr(hashed);
+    const head = copy.slice(0, 32);
     head[0] &= 248; // Clamp bits: 0b1111_1000
     head[31] &= 127; // 0b0111_1111
     head[31] |= 64; // 0b0100_0000
-    const prefix = hashed.slice(32, 64); // secret key "prefix"
+    const prefix = copy.slice(32, 64); // secret key "prefix"
     // RFC words this as `[s]B`; reducing the clamped little-endian scalar modulo `N` is equivalent
     // for base-point multiplication because `G` already has subgroup order `N`.
     const scalar = modL_LE(head);
@@ -941,4 +942,4 @@ const wNAF = (n) => {
     return { p, f }; // callers only need `p`; `f` is kept for zero-digit mitigation symmetry
 };
 // !! Remove the export to easily use in REPL / browser console
-export { etc, getPublicKey, getPublicKeyAsync, hash, hashes, keygen, keygenAsync, Point, sign, signAsync, utils, verify, verifyAsync, };
+export { etc, getPublicKey, getPublicKeyAsync, hash, hashes, keygen, keygenAsync, Point, sign, signAsync, utils, verify, verifyAsync };
