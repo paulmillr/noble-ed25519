@@ -1137,6 +1137,5 @@ export {
   signAsync,
   utils,
   verify,
-  verifyAsync
+  verifyAsync,
 };
-

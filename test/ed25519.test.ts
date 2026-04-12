@@ -1,10 +1,10 @@
-import { sha512 } from '@noble/hashes/sha2.js';
 import {
   hexToBytes as bytes,
   concatBytes,
   bytesToHex as hex,
   randomBytes,
 } from '@noble/hashes/utils.js';
+import { sha512 } from '@noble/hashes/sha2.js';
 import { describe, should } from '@paulmillr/jsbt/test.js';
 import * as fc from 'fast-check';
 import { deepStrictEqual as eql, strictEqual, throws } from 'node:assert';
