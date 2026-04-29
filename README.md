@@ -27,6 +27,7 @@ Switch to noble-curves (drop-in) if you need features like ristretto255, x25519 
   [post-quantum](https://github.com/paulmillr/noble-post-quantum),
   5kb [secp256k1](https://github.com/paulmillr/noble-secp256k1) /
   [ed25519](https://github.com/paulmillr/noble-ed25519)
+- WASM version: [awasm-noble](https://github.com/paulmillr/awasm-noble)
 - [Check out the homepage](https://paulmillr.com/noble/)
   for reading resources, documentation, and apps built with noble
 
