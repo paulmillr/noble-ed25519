@@ -817,6 +817,9 @@ const _verify = (
   // zip215=false keeps the library's stricter branch, which still canonicalizes `R` / `A` before
   // hashing and rejects small-order public keys earlier than pure RFC8032 text would require.
   // Preserve the exported ZIP-215 default for `{}` / `{ zip215: undefined }`, not just omitted opts.
+  if (options === null || typeof options !== 'object') {
+    err('expected valid options object');
+  }
   const { zip215 = true } = options;
 
   const r = sig.subarray(0, L);
