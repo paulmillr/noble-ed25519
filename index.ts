@@ -28,7 +28,8 @@ import * as ed from '@noble/ed25519';
  * Mirror noble-curves: Point.CURVE() exposes shared params, but callers must not be able to mutate
  * that shared view and desynchronize it from the arithmetic constants captured below.
  */
-const ed25519_CURVE: EdwardsOpts = Object.freeze({
+const freeze = Object.freeze;
+const ed25519_CURVE: EdwardsOpts = freeze({
   p: 0x7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffedn,
   n: 0x1000000000000000000000000000000014def9dea2f79cd65812631a5cf5d3edn,
   h: 8n,
@@ -213,18 +214,22 @@ const u8n = (len: number): TRet<Bytes> => new Uint8Array(len) as TRet<Bytes>;
 const u8fr = (buf: ArrayLike<number>): TRet<Bytes> => Uint8Array.from(buf) as TRet<Bytes>;
 // Left-pad hex to a caller-chosen width. Width enforcement/truncation policy stays with callers.
 const padh = (n: number | bigint, pad: number) => n.toString(16).padStart(pad, '0');
-// Lowercase hex serializer.
-const bytesToHex = (b: TArg<Bytes>): string =>
-  Array.from(abytes(b))
-    .map((e) => padh(e, 2))
-    .join('');
-const C = { _0: 48, _9: 57, A: 65, F: 70, a: 97, f: 102 } as const; // ASCII characters
-const _ch = (ch: number): number | undefined => {
-  if (ch >= C._0 && ch <= C._9) return ch - C._0; // '2' => 50-48
-  if (ch >= C.A && ch <= C.F) return ch - (C.A - 10); // 'B' => 66-(65-10)
-  if (ch >= C.a && ch <= C.f) return ch - (C.a - 10); // 'b' => 98-(97-10)
-  return;
+// Lowercase hex serializer. Precomputed byte=>hex table avoids per-byte string formatting.
+const hexes = /* @__PURE__ */ Array.from({ length: 256 }, (_, i) => padh(i, 2));
+const bytesToHex = (b: TArg<Bytes>): string => {
+  abytes(b);
+  let hex = '';
+  for (let i = 0; i < b.length; i++) hex += hexes[b[i]];
+  return hex;
 };
+// Strict ASCII nibble parser: non-ASCII hex lookalikes are rejected as undefined.
+// ASCII codes: '0'..'9' = 48..57, 'A'..'F' = 65..70, 'a'..'f' = 97..102.
+// prettier-ignore
+const _ch = (ch: number): number | undefined =>
+  ch >= 48 && ch <= 57 ? ch - 48 // '2' => 50-48
+  : ch >= 65 && ch <= 70 ? ch - (65 - 10) // 'B' => 66-(65-10)
+  : ch >= 97 && ch <= 102 ? ch - (97 - 10) // 'b' => 98-(97-10)
+  : undefined;
 // Accepts both uppercase and lowercase hex; all parse failures intentionally collapse to `hex invalid`.
 const hexToBytes = (hex: string): TRet<Bytes> => {
   const e = 'hex invalid';
@@ -379,7 +384,7 @@ class Point {
     this.Y = assertRange(Y, 0n, max);
     this.Z = assertRange(Z, 1n, max);
     this.T = assertRange(T, 0n, max);
-    Object.freeze(this);
+    freeze(this);
   }
   static CURVE(): EdwardsOpts {
     return ed25519_CURVE;
@@ -564,7 +569,9 @@ class Point {
   }
 
   clearCofactor(): Point {
-    return this.multiply(big(h), false);
+    // cofactor h=8=2³, so [h]P is three doublings; avoids generic multiply() ladder overhead
+    if (h !== 8n) err('unexpected cofactor');
+    return this.double().double().double();
   }
   isSmallOrder(): boolean {
     return this.clearCofactor().is0();
@@ -938,7 +945,7 @@ const etc: {
   mod: typeof M;
   invert: typeof invert;
   randomBytes: (len?: number) => TRet<Bytes>;
-} = /* @__PURE__ */ Object.freeze({
+} = /* @__PURE__ */ freeze({
   bytesToHex,
   hexToBytes,
   concatBytes,
@@ -1040,7 +1047,7 @@ const utils: {
   getExtendedPublicKeyAsync: typeof getExtendedPublicKeyAsync;
   getExtendedPublicKey: typeof getExtendedPublicKey;
   randomSecretKey: typeof randomSecretKey;
-} = /* @__PURE__ */ Object.freeze({
+} = /* @__PURE__ */ freeze({
   getExtendedPublicKeyAsync: getExtendedPublicKeyAsync as typeof getExtendedPublicKeyAsync,
   getExtendedPublicKey: getExtendedPublicKey as typeof getExtendedPublicKey,
   randomSecretKey: randomSecretKey as typeof randomSecretKey,
@@ -1113,11 +1120,11 @@ const wNAF = (n: bigint): TRet<{ p: Point; f: Point }> => {
     const off = w * pwindowSize;
     const offF = off; // offsets, evaluate both
     const offP = off + Math.abs(wbits) - 1;
-    const isEven = w % 2 !== 0; // conditions, evaluate both
+    const isOddW = w % 2 !== 0; // conditions, evaluate both; alternates fake-add sign per window
     const isNeg = wbits < 0;
     if (wbits === 0) {
       // off == I: can't add it. Adding random offF instead.
-      f = f.add(ctneg(isEven, comp[offF])); // bits are 0: add garbage to fake point
+      f = f.add(ctneg(isOddW, comp[offF])); // bits are 0: add garbage to fake point
     } else {
       p = p.add(ctneg(isNeg, comp[offP])); // bits are 1: add to result point
     }
