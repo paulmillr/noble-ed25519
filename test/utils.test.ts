@@ -1,15 +1,15 @@
-import { describe, should } from '@paulmillr/jsbt/test.js';
+import { describe, it } from '@paulmillr/jsbt/test.js';
 import * as fc from 'fast-check';
 import { deepStrictEqual as eql, throws } from 'node:assert';
 import {
-  bytesToHex,
-  concatBytes,
-  ed,
-  extra,
-  hexToBytes,
-  invert,
-  mod,
-  secp,
+    bytesToHex,
+    concatBytes,
+    ed,
+    extra,
+    hexToBytes,
+    invert,
+    mod,
+    secp,
 } from './utils.helpers.ts';
 import { getTypeTests } from './utils.ts';
 
@@ -28,7 +28,7 @@ describe('utils', () => {
     { bytes: Uint8Array.from([0xca, 0xfe]), hex: 'cafe' },
     { bytes: Uint8Array.from(new Array(1024).fill(0x69)), hex: '69'.repeat(1024) },
   ];
-  should('hexToBytes', () => {
+  it('hexToBytes', () => {
     for (let v of staticHexVectors) eql(hexToBytes(v.hex), v.bytes);
     for (let v of staticHexVectors) eql(hexToBytes(v.hex.toUpperCase()), v.bytes);
     for (let [v, repr] of getTypeTests()) {
@@ -36,14 +36,14 @@ describe('utils', () => {
       throws(() => hexToBytes(v));
     }
   });
-  should('bytesToHex', () => {
+  it('bytesToHex', () => {
     for (let v of staticHexVectors) eql(bytesToHex(v.bytes), v.hex);
     for (let [v, repr] of getTypeTests()) {
       if (repr.startsWith('ui8a')) continue;
       throws(() => bytesToHex(v));
     }
   });
-  should('hexToBytes <=> bytesToHex roundtrip', () =>
+  it('hexToBytes <=> bytesToHex roundtrip', () =>
     fc.assert(
       fc.property(hexaString({ minLength: 2, maxLength: 64 }), (hex) => {
         if (hex.length % 2 !== 0) return;
@@ -54,7 +54,7 @@ describe('utils', () => {
       })
     )
   );
-  should('concatBytes', () => {
+  it('concatBytes', () => {
     const a = 1;
     const b = 2;
     const c = 0xff;
@@ -71,7 +71,7 @@ describe('utils', () => {
       });
     }
   });
-  should('concatBytes random', () =>
+  it('concatBytes random', () =>
     fc.assert(
       fc.property(fc.uint8Array(), fc.uint8Array(), fc.uint8Array(), (a, b, c) => {
         const expected = Uint8Array.from([...a, ...b, ...c]);
@@ -79,7 +79,7 @@ describe('utils', () => {
       })
     )
   );
-  should('validator constructors', () => {
+  it('validator constructors', () => {
     if (extra.abytes) {
       throws(() => extra.abytes!('x' as any), TypeError);
       throws(() => extra.abytes!(new Uint8Array(31), 32), RangeError);
@@ -97,7 +97,7 @@ describe('utils', () => {
       throws(() => ed.utils.randomSecretKey(new Uint8Array(31)), RangeError);
     }
   });
-  should(
+  it(
     'bytesToHex/concatBytes reject typed-array subclasses that spoof the Uint8Array constructor name',
     () => {
       class Uint8Array extends Uint16Array {}
@@ -127,7 +127,7 @@ describe('utils', () => {
   );
   if (extra.copyBytes) {
     const copyBytes = extra.copyBytes;
-    should('copyBytes', () => {
+    it('copyBytes', () => {
       const src = Uint8Array.of(1, 2, 3);
       const copy = copyBytes(src);
       eql(copy, src);
@@ -142,7 +142,7 @@ describe('utils', () => {
   }
   if (extra.equalBytes) {
     const equalBytes = extra.equalBytes;
-    should('equalBytes', () => {
+    it('equalBytes', () => {
       eql(equalBytes(Uint8Array.of(1, 2), Uint8Array.of(1, 2)), true);
       eql(equalBytes(Uint8Array.of(1, 2), Uint8Array.of(1, 3)), false);
       throws(
@@ -157,7 +157,7 @@ describe('utils', () => {
   }
   if (extra.asciiToBytes) {
     const asciiToBytes = extra.asciiToBytes;
-    should('asciiToBytes', () => {
+    it('asciiToBytes', () => {
       const strings = [
         'H2C-OVERSIZE-DST-',
         'Seed-',
@@ -202,7 +202,7 @@ describe('utils', () => {
   }
   if (extra.hexToNumber) {
     const hexToNumber = extra.hexToNumber;
-    should('hexToNumber', () => {
+    it('hexToNumber', () => {
       eql(hexToNumber(''), 0n);
       eql(hexToNumber('ff'), 255n);
       throws(() => hexToNumber(1 as any), TypeError);
@@ -210,7 +210,7 @@ describe('utils', () => {
   }
   if (extra.bitLen) {
     const bitLen = extra.bitLen;
-    should('bitLen', () => {
+    it('bitLen', () => {
       eql(bitLen(0n), 0);
       eql(bitLen(1n), 1);
       eql(bitLen(8n), 4);
@@ -221,7 +221,7 @@ describe('utils', () => {
     const numberToHexUnpadded = extra.numberToHexUnpadded;
     const numberToBytesBE = extra.numberToBytesBE;
     const numberToVarBytesBE = extra.numberToVarBytesBE;
-    should('numberToHexUnpadded/numberToBytesBE/numberToVarBytesBE', () => {
+    it('numberToHexUnpadded/numberToBytesBE/numberToVarBytesBE', () => {
       const VECTORS = [
         { value: 0n, expected: '00' },
         { value: 0, expected: '00' },
@@ -256,7 +256,7 @@ describe('utils', () => {
   if (extra.numberToBytesBE && extra.numberToBytesLE) {
     const numberToBytesBE = extra.numberToBytesBE;
     const numberToBytesLE = extra.numberToBytesLE;
-    should('numberToBytesBE/numberToBytesLE', () => {
+    it('numberToBytesBE/numberToBytesLE', () => {
       const VECTORS = [
         { value: 0n, len: 1, expectedBE: '00', expectedLE: '00' },
         { value: 1n, len: 1, expectedBE: '01', expectedLE: '01' },
@@ -298,7 +298,7 @@ describe('utils', () => {
   }
   if (extra.abytes) {
     const abytes = extra.abytes;
-    should('abytes', () => {
+    it('abytes', () => {
       const VECTORS = [
         { b: 1, comment: 'number' },
         { b: true, comment: 'boolean' },
@@ -330,7 +330,7 @@ describe('utils', () => {
     const asafenumber = extra.asafenumber;
     const aInRange = extra.aInRange;
     const validateObject = extra.validateObject;
-    should('abool/asafenumber/aInRange/validateObject', () => {
+    it('abool/asafenumber/aInRange/validateObject', () => {
       eql(abool(true), true);
       throws(() => abool('x' as any), TypeError);
       eql(asafenumber(1), undefined);
@@ -349,14 +349,14 @@ describe('utils', () => {
   }
   if (extra.bitSet) {
     const bitSet = extra.bitSet;
-    should('bitSet', () => {
+    it('bitSet', () => {
       eql(bitSet(0n, 1, true), 2n);
       eql(bitSet(5n, 2, false), 1n);
     });
   }
   if (extra.createHmacDrbg) {
     const createHmacDrbg = extra.createHmacDrbg;
-    should('createHmacDrbg', () => {
+    it('createHmacDrbg', () => {
       throws(() => createHmacDrbg(32, 32, 1 as any), TypeError);
       const hmacFn = (key: Uint8Array, msg: Uint8Array) =>
         Uint8Array.from({ length: key.length }, (_, i) => (msg[i % msg.length] || 0) ^ (i + 1));
@@ -374,12 +374,12 @@ describe('utils', () => {
 });
 
 describe('utils math', () => {
-  should('mod', () => {
+  it('mod', () => {
     eql(mod(11n, 10n), 1n);
     eql(mod(-1n, 10n), 9n);
     eql(mod(0n, 10n), 0n);
   });
-  should('invert', () => {
+  it('invert', () => {
     eql(invert(512n, 1023n), 2n);
     eql(
       invert(2n ** 255n, 2n ** 255n - 19n),
@@ -406,4 +406,4 @@ describe('utils math', () => {
   });
 });
 
-should.runWhen(import.meta.url);
+it.runWhen(import.meta.url);

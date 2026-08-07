@@ -1,9 +1,9 @@
-import { describe, should } from '@paulmillr/jsbt/test.js';
+import { describe, it } from '@paulmillr/jsbt/test.js';
 import { deepStrictEqual as eql, rejects, throws } from 'node:assert';
 import * as ed from '../index.ts';
 
 describe('hashes', () => {
-  should(
+  it(
     'ed.hash() rejects a non-Uint8Array message before calling the configured SHA-512 provider',
     () => {
       const prev = ed.hashes.sha512;
@@ -21,7 +21,7 @@ describe('hashes', () => {
     }
   );
 
-  should(
+  it(
     'ed.hash() rejects configured SHA-512 providers that return the wrong type or a digest not exactly 64 bytes',
     () => {
       const prev = ed.hashes.sha512;
@@ -36,7 +36,7 @@ describe('hashes', () => {
     }
   );
 
-  should(
+  it(
     'getPublicKey()/getPublicKeyAsync() reject configured providers that return digests not exactly 64 bytes',
     async () => {
       const sk = new Uint8Array(32).fill(7);
@@ -57,7 +57,7 @@ describe('hashes', () => {
     }
   );
 
-  should(
+  it(
     'sign/signAsync/verify/verifyAsync reject configured SHA-512 providers that return digests not exactly 64 bytes',
     async () => {
       const msg = new Uint8Array([9]);
@@ -84,4 +84,4 @@ describe('hashes', () => {
   );
 });
 
-should.runWhen(import.meta.url);
+it.runWhen(import.meta.url);
