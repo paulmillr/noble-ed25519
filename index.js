@@ -663,6 +663,9 @@ const _verify = (sig, msg, publicKey, options = defaultVerifyOpts) => {
     // zip215=false keeps the library's stricter branch, which still canonicalizes `R` / `A` before
     // hashing and rejects small-order public keys earlier than pure RFC8032 text would require.
     // Preserve the exported ZIP-215 default for `{}` / `{ zip215: undefined }`, not just omitted opts.
+    if (options === null || typeof options !== 'object') {
+        err('expected valid options object');
+    }
     const { zip215 = true } = options;
     const r = sig.subarray(0, L);
     const s = bytesToNumberLE(sig.subarray(L, L * 2)); // Decode second half as an integer S;
@@ -942,4 +945,4 @@ const wNAF = (n) => {
     return { p, f }; // callers only need `p`; `f` is kept for zero-digit mitigation symmetry
 };
 // !! Remove the export to easily use in REPL / browser console
-export { etc, getPublicKey, getPublicKeyAsync, hash, hashes, keygen, keygenAsync, Point, sign, signAsync, utils, verify, verifyAsync };
+export { etc, getPublicKey, getPublicKeyAsync, hash, hashes, keygen, keygenAsync, Point, sign, signAsync, utils, verify, verifyAsync, };
