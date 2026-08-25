@@ -211,6 +211,10 @@ const abytes = (value: TArg<Bytes>, length?: number, title: string = ''): TRet<B
 const u8n = (len: number): TRet<Bytes> => new Uint8Array(len) as TRet<Bytes>;
 // Clone helper used before in-place byte edits such as sign-bit clearing or endian reversal.
 const u8fr = (buf: ArrayLike<number>): TRet<Bytes> => Uint8Array.from(buf) as TRet<Bytes>;
+// Signing hashes the message twice. Take one owned snapshot so caller mutation cannot make nonce
+// derivation and challenge derivation observe different messages.
+const snapshotBytes = (value: TArg<Bytes>, title: string): TRet<Bytes> =>
+  u8fr(abytes(value, undefined, title));
 // Left-pad hex to a caller-chosen width. Width enforcement/truncation policy stays with callers.
 const padh = (n: number | bigint, pad: number) => n.toString(16).padStart(pad, '0');
 // Lowercase hex serializer.
@@ -616,7 +620,7 @@ const pow_2_252_3 = (x: bigint) => {                    // x^(2^252-3) unrolled 
   const b250 = modP(pow2(b240, 10n) * b10);             // x^(2^250-1)
   const pow_p_5_8 = modP(pow2(b250, 2n) * x);           // x^((p-5)/8), used by RFC8032 point decode
   return { pow_p_5_8, b2 };
-}
+};
 const RM1 = 0x2b8324804fc1df0b2b4d00993dfbd7a72f431806ad2fe478c4ee1b274a0ea0b0n; // 2^((p-1)/4) = sqrt(-1)
 // RFC8032 §5.1.3 square-root helper for point decompression. `value` is only meaningful when
 // `isValid` is true; callers are also expected to pass canonical field elements with non-zero `v`.
@@ -636,7 +640,7 @@ const uvRatio = (u: bigint, v: bigint): { isValid: boolean, value: bigint } => {
   if (useRoot2 || noRoot) x = root2;                    // We return root2 anyway, for const-time
   if ((M(x) & 1n) === 1n) x = M(-x);                    // edIsNegative
   return { isValid: useRoot1 || useRoot2, value: x };
-}
+};
 // Implementation `N` is the subgroup order; `L` is only the shared 32-byte encoded width constant.
 // Reduce any little-endian byte string modulo the subgroup order; the `hash` name reflects the
 // common caller shape, not an input restriction.
@@ -761,7 +765,7 @@ const _sign = (
  * ```
  */
 const signAsync = async (message: TArg<Bytes>, secretKey: TArg<Bytes>): Promise<TRet<Bytes>> => {
-  const m = abytes(message);
+  const m = snapshotBytes(message, 'message');
   const e = await getExtendedPublicKeyAsync(secretKey);
   const rBytes = await sha512a(e.prefix, m); // r = SHA512(dom2(F, C) || prefix || PH(M))
   return hashFinishA(_sign(e, rBytes, m)); // gen R, k, S, then 64-byte signature
@@ -788,7 +792,7 @@ const signAsync = async (message: TArg<Bytes>, secretKey: TArg<Bytes>): Promise<
  * ```
  */
 const sign = (message: TArg<Bytes>, secretKey: TArg<Bytes>): TRet<Bytes> => {
-  const m = abytes(message);
+  const m = snapshotBytes(message, 'message');
   const e = getExtendedPublicKey(secretKey);
   const rBytes = sha512s(e.prefix, m); // r = SHA512(dom2(F, C) || prefix || PH(M))
   return hashFinishS(_sign(e, rBytes, m)); // gen R, k, S, then 64-byte signature
@@ -817,6 +821,9 @@ const _verify = (
   // zip215=false keeps the library's stricter branch, which still canonicalizes `R` / `A` before
   // hashing and rejects small-order public keys earlier than pure RFC8032 text would require.
   // Preserve the exported ZIP-215 default for `{}` / `{ zip215: undefined }`, not just omitted opts.
+  if (options === null || typeof options !== 'object') {
+    err('expected valid options object');
+  }
   const { zip215 = true } = options;
 
   const r = sig.subarray(0, L);
@@ -1137,6 +1144,5 @@ export {
   signAsync,
   utils,
   verify,
-  verifyAsync
+  verifyAsync,
 };
-
