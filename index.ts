@@ -211,6 +211,10 @@ const abytes = (value: TArg<Bytes>, length?: number, title: string = ''): TRet<B
 const u8n = (len: number): TRet<Bytes> => new Uint8Array(len) as TRet<Bytes>;
 // Clone helper used before in-place byte edits such as sign-bit clearing or endian reversal.
 const u8fr = (buf: ArrayLike<number>): TRet<Bytes> => Uint8Array.from(buf) as TRet<Bytes>;
+// Signing hashes the message twice. Take one owned snapshot so caller mutation cannot make nonce
+// derivation and challenge derivation observe different messages.
+const snapshotBytes = (value: TArg<Bytes>, title: string): TRet<Bytes> =>
+  u8fr(abytes(value, undefined, title));
 // Left-pad hex to a caller-chosen width. Width enforcement/truncation policy stays with callers.
 const padh = (n: number | bigint, pad: number) => n.toString(16).padStart(pad, '0');
 // Lowercase hex serializer.
@@ -761,7 +765,7 @@ const _sign = (
  * ```
  */
 const signAsync = async (message: TArg<Bytes>, secretKey: TArg<Bytes>): Promise<TRet<Bytes>> => {
-  const m = abytes(message);
+  const m = snapshotBytes(message, 'message');
   const e = await getExtendedPublicKeyAsync(secretKey);
   const rBytes = await sha512a(e.prefix, m); // r = SHA512(dom2(F, C) || prefix || PH(M))
   return hashFinishA(_sign(e, rBytes, m)); // gen R, k, S, then 64-byte signature
@@ -788,7 +792,7 @@ const signAsync = async (message: TArg<Bytes>, secretKey: TArg<Bytes>): Promise<
  * ```
  */
 const sign = (message: TArg<Bytes>, secretKey: TArg<Bytes>): TRet<Bytes> => {
-  const m = abytes(message);
+  const m = snapshotBytes(message, 'message');
   const e = getExtendedPublicKey(secretKey);
   const rBytes = sha512s(e.prefix, m); // r = SHA512(dom2(F, C) || prefix || PH(M))
   return hashFinishS(_sign(e, rBytes, m)); // gen R, k, S, then 64-byte signature

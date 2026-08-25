@@ -84,6 +84,9 @@ const abytes = (value, length, title = '') => {
 const u8n = (len) => new Uint8Array(len);
 // Clone helper used before in-place byte edits such as sign-bit clearing or endian reversal.
 const u8fr = (buf) => Uint8Array.from(buf);
+// Signing hashes the message twice. Take one owned snapshot so caller mutation cannot make nonce
+// derivation and challenge derivation observe different messages.
+const snapshotBytes = (value, title) => u8fr(abytes(value, undefined, title));
 // Left-pad hex to a caller-chosen width. Width enforcement/truncation policy stays with callers.
 const padh = (n, pad) => n.toString(16).padStart(pad, '0');
 // Lowercase hex serializer.
@@ -621,7 +624,7 @@ const _sign = (e, rBytes, msg) => {
  * ```
  */
 const signAsync = async (message, secretKey) => {
-    const m = abytes(message);
+    const m = snapshotBytes(message, 'message');
     const e = await getExtendedPublicKeyAsync(secretKey);
     const rBytes = await sha512a(e.prefix, m); // r = SHA512(dom2(F, C) || prefix || PH(M))
     return hashFinishA(_sign(e, rBytes, m)); // gen R, k, S, then 64-byte signature
@@ -648,7 +651,7 @@ const signAsync = async (message, secretKey) => {
  * ```
  */
 const sign = (message, secretKey) => {
-    const m = abytes(message);
+    const m = snapshotBytes(message, 'message');
     const e = getExtendedPublicKey(secretKey);
     const rBytes = sha512s(e.prefix, m); // r = SHA512(dom2(F, C) || prefix || PH(M))
     return hashFinishS(_sign(e, rBytes, m)); // gen R, k, S, then 64-byte signature
@@ -663,6 +666,9 @@ const _verify = (sig, msg, publicKey, options = defaultVerifyOpts) => {
     // zip215=false keeps the library's stricter branch, which still canonicalizes `R` / `A` before
     // hashing and rejects small-order public keys earlier than pure RFC8032 text would require.
     // Preserve the exported ZIP-215 default for `{}` / `{ zip215: undefined }`, not just omitted opts.
+    if (options === null || typeof options !== 'object') {
+        err('expected valid options object');
+    }
     const { zip215 = true } = options;
     const r = sig.subarray(0, L);
     const s = bytesToNumberLE(sig.subarray(L, L * 2)); // Decode second half as an integer S;
@@ -942,4 +948,4 @@ const wNAF = (n) => {
     return { p, f }; // callers only need `p`; `f` is kept for zero-digit mitigation symmetry
 };
 // !! Remove the export to easily use in REPL / browser console
-export { etc, getPublicKey, getPublicKeyAsync, hash, hashes, keygen, keygenAsync, Point, sign, signAsync, utils, verify, verifyAsync };
+export { etc, getPublicKey, getPublicKeyAsync, hash, hashes, keygen, keygenAsync, Point, sign, signAsync, utils, verify, verifyAsync, };

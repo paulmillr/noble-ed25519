@@ -9,7 +9,7 @@ import { describe, should } from '@paulmillr/jsbt/test.js';
 import * as fc from 'fast-check';
 import { deepStrictEqual as eql, strictEqual, throws } from 'node:assert';
 import { ed25519 as ed, ED25519_TORSION_SUBGROUP, numberToBytesLE } from './ed25519.helpers.ts';
-import { getTypeTestsNonUi8a, json, txt } from './utils.ts';
+import { getTypeTestsNonUi8a, json, jsonGZ, txt } from './utils.ts';
 
 // Any changes to the file will need to be aware of the fact
 // the file is shared between noble-curves and noble-ed25519.
@@ -66,13 +66,15 @@ describe('ed25519', () => {
       }
 
       // https://tools.ietf.org/html/rfc8032#section-7
-      const VECTORS_rfc8032_ed25519 = json('./vectors/rfc8032-ed25519.json');
+      const VECTORS_rfc8032_ed25519 = jsonGZ(
+        './vectors/acvp-vectors/rfc/8032-eddsa/ed25519.json.gz'
+      );
       for (const vec of VECTORS_rfc8032_ed25519) {
-        const { priv, msg, pub, sig } = vec;
-        const pubG = ed.getPublicKey(bytes(priv));
-        const sigG = ed.sign(bytes(msg), bytes(priv));
-        eql(hex(pubG), pub);
-        eql(hex(sigG), sig);
+        const { secretKey, message, publicKey, signature } = vec;
+        const pubG = ed.getPublicKey(bytes(secretKey));
+        const sigG = ed.sign(bytes(message), bytes(secretKey));
+        eql(hex(pubG), publicKey);
+        eql(hex(sigG), signature);
       }
     });
   });
@@ -345,12 +347,48 @@ describe('ed25519', () => {
         strictEqual(point.isTorsionFree(), true, `orig must be torsionFree: ${hex}`);
         strictEqual(dirty.isTorsionFree(), false, `dirty must not be torsionFree: ${hex}`);
         strictEqual(cleared.isTorsionFree(), true, `cleared must be torsionFree: ${hex}`);
+        strictEqual(dirty.multiply(5n).equals(dirty.multiplyUnsafe(5n)), true);
       }
 
       const xy = { x: 0n, y: 1n };
       const p = Point.fromAffine(xy);
       eql(p, Point.ZERO);
       eql(p.toAffine(), xy);
+    });
+
+    should('small-order and torsioned points multiply exactly (naive reference)', () => {
+      const P = ed.Point.CURVE().p;
+      const Z = Point.ZERO;
+      const naiveMul = (p, s) => {
+        let acc = Z;
+        let base = p;
+        while (s > 0n) {
+          if (s & 1n) acc = acc.add(base);
+          if (s > 1n) base = base.double();
+          s >>= 1n;
+        }
+        return acc;
+      };
+      // order-2 torsion point (0, -1)
+      const T2 = Point.fromAffine({ x: 0n, y: P - 1n });
+      strictEqual(T2.double().is0(), true, '(0,-1) has order 2');
+      strictEqual(T2.multiply(2n).is0(), true, 'T2*2 = O');
+      strictEqual(T2.multiply(3n).equals(T2), true, 'T2*3 = T2');
+      strictEqual(T2.multiplyUnsafe(8n).is0(), true, 'T2*8 = O');
+      // torsioned point Q+T2: multiply must be exact scalar multiplication, not "mod L
+      // in the subgroup" (exercises the unblinded non-BASE constant-time path)
+      const Q = Point.BASE.multiply(12345n);
+      const P2 = Q.add(T2);
+      for (const s of [1n, 2n, 7n, CURVE_N - 1n, (CURVE_N - 1n) / 2n]) {
+        const want = naiveMul(P2, s);
+        strictEqual(P2.multiply(s).equals(want), true, `torsioned multiply ${s.toString(16)}`);
+        strictEqual(P2.multiplyUnsafe(s).equals(want), true, `torsioned multiplyUnsafe`);
+      }
+      strictEqual(Q.isTorsionFree(), true);
+      strictEqual(P2.isTorsionFree(), false);
+      // BASE path has blinding active (L*BASE == O): must match the naive reference
+      const s = 0xdeadbeefcafen;
+      strictEqual(Point.BASE.multiply(s).equals(naiveMul(Point.BASE, s)), true);
     });
   });
 
@@ -410,19 +448,25 @@ describe('ed25519', () => {
   });
 
   should('wycheproof/ED25519', () => {
-    const ed25519vectors = json('./vectors/wycheproof/ed25519_test.json');
+    const ed25519vectors = jsonGZ(
+      './vectors/acvp-vectors/wycheproof/testvectors_v1/ed25519_test.json.gz'
+    );
     for (let g = 0; g < ed25519vectors.testGroups.length; g++) {
       const group = ed25519vectors.testGroups[g];
       const key = group.publicKey;
       for (let i = 0; i < group.tests.length; i++) {
         const v = group.tests[i];
         const comment = `(${g}/${i}, ${v.result}): ${v.comment}`;
+        // Wycheproof targets strict RFC 8032 verification; tcId 151 (x=0 with
+        // sign bit set) is correctly accepted under the default ZIP-215 rules,
+        // which are covered separately by the zip215.json vectors.
+        const opts = { zip215: false };
         if (v.result === 'valid' || v.result === 'acceptable') {
-          eql(ed.verify(bytes(v.sig), bytes(v.msg), bytes(key.pk)), true, comment);
+          eql(ed.verify(bytes(v.sig), bytes(v.msg), bytes(key.pk), opts), true, comment);
         } else if (v.result === 'invalid') {
           let failed = false;
           try {
-            failed = !ed.verify(bytes(v.sig), bytes(v.msg), bytes(key.pk));
+            failed = !ed.verify(bytes(v.sig), bytes(v.msg), bytes(key.pk), opts);
           } catch (error) {
             failed = true;
           }
