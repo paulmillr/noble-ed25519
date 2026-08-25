@@ -38,159 +38,183 @@ const ed25519_CURVE = Object.freeze({
     Gy: 0x6666666666666666666666666666666666666666666666666666666666666658n,
 });
 const { p: P, n: N, Gx, Gy, a: _a, d: _d, h } = ed25519_CURVE;
-const L = 32; // shared 32-byte encoded width for Ed25519 points, scalars, signatures, and keys
+// Shared 32-byte encoded width for Ed25519 points, scalars, signatures/2, and keys. Named LEN
+// rather than RFC 8032's `L`, which names the group order (stored here as `N`).
+const LEN = 32;
 // Helpers and Precomputes sections are reused between libraries
 // ## Helpers
 // ----------
-// @ts-ignore
-const captureTrace = (...args) => {
-    if ('captureStackTrace' in Error && typeof Error.captureStackTrace === 'function') {
-        Error.captureStackTrace(...args);
-    }
+/** Checks if something is Uint8Array. Be careful: nodejs Buffer will return true. */
+const isBytes = (a) => {
+    // Plain `instanceof Uint8Array` is too strict for some Buffer / proxy / cross-realm cases.
+    // The fallback still requires a real ArrayBuffer view, so plain
+    // JSON-deserialized `{ constructor: ... }` spoofing is rejected, and
+    // `BYTES_PER_ELEMENT === 1` keeps the fallback on byte-oriented views.
+    return (a instanceof Uint8Array ||
+        (ArrayBuffer.isView(a) &&
+            a.constructor.name === 'Uint8Array' &&
+            'BYTES_PER_ELEMENT' in a &&
+            a.BYTES_PER_ELEMENT === 1));
 };
-const err = (message = '') => {
-    const e = new Error(message);
-    captureTrace(e, err);
-    throw e;
-};
-// Plain `instanceof Uint8Array` is too strict for some Buffer / proxy / cross-realm cases. The
-// fallback still requires a real ArrayBuffer view so plain JSON-deserialized `{ constructor: ... }`
-// spoofing is rejected, and `BYTES_PER_ELEMENT === 1` keeps the fallback on byte-oriented views.
-const isBytes = (a) => a instanceof Uint8Array ||
-    (ArrayBuffer.isView(a) &&
-        a.constructor.name === 'Uint8Array' &&
-        'BYTES_PER_ELEMENT' in a &&
-        a.BYTES_PER_ELEMENT === 1);
-/**
- * Asserts something is Bytes, optionally enforces exact length,
- * and returns the same reference.
- */
+/** Asserts something is Bytes. */
 const abytes = (value, length, title = '') => {
+    // Success path first: this runs at the start of every update() / digestInto(), and the
+    // common `abytes(data)` form must not pay for length handling it does not use.
+    if (isBytes(value) && (length === undefined || value.length === length))
+        return value;
+    // Error path: recompute freely to build the exact message.
     const bytes = isBytes(value);
-    const len = value?.length;
-    const needsLen = length !== undefined;
-    if (!bytes || (needsLen && len !== length)) {
-        const prefix = title && `"${title}" `;
-        const ofLen = needsLen ? ` of length ${length}` : '';
-        const got = bytes ? `length=${len}` : `type=${typeof value}`;
-        const msg = prefix + 'expected Uint8Array' + ofLen + ', got ' + got;
-        throw bytes ? new RangeError(msg) : new TypeError(msg);
-    }
-    return value;
+    const ofLen = length !== undefined ? ` of length ${length}` : '';
+    const got = bytes ? `length=${value.length}` : `type=${typeof value}`;
+    const message = (title ? `"${title}" ` : '') + 'expected Uint8Array' + ofLen + ', got ' + got;
+    if (!bytes)
+        throw new TypeError(message);
+    throw new RangeError(message);
 };
-// Signing hashes the message twice. Take one owned snapshot so caller mutation cannot make nonce
-// derivation and challenge derivation observe different messages.
-const snapshotBytes = (value, title) => Uint8Array.from(abytes(value, undefined, title));
+// Validate, then take one owned copy, so later caller mutation cannot be observed — e.g. cannot
+// make sign()'s nonce derivation and challenge derivation see different messages.
+const snapshotBytes = (value, title = '', length) => Uint8Array.from(abytes(value, length, title));
 // Callers keep values non-negative and within the requested width; padStart() won't truncate over-wide inputs.
 const padh = (n, pad) => n.toString(16).padStart(pad, '0');
-/** Render bytes as lowercase hex. */
-const bytesToHex = (b) => {
+/** Convert byte array to hex string. */
+const bytesToHex = (bytes) => {
+    abytes(bytes);
     let hex = '';
-    for (const e of abytes(b))
-        hex += padh(e, 2);
+    for (let i = 0; i < bytes.length; i++) {
+        hex += padh(bytes[i], 2);
+    }
     return hex;
 };
 // Strict ASCII nibble parser: non-ASCII hex lookalikes are rejected as undefined.
 // ASCII codes: '0'..'9' = 48..57, 'A'..'F' = 65..70, 'a'..'f' = 97..102.
 // prettier-ignore
-const _ch = (ch) => ch >= 48 && ch <= 57 ? ch - 48 // '2' => 50-48
-    : ch >= 65 && ch <= 70 ? ch - (65 - 10) // 'B' => 66-(65-10)
-        : ch >= 97 && ch <= 102 ? ch - (97 - 10) // 'b' => 98-(97-10)
-            : undefined;
+const asciiToBase16 = (ch) => {
+    return ch >= 48 && ch <= 57 ? ch - 48 // '2' => 50-48
+        : ch >= 65 && ch <= 70 ? ch - (65 - 10) // 'B' => 66-(65-10)
+            : ch >= 97 && ch <= 102 ? ch - (97 - 10) // 'b' => 98-(97-10)
+                : undefined;
+};
+/** Convert hex string to byte array. */
 const hexToBytes = (hex) => {
-    const e = 'hex invalid'; // Strict ASCII hex only, with one generic error for type and parse failures.
+    const e = 'hex invalid'; // Strict ASCII hex only, with one generic error for parse failures.
     if (typeof hex !== 'string')
-        return err(e);
+        throw new TypeError(e);
     const hl = hex.length;
     const al = hl / 2;
     if (hl % 2)
-        return err(e);
+        throw new RangeError(e);
     const array = new Uint8Array(al);
     for (let ai = 0, hi = 0; ai < al; ai++, hi += 2) {
-        // treat each char as ASCII
-        const n1 = _ch(hex.charCodeAt(hi)); // parse first char, multiply it by 16
-        const n2 = _ch(hex.charCodeAt(hi + 1)); // parse second char
+        const n1 = asciiToBase16(hex.charCodeAt(hi)); // parse first char, multiply it by 16
+        const n2 = asciiToBase16(hex.charCodeAt(hi + 1)); // parse second char
         if (n1 === undefined || n2 === undefined)
-            return err(e);
+            throw new RangeError(e);
         array[ai] = n1 * 16 + n2; // example: 'A9' => 10*16 + 9
     }
     return array;
 };
-const cr = () => globalThis?.crypto; // Optional WebCrypto lookup; sync code still handles absence.
-// Async-path capability helper for WebCrypto-backed APIs.
-const subtle = () => cr()?.subtle ?? err('crypto.subtle must be defined, consider polyfill');
-// prettier-ignore
-const concatBytes = (...arrs) => {
-    // Argument order is transcript-significant for hash/signature callers, and input validation here
-    // intentionally reuses `abytes(...)` without making defensive copies of the source chunks.
-    let len = 0;
-    for (const a of arrs)
-        len += abytes(a).length;
-    const r = new Uint8Array(len); // create u8a of summed length
-    let pad = 0; // walk through each array,
-    arrs.forEach(a => { r.set(a, pad); pad += a.length; }); // ensure they have proper type
-    return r;
+// WebCrypto is available in all modern environments
+const subtle = () => {
+    const s = globalThis?.crypto?.subtle;
+    if (s)
+        return s;
+    throw new Error('crypto.subtle must be defined, consider polyfill');
 };
-/** WebCrypto OS-level CSPRNG (random number generator). Absence still fails later via `cr()`. */
-const randomBytes = (len = L) => {
-    const c = cr();
+/** Copies several Uint8Arrays into one. */
+const concatBytes = (...arrays) => {
+    let sum = 0;
+    for (let i = 0; i < arrays.length; i++) {
+        const a = arrays[i];
+        abytes(a);
+        sum += a.length;
+    }
+    const res = new Uint8Array(sum);
+    for (let i = 0, pad = 0; i < arrays.length; i++) {
+        const a = arrays[i];
+        res.set(a, pad);
+        pad += a.length;
+    }
+    return res;
+};
+/**
+ * WebCrypto OS-level CSPRNG (random number generator).
+ * Will throw when not available; large-request ceilings are delegated to getRandomValues().
+ */
+const randomBytes = (len = LEN) => {
+    const c = globalThis?.crypto;
+    if (typeof c?.getRandomValues !== 'function')
+        throw new Error('crypto.getRandomValues must be defined, consider polyfill');
     return c.getRandomValues(new Uint8Array(len));
 };
 const big = BigInt;
 /** Inclusive-lower, exclusive-upper bigint range assertion. */
-const assertRange = (n, min, max, msg = 'bad number: out of range') => {
-    if (typeof n !== 'bigint')
-        throw new TypeError(msg);
-    if (min <= n && n < max)
+const arange = (n, min, max, title = '') => {
+    if (typeof n === 'bigint' && min <= n && n < max)
         return n;
-    throw new RangeError(msg);
+    const message = (title ? `"${title}" ` : '') + 'bad number: out of range';
+    if (typeof n !== 'bigint')
+        throw new TypeError(message);
+    throw new RangeError(message);
 };
-/** Canonical modular reduction into `[0, b)`. */
-const M = (a, b = P) => {
+/** Canonical modular reduction. Callers must provide a positive modulus. */
+const mod = (a, b = P) => {
     const r = a % b;
     return r >= 0n ? r : b + r;
 };
 // Low-255-bit mask used by the `2^255 - 19` fast reduction in `modP(...)`.
 const P_MASK = (1n << 255n) - 1n;
 // Fast reduction for the special prime `2^255 - 19`. This path assumes nonnegative inputs; the
-// generic fallback would simply be `M(num, P)`.
+// generic fallback would simply be `mod(num, P)`.
 const modP = (num) => {
-    // return M(num, P);
     if (num < 0n)
-        err('negative coordinate');
+        throw new RangeError('negative coordinate');
     let r = (num >> 255n) * 19n + (num & P_MASK);
     r = (r >> 255n) * 19n + (r & P_MASK);
     return r % P;
 };
 // Reduce modulo the subgroup order stored in implementation constant `N` (RFC 8032's `L`).
-const modN = (a) => M(a, N);
-/** Modular inversion using Euclidean GCD (non-CT) instead of the RFC's `x^(p-2)` formulation.
- * This still sits on secret-dependent paths like point normalization during keygen/signing. */
-// prettier-ignore
-const invert = (num, md) => {
-    if (num === 0n || md <= 0n)
-        err('no inverse n=' + num + ' mod=' + md);
-    let a = M(num, md), b = md, x = 0n, y = 1n, u = 1n, v = 0n;
+const modN = (a) => mod(a, N);
+/** Modular inversion using extended euclidean GCD. Variable-time (non-CT). */
+const invert = (number, modulo) => {
+    if (number === 0n)
+        throw new Error('invert: expected non-zero number');
+    // modulo = 1 is the zero ring: gcd(x, 1) = 1 makes the loop below "succeed" and return the
+    // useless inverse 0. Reject it like pow() and invertCt() do.
+    if (modulo <= 1n)
+        throw new Error('invert: expected modulus > 1, got ' + modulo);
+    // This is variable-time: the loop count depends on `number`.
+    let a = mod(number, modulo);
+    let b = modulo;
+    // Only the Bézout coefficient of `number` (x/u chain) is tracked; the coefficient of `modulo`
+    // never affects the output, so it is not computed.
+    // prettier-ignore
+    let x = 0n, u = 1n;
     while (a !== 0n) {
-        const q = b / a, r = b % a;
-        const m = x - u * q, n = y - v * q;
-        b = a, a = r, x = u, y = v, u = m, v = n;
+        const q = b / a;
+        const r = b - a * q;
+        const m = x - u * q;
+        // prettier-ignore
+        b = a, a = r, x = u, u = m;
     }
-    return b === 1n ? M(x, md) : err('no inverse'); // b is gcd at this point
+    const gcd = b;
+    if (gcd !== 1n)
+        throw new Error('invert: does not exist');
+    return mod(x, modulo);
 };
 // Dynamic lookup keeps sync/async hash providers configurable at runtime. Both exported slots are
 // caller-owned and may be unset; wrapper helpers use this lookup first and then enforce the digest
 // contract instead of trusting provider output.
-const callHash = (name) => {
+const _hash = (name) => {
     // @ts-ignore
     const fn = hashes[name];
     if (typeof fn !== 'function')
-        err('hashes.' + name + ' not set');
+        throw new Error('hashes.' + name + ' not set');
     return fn;
 };
-// Both provider slots are configurable API surface and may return arbitrary values, so callers must
-// enforce the promised 64-byte SHA-512 digest contract here instead of trusting provider output.
-const checkDigest = (value) => abytes(value, 64, 'digest');
+// All exported provider slots are caller-configurable and may be unset or return arbitrary values,
+// so wrapper helpers must enforce the exact 64-byte SHA-512 digest contract instead of trusting providers.
+const callHash = (name, ...m) => abytes(_hash(name)(concatBytes(...m)), 64, 'digest');
+const callHashAsync = (name, ...m) => Promise.resolve(_hash(name)(concatBytes(...m))).then((r) => abytes(r, 64, 'digest'));
 /**
  * SHA-512 helper used by the synchronous API.
  * @param msg - Message bytes to hash.
@@ -207,11 +231,15 @@ const checkDigest = (value) => abytes(value, 64, 'digest');
  * ```
  */
 // Public helper validates the message boundary explicitly; the configured provider is still looked
-// up dynamically and its output is checked with `checkDigest(...)`.
-const hash = (msg) => checkDigest(callHash('sha512')(abytes(msg, undefined, 'message')));
+// up dynamically and its output is checked with `callHash(...)`.
+const hash = (msg) => callHash('sha512', abytes(msg, undefined, 'message'));
 // Runtime class guard: this is `instanceof Point`, so cross-realm / duplicate-bundle Point objects
 // are rejected even if they are structurally identical.
-const apoint = (p) => (p instanceof Point ? p : err('Point expected'));
+const apoint = (p) => {
+    if (p instanceof Point)
+        return p;
+    throw new TypeError('Point expected');
+};
 // ## End of Helpers
 // -----------------
 // Exclusive upper bound `2^256` used by 32-byte decode/serialization range checks.
@@ -240,10 +268,10 @@ class Point {
     // on-curve or that T matches X*Y/Z.
     constructor(X, Y, Z, T) {
         const max = B256;
-        this.X = assertRange(X, 0n, max);
-        this.Y = assertRange(Y, 0n, max);
-        this.Z = assertRange(Z, 1n, max);
-        this.T = assertRange(T, 0n, max);
+        this.X = arange(X, 0n, max, 'X');
+        this.Y = arange(Y, 0n, max, 'Y');
+        this.Z = arange(Z, 1n, max, 'Z');
+        this.T = arange(T, 0n, max, 'T');
         Object.freeze(this);
     }
     static CURVE() {
@@ -252,33 +280,32 @@ class Point {
     static fromAffine(p) {
         return new Point(p.x, p.y, 1n, modP(p.x * p.y));
     }
-    /** RFC8032 5.1.3: Bytes to Point. */
-    static fromBytes(hex, zip215 = false) {
+    /** RFC8032 5.1.3: Uint8Array to Point. */
+    static fromBytes(bytes, zip215 = false) {
         const d = _d;
-        // Copy array to not mess it up.
-        const normed = Uint8Array.from(abytes(hex, L));
+        const normed = snapshotBytes(bytes, 'point', LEN); // owned copy: sign-bit mask below mutates it
         // adjust first LE byte = last BE byte
-        const lastByte = hex[31];
+        const lastByte = normed[31];
         normed[31] = lastByte & ~0x80;
         const y = bytesToNumberLE(normed);
         // After clearing the sign bit, parsed `y` is always < 2^255. ZIP-215 still accepts the full
         // post-mask range here, while strict RFC8032 decoding further requires `y < p`.
         const max = zip215 ? B256 : P;
-        assertRange(y, 0n, max);
+        arange(y, 0n, max, 'y coordinate');
         const y2 = modP(y * y); // y²
-        const u = M(y2 - 1n); // u=y²-1
+        const u = mod(y2 - 1n); // u=y²-1
         const v = modP(d * y2 + 1n); // v=dy²+1
         let { isValid, value: x } = uvRatio(u, v); // (uv³)(uv⁷)^(p-5)/8; square root
         if (!isValid)
-            err('bad point: y not sqrt'); // not square root: bad point
+            throw new Error('bad point: y not sqrt'); // not square root: bad point
         const isXOdd = (x & 1n) === 1n; // adjust sign of x coordinate
         const isLastByteOdd = (lastByte & 0x80) !== 0; // x_0, last bit
         // ZIP-215-compatible decoding keeps the x=0 / sign-bit=1 encoding accepted; strict RFC 8032
         // rejects it, but the vendored ZIP-215 compliance vectors include this form in A/R bytes.
         if (!zip215 && x === 0n && isLastByteOdd)
-            err('bad point: x==0, isLastByteOdd'); // x=0, x_0=1
+            throw new Error('bad point: x==0, isLastByteOdd'); // x=0, x_0=1
         if (isLastByteOdd !== isXOdd)
-            x = M(-x);
+            x = mod(-x);
         return new Point(x, y, 1n, modP(x * y)); // Z=1, T=xy
     }
     static fromHex(hex, zip215) {
@@ -298,7 +325,7 @@ class Point {
         // Intentional stricter-than-on-curve policy: reject ZERO by default because many protocols
         // require a non-zero point, and silently accepting identity points is a common caller mistake.
         if (p.is0())
-            return err('bad point: ZERO'); // TODO: optimize, with vars below?
+            throw new Error('bad point: ZERO');
         // Equation in affine coordinates: ax² + y² = 1 + dx²y²
         // Equation in projective coordinates (X/Z, Y/Z, Z):  (aX² + Y²)Z² = Z⁴ + dX²Y²
         const { X, Y, Z, T } = p;
@@ -308,14 +335,14 @@ class Point {
         const Z4 = modP(Z2 * Z2); // Z⁴
         const aX2 = modP(X2 * a); // aX²
         const left = modP(Z2 * (aX2 + Y2)); // (aX² + Y²)Z²
-        const right = M(Z4 + modP(d * modP(X2 * Y2))); // Z⁴ + dX²Y²
+        const right = mod(Z4 + modP(d * modP(X2 * Y2))); // Z⁴ + dX²Y²
         if (left !== right)
-            return err('bad point: equation left != right (1)');
+            throw new Error('bad point: equation left != right (1)');
         // In Extended coordinates we also have T, which is x*y=T/Z: check X*Y == Z*T
         const XY = modP(X * Y);
         const ZT = modP(Z * T);
         if (XY !== ZT)
-            return err('bad point: equation left != right (2)');
+            throw new Error('bad point: equation left != right (2)');
         return this;
     }
     /** Equality check: compare points P&Q. */
@@ -333,7 +360,7 @@ class Point {
     }
     /** Flip point over y coordinate. */
     negate() {
-        return new Point(M(-this.X), this.Y, this.Z, M(-this.T));
+        return new Point(mod(-this.X), this.Y, this.Z, mod(-this.T));
     }
     /** Point doubling. Complete formula. Cost: `4M + 4S + 1*a + 6add + 1*2`. */
     double() {
@@ -344,32 +371,32 @@ class Point {
         const B = modP(Y1 * Y1);
         const C = modP(2n * Z1 * Z1);
         const D = modP(a * A);
-        const x1y1 = M(X1 + Y1);
-        const E = M(modP(x1y1 * x1y1) - A - B);
-        const G = M(D + B);
-        const F = M(G - C);
-        const H = M(D - B);
+        const x1y1 = mod(X1 + Y1);
+        const E = mod(modP(x1y1 * x1y1) - A - B);
+        const G = mod(D + B);
+        const F = mod(G - C);
+        const H = mod(D - B);
         const X3 = modP(E * F);
         const Y3 = modP(G * H);
         const T3 = modP(E * H);
         const Z3 = modP(F * G);
         return new Point(X3, Y3, Z3, T3);
     }
-    /** Point addition. Complete formula. Cost: `8M + 1*k + 8add + 1*2`. */
+    /** Point addition. Complete formula. Cost: `9M + 1*a + 1*d + 7add`. */
     add(other) {
         const { X: X1, Y: Y1, Z: Z1, T: T1 } = this;
         const { X: X2, Y: Y2, Z: Z2, T: T2 } = apoint(other); // doesn't check if other on-curve
         const a = _a;
         const d = _d;
-        // https://hyperelliptic.org/EFD/g1p/auto-twisted-extended-1.html#addition-add-2008-hwcd-3
+        // https://hyperelliptic.org/EFD/g1p/auto-twisted-extended.html#addition-add-2008-hwcd
         const A = modP(X1 * X2);
         const B = modP(Y1 * Y2);
         const C = modP(modP(T1 * d) * T2);
         const D = modP(Z1 * Z2);
-        const E = M(modP(M(X1 + Y1) * M(X2 + Y2)) - A - B);
-        const F = M(D - C);
-        const G = M(D + C);
-        const H = M(B - modP(a * A));
+        const E = mod(modP(mod(X1 + Y1) * mod(X2 + Y2)) - A - B);
+        const F = mod(D - C);
+        const G = mod(D + C);
+        const H = mod(B - modP(a * A));
         const X3 = modP(E * F);
         const Y3 = modP(G * H);
         const T3 = modP(E * H);
@@ -392,7 +419,7 @@ class Point {
         // `n = 0` as the one extra accepted case used by verification-style callers.
         if (!safe && n === 0n)
             return I;
-        assertRange(n, 1n, N);
+        arange(n, 1n, N, 'scalar');
         if (!safe && this.is0())
             return I;
         if (n === 1n)
@@ -424,7 +451,7 @@ class Point {
         const iz = invert(Z, P);
         // (Z * Z^-1) must be 1, otherwise bad math
         if (modP(Z * iz) !== 1n)
-            err('invalid inverse');
+            throw new Error('invalid inverse');
         // x = X*Z^-1; y = Y*Z^-1
         const x = modP(X * iz);
         const y = modP(Y * iz);
@@ -455,13 +482,13 @@ class Point {
     }
 }
 /** Generator / base point */
-const G = new Point(Gx, Gy, 1n, M(Gx * Gy));
+const G = new Point(Gx, Gy, 1n, mod(Gx * Gy));
 /** Identity / zero point */
 const I = new Point(0n, 1n, 1n, 0n);
 // Static aliases
 Point.BASE = G;
 Point.ZERO = I;
-const numTo32bLE = (num) => hexToBytes(padh(assertRange(num, 0n, B256), 64)).reverse();
+const numTo32bLE = (num) => hexToBytes(padh(arange(num, 0n, B256, 'num'), 64)).reverse();
 // Caller-enforced width: some sites require 32-byte RFC encodings, while others intentionally feed
 // wider SHA-512 output chunks through the same little-endian parser.
 const bytesToNumberLE = (b) => big('0x' + bytesToHex(Uint8Array.from(abytes(b)).reverse()));
@@ -503,28 +530,23 @@ const uvRatio = (u, v) => {
     const root1 = x; // First root candidate
     const root2 = modP(x * RM1); // Second root candidate; RM1 is √-1
     const useRoot1 = vx2 === u; // If vx² = u (mod p), x is a square root
-    const useRoot2 = vx2 === M(-u); // If vx² = -u, set x <-- x * 2^((p-1)/4)
-    const noRoot = vx2 === M(-u * RM1); // There is no valid root, vx² = -u√-1
+    const useRoot2 = vx2 === mod(-u); // If vx² = -u, set x <-- x * 2^((p-1)/4)
+    const noRoot = vx2 === mod(-u * RM1); // There is no valid root, vx² = -u√-1
     if (useRoot1)
         x = root1;
     if (useRoot2 || noRoot)
         x = root2; // We return root2 anyway, for const-time
-    if ((M(x) & 1n) === 1n)
-        x = M(-x); // edIsNegative
+    if ((mod(x) & 1n) === 1n)
+        x = mod(-x); // edIsNegative
     return { isValid: useRoot1 || useRoot2, value: x };
 };
-// Implementation `N` is the subgroup order; `L` is only the shared 32-byte encoded width constant.
-// Reduce any little-endian byte string modulo the subgroup order; the `hash` name reflects the
-// common caller shape, not an input restriction.
-const modL_LE = (hash) => modN(bytesToNumberLE(hash)); // modulo L; but little-endian
-// Both sync and async SHA-512 slots are exported/configurable; use `callHash(...)` for both so
-// missing async overrides fail explicitly, then validate the returned digest type/length.
-const sha512a = (...m) => Promise.resolve(callHash('sha512Async')(concatBytes(...m))).then(checkDigest);
-const sha512s = (...m) => checkDigest(callHash('sha512')(concatBytes(...m)));
+// Reduce a little-endian byte string modulo the subgroup order `N` (RFC 8032's `L`); the `hash`
+// param name reflects the common caller shape, not an input restriction.
+const modL_LE = (hash) => modN(bytesToNumberLE(hash));
 // RFC8032 5.1.5. Split the 64-byte hashed seed into the clamped scalar half and nonce prefix.
-const hash2extK = (hashed) => {
+const hashedToExtK = (hashed) => {
     // slice creates a copy, unlike subarray
-    const copy = Uint8Array.from(hashed);
+    const copy = snapshotBytes(hashed);
     const head = copy.slice(0, 32);
     head[0] &= 248; // Clamp bits: 0b1111_1000
     head[31] &= 127; // 0b0111_1111
@@ -537,9 +559,9 @@ const hash2extK = (hashed) => {
     const pointBytes = point.toBytes(); // point serialized to Uint8Array
     return { head, prefix, scalar, point, pointBytes };
 };
-// RFC8032 5.1.5; getPublicKey async, sync. Hash priv key and extract point.
-const getExtendedPublicKeyAsync = (secretKey) => sha512a(abytes(secretKey, L)).then(hash2extK);
-const getExtendedPublicKey = (secretKey) => hash2extK(sha512s(abytes(secretKey, L)));
+// RFC8032 5.1.5; getPublicKey async, sync. Hash secret key and extract point.
+const getExtendedPublicKeyAsync = (secretKey) => callHashAsync('sha512Async', abytes(secretKey, LEN, 'secretKey')).then(hashedToExtK);
+const getExtendedPublicKey = (secretKey) => hashedToExtK(callHash('sha512', abytes(secretKey, LEN, 'secretKey')));
 /**
  * Creates a 32-byte Ed25519 public key from the RFC 8032 32-byte secret-key seed. Async.
  * @param secretKey - 32-byte RFC 8032 secret-key seed, not a 64-byte expanded secret key.
@@ -560,7 +582,7 @@ const getPublicKeyAsync = (secretKey) => getExtendedPublicKeyAsync(secretKey).th
 /**
  * Creates a 32-byte Ed25519 public key from the RFC 8032 32-byte secret-key seed.
  * To use, set `hashes.sha512` first.
- * @param priv - 32-byte RFC 8032 secret-key seed, not a 64-byte expanded secret key.
+ * @param secretKey - 32-byte RFC 8032 secret-key seed, not a 64-byte expanded secret key.
  * @returns 32-byte public key.
  * @throws If synchronous SHA-512 has not been configured in `hashes`. {@link Error}
  * @throws On wrong argument types. {@link TypeError}
@@ -577,19 +599,19 @@ const getPublicKeyAsync = (secretKey) => getExtendedPublicKeyAsync(secretKey).th
  * const publicKey = ed.getPublicKey(secretKey);
  * ```
  */
-const getPublicKey = (priv) => getExtendedPublicKey(priv).pointBytes;
-const hashFinishA = (res) => sha512a(res.hashable).then(res.finish);
-const hashFinishS = (res) => res.finish(sha512s(res.hashable));
+const getPublicKey = (secretKey) => getExtendedPublicKey(secretKey).pointBytes;
+const hashFinishAsync = (res) => callHashAsync('sha512Async', res.hashable).then(res.finish);
+const hashFinishSync = (res) => res.finish(callHash('sha512', res.hashable));
 // Code, shared between sync & async sign
 const _sign = (e, rBytes, msg) => {
-    const { pointBytes: P, scalar: s } = e;
+    const { pointBytes: A, scalar: s } = e;
     const r = modL_LE(rBytes); // r was created outside, reduce it modulo L
     // RFC 8032 5.1.6 allows r mod L = 0, and SUPERCOP ref10 accepts the resulting identity-point
     // signature.
     // We intentionally keep the safe multiply() rejection here so a miswired all-zero SHA-512 provider
     // fails loudly instead of silently producing a degenerate signature.
     const R = G.multiply(r).toBytes(); // R = [r]B
-    const hashable = concatBytes(R, P, msg); // dom2(F, C) || R || A || PH(M)
+    const hashable = concatBytes(R, A, msg); // dom2(F, C) || R || A || PH(M)
     const finish = (hashed) => {
         // k = SHA512(dom2(F, C) || R || A || PH(M))
         const S = modN(r + modL_LE(hashed) * s); // S = (r + k * s) mod L; 0 <= s < l
@@ -619,8 +641,8 @@ const _sign = (e, rBytes, msg) => {
 const signAsync = async (message, secretKey) => {
     const m = snapshotBytes(message, 'message');
     const e = await getExtendedPublicKeyAsync(secretKey);
-    const rBytes = await sha512a(e.prefix, m); // r = SHA512(dom2(F, C) || prefix || PH(M))
-    return hashFinishA(_sign(e, rBytes, m)); // gen R, k, S, then 64-byte signature
+    const rBytes = await callHashAsync('sha512Async', e.prefix, m); // r = SHA512(dom2(F, C) || prefix || PH(M))
+    return hashFinishAsync(_sign(e, rBytes, m)); // gen R, k, S, then 64-byte signature
 };
 /**
  * Signs message using secret key. To use, set `hashes.sha512` first.
@@ -646,25 +668,25 @@ const signAsync = async (message, secretKey) => {
 const sign = (message, secretKey) => {
     const m = snapshotBytes(message, 'message');
     const e = getExtendedPublicKey(secretKey);
-    const rBytes = sha512s(e.prefix, m); // r = SHA512(dom2(F, C) || prefix || PH(M))
-    return hashFinishS(_sign(e, rBytes, m)); // gen R, k, S, then 64-byte signature
+    const rBytes = callHash('sha512', e.prefix, m); // r = SHA512(dom2(F, C) || prefix || PH(M))
+    return hashFinishSync(_sign(e, rBytes, m)); // gen R, k, S, then 64-byte signature
 };
 // Exported defaults favor ZIP-215 interoperability semantics; callers must opt into the stricter
 // branch with `{ zip215: false }`.
 const defaultVerifyOpts = { zip215: true };
 const _verify = (sig, msg, publicKey, options = defaultVerifyOpts) => {
-    sig = abytes(sig, 64); // Signature hex str/Bytes, must be 64 bytes
-    msg = abytes(msg); // Message hex str/Bytes
-    publicKey = abytes(publicKey, L);
+    sig = abytes(sig, 64, 'signature'); // Signature hex str/Bytes, must be 64 bytes
+    msg = abytes(msg, undefined, 'message'); // Message hex str/Bytes
+    publicKey = abytes(publicKey, LEN, 'publicKey');
     // zip215=false keeps the library's stricter branch, which still canonicalizes `R` / `A` before
     // hashing and rejects small-order public keys earlier than pure RFC8032 text would require.
     // Preserve the exported ZIP-215 default for `{}` / `{ zip215: undefined }`, not just omitted opts.
     if (options === null || typeof options !== 'object') {
-        err('expected valid options object');
+        throw new TypeError('expected valid options object');
     }
     const { zip215 = true } = options;
-    const r = sig.subarray(0, L);
-    const s = bytesToNumberLE(sig.subarray(L, L * 2)); // Decode second half as an integer S;
+    const r = sig.subarray(0, LEN);
+    const s = bytesToNumberLE(sig.subarray(LEN, LEN * 2)); // Decode second half as an integer S;
     let A, R, SB;
     let hashable = Uint8Array.of();
     let finished = false;
@@ -722,7 +744,7 @@ const _verify = (sig, msg, publicKey, options = defaultVerifyOpts) => {
  * const isValid = await ed.verifyAsync(signature, message, publicKey);
  * ```
  */
-const verifyAsync = async (signature, message, publicKey, opts = defaultVerifyOpts) => hashFinishA(_verify(signature, message, publicKey, opts));
+const verifyAsync = async (signature, message, publicKey, opts = defaultVerifyOpts) => hashFinishAsync(_verify(signature, message, publicKey, opts));
 /**
  * Verifies a signature on message and public key using the synchronous hash path.
  * The implementation is based on RFC8032 5.1.7, but default opts use ZIP-215 semantics; pass
@@ -750,7 +772,7 @@ const verifyAsync = async (signature, message, publicKey, opts = defaultVerifyOp
  * const isValid = ed.verify(signature, message, publicKey);
  * ```
  */
-const verify = (signature, message, publicKey, opts = defaultVerifyOpts) => hashFinishS(_verify(signature, message, publicKey, opts));
+const verify = (signature, message, publicKey, opts = defaultVerifyOpts) => hashFinishSync(_verify(signature, message, publicKey, opts));
 /**
  * Math, hex, byte helpers. Not in `utils` because utils share API with noble-curves.
  * Exposes the same low-level field-default `mod` reducer and non-CT `invert` helper used
@@ -766,8 +788,8 @@ const etc = /* @__PURE__ */ Object.freeze({
     bytesToHex,
     hexToBytes,
     concatBytes,
-    mod: M,
-    invert: invert,
+    mod,
+    invert,
     randomBytes,
 });
 /**
@@ -796,8 +818,8 @@ const hashes = {
 // Returns the final 32-byte Ed25519 secret-key seed verbatim, generating fresh random bytes only
 // when omitted.
 const randomSecretKey = (seed) => {
-    seed = seed === undefined ? randomBytes(L) : seed;
-    return abytes(seed, L);
+    seed = seed === undefined ? randomBytes(LEN) : seed;
+    return abytes(seed, LEN, 'seed');
 };
 /**
  * Generates a secret/public keypair.
@@ -857,9 +879,9 @@ const keygenAsync = async (seed) => {
  * ```
  */
 const utils = /* @__PURE__ */ Object.freeze({
-    getExtendedPublicKeyAsync: getExtendedPublicKeyAsync,
-    getExtendedPublicKey: getExtendedPublicKey,
-    randomSecretKey: randomSecretKey,
+    getExtendedPublicKeyAsync,
+    getExtendedPublicKey,
+    randomSecretKey,
 });
 // ## Precomputes
 // --------------
@@ -908,7 +930,6 @@ const wNAF = (n) => {
     let p = I;
     let f = G; // f must be G, or could become I in the end
     const pow_2_w = 2 ** W; // 256 for W=8
-    const maxNum = pow_2_w; // 256 for W=8
     const mask = big(pow_2_w - 1); // 255 for W=8 == mask 0b11111111
     const shiftBy = big(W); // 8 for W=8
     for (let w = 0; w < pwindows; w++) {
@@ -920,25 +941,24 @@ const wNAF = (n) => {
         // Naive: index +127 => 127, +224 => 224
         // Optimized: index +127 => 127, +224 => 256-32
         if (wbits > pwindowSize) {
-            wbits -= maxNum;
+            wbits -= pow_2_w;
             n += 1n;
         }
-        const off = w * pwindowSize;
-        const offF = off; // offsets, evaluate both
-        const offP = off + Math.abs(wbits) - 1;
-        const isEven = w % 2 !== 0; // conditions, evaluate both
+        const off = w * pwindowSize; // offset of this window's block; also the fake-add index
+        const offP = off + Math.abs(wbits) - 1; // real-add index; both offsets always evaluated
+        const isOddW = w % 2 !== 0; // conditions, evaluate both; alternates fake-add sign per window
         const isNeg = wbits < 0;
         if (wbits === 0) {
-            // off == I: can't add it. Adding random offF instead.
-            f = f.add(ctneg(isEven, comp[offF])); // bits are 0: add garbage to fake point
+            // wbits == 0 means the real index would be I: can't add it. Add window offset `off` instead.
+            f = f.add(ctneg(isOddW, comp[off])); // bits are 0: add garbage to fake point
         }
         else {
             p = p.add(ctneg(isNeg, comp[offP])); // bits are 1: add to result point
         }
     }
     if (n !== 0n)
-        err('invalid wnaf');
-    return { p, f }; // callers only need `p`; `f` is kept for zero-digit mitigation symmetry
+        throw new Error('invalid wnaf');
+    return { p, f }; // return both real and fake points for JIT/leakage-shape symmetry
 };
 // !! Remove the export to easily use in REPL / browser console
-export { etc, getPublicKey, getPublicKeyAsync, hash, hashes, keygen, keygenAsync, Point, sign, signAsync, utils, verify, verifyAsync };
+export { etc, getPublicKey, getPublicKeyAsync, hash, hashes, keygen, keygenAsync, Point, sign, signAsync, utils, verify, verifyAsync, };
