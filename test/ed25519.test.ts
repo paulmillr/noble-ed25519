@@ -1,11 +1,11 @@
-import {
-  hexToBytes as bytes,
-  concatBytes,
-  bytesToHex as hex,
-  randomBytes,
-} from '@noble/hashes/utils.js';
 import { sha512 } from '@noble/hashes/sha2.js';
-import { describe, should } from '@paulmillr/jsbt/test.js';
+import {
+    hexToBytes as bytes,
+    concatBytes,
+    bytesToHex as hex,
+    randomBytes,
+} from '@noble/hashes/utils.js';
+import { describe, it } from '@paulmillr/jsbt/test.js';
 import * as fc from 'fast-check';
 import { deepStrictEqual as eql, strictEqual, throws } from 'node:assert';
 import { ed25519 as ed, ED25519_TORSION_SUBGROUP, numberToBytesLE } from './ed25519.helpers.ts';
@@ -27,7 +27,7 @@ describe('ed25519', () => {
   if (isNobleCurves) Point.BASE.precompute(8, false);
 
   describe('getPublicKey()', () => {
-    should('reject invalid inputs', () => {
+    it('reject invalid inputs', () => {
       const invalidPriv = new Uint8Array(33).fill(1);
       throws(() => ed.getPublicKey(invalidPriv), '>32byte private key');
       for (const item of getTypeTestsNonUi8a()) {
@@ -38,7 +38,7 @@ describe('ed25519', () => {
   });
 
   describe('sign()', () => {
-    should('random signature and static vectors', () => {
+    it('random signature and static vectors', () => {
       const priv = ed.utils.randomSecretKey();
       const pub = ed.getPublicKey(priv);
       const msg = new TextEncoder().encode('hello');
@@ -80,7 +80,7 @@ describe('ed25519', () => {
   });
 
   describe('verify()', () => {
-    should('static, random, mutation, and ZIP-215 cases', async () => {
+    it('static, random, mutation, and ZIP-215 cases', async () => {
       const priv = bytes32('a665a45920422f9d417e4867ef');
       const priv2 = bytes32('a675a45920422f9d417e4867ef');
       const msg = bytes('874f9960c5d2b7a9b5fad383e1ba44719ebb743a');
@@ -265,7 +265,7 @@ describe('ed25519', () => {
   });
 
   describe('Point', () => {
-    should('constructor, validation, multiply, torsion, and affine edge cases', () => {
+    it('constructor, validation, multiply, torsion, and affine edge cases', () => {
       throws(() => ed.Point.BASE.subtract({ negate: () => ed.Point.ZERO } as any));
 
       const t = 81718630521762619991978402609047527194981150691135404693881672112315521837062n;
@@ -356,7 +356,7 @@ describe('ed25519', () => {
       eql(p.toAffine(), xy);
     });
 
-    should('small-order and torsioned points multiply exactly (naive reference)', () => {
+    it('small-order and torsioned points multiply exactly (naive reference)', () => {
       const P = ed.Point.CURVE().p;
       const Z = Point.ZERO;
       const naiveMul = (p, s) => {
@@ -395,7 +395,7 @@ describe('ed25519', () => {
   // https://zips.z.cash/zip-0215
   // Vectors from https://gist.github.com/hdevalence/93ed42d17ecab8e42138b213812c8cc7
   describe('ZIP215', () => {
-    should('compliance tests and scalar-boundary rejection', () => {
+    it('compliance tests and scalar-boundary rejection', () => {
       const zip215 = json('./vectors/ed25519/zip215.json');
       const str = new TextEncoder().encode('Zcash');
       for (let v of zip215) {
@@ -421,7 +421,7 @@ describe('ed25519', () => {
     });
   });
 
-  should('wycheproof/ED25519 (OLD)', () => {
+  it('wycheproof/ED25519 (OLD)', () => {
     // Old vectors allow to test sign() because they include private key.
     const ed25519vectors_OLD = json('./vectors/ed25519/ed25519_test_OLD.json');
     for (let g = 0; g < ed25519vectors_OLD.testGroups.length; g++) {
@@ -447,7 +447,7 @@ describe('ed25519', () => {
     }
   });
 
-  should('wycheproof/ED25519', () => {
+  it('wycheproof/ED25519', () => {
     const ed25519vectors = jsonGZ(
       './vectors/acvp-vectors/wycheproof/testvectors_v1/ed25519_test.json.gz'
     );
@@ -477,4 +477,4 @@ describe('ed25519', () => {
   });
 });
 
-should.runWhen(import.meta.url);
+it.runWhen(import.meta.url);
