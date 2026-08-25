@@ -53,8 +53,6 @@ const err = (message = '') => {
     captureTrace(e, err);
     throw e;
 };
-const isBig = (n) => typeof n === 'bigint'; // is big integer
-const isStr = (s) => typeof s === 'string'; // is string
 // Plain `instanceof Uint8Array` is too strict for some Buffer / proxy / cross-realm cases. The
 // fallback still requires a real ArrayBuffer view so plain JSON-deserialized `{ constructor: ... }`
 // spoofing is rejected, and `BYTES_PER_ELEMENT === 1` keeps the fallback on byte-oriented views.
@@ -80,39 +78,34 @@ const abytes = (value, length, title = '') => {
     }
     return value;
 };
-/** create Uint8Array */
-const u8n = (len) => new Uint8Array(len);
-// Clone helper used before in-place byte edits such as sign-bit clearing or endian reversal.
-const u8fr = (buf) => Uint8Array.from(buf);
 // Signing hashes the message twice. Take one owned snapshot so caller mutation cannot make nonce
 // derivation and challenge derivation observe different messages.
-const snapshotBytes = (value, title) => u8fr(abytes(value, undefined, title));
-// Left-pad hex to a caller-chosen width. Width enforcement/truncation policy stays with callers.
+const snapshotBytes = (value, title) => Uint8Array.from(abytes(value, undefined, title));
+// Callers keep values non-negative and within the requested width; padStart() won't truncate over-wide inputs.
 const padh = (n, pad) => n.toString(16).padStart(pad, '0');
-// Lowercase hex serializer.
-const bytesToHex = (b) => Array.from(abytes(b))
-    .map((e) => padh(e, 2))
-    .join('');
-const C = { _0: 48, _9: 57, A: 65, F: 70, a: 97, f: 102 }; // ASCII characters
-const _ch = (ch) => {
-    if (ch >= C._0 && ch <= C._9)
-        return ch - C._0; // '2' => 50-48
-    if (ch >= C.A && ch <= C.F)
-        return ch - (C.A - 10); // 'B' => 66-(65-10)
-    if (ch >= C.a && ch <= C.f)
-        return ch - (C.a - 10); // 'b' => 98-(97-10)
-    return;
+/** Render bytes as lowercase hex. */
+const bytesToHex = (b) => {
+    let hex = '';
+    for (const e of abytes(b))
+        hex += padh(e, 2);
+    return hex;
 };
-// Accepts both uppercase and lowercase hex; all parse failures intentionally collapse to `hex invalid`.
+// Strict ASCII nibble parser: non-ASCII hex lookalikes are rejected as undefined.
+// ASCII codes: '0'..'9' = 48..57, 'A'..'F' = 65..70, 'a'..'f' = 97..102.
+// prettier-ignore
+const _ch = (ch) => ch >= 48 && ch <= 57 ? ch - 48 // '2' => 50-48
+    : ch >= 65 && ch <= 70 ? ch - (65 - 10) // 'B' => 66-(65-10)
+        : ch >= 97 && ch <= 102 ? ch - (97 - 10) // 'b' => 98-(97-10)
+            : undefined;
 const hexToBytes = (hex) => {
-    const e = 'hex invalid';
-    if (!isStr(hex))
+    const e = 'hex invalid'; // Strict ASCII hex only, with one generic error for type and parse failures.
+    if (typeof hex !== 'string')
         return err(e);
     const hl = hex.length;
     const al = hl / 2;
     if (hl % 2)
         return err(e);
-    const array = u8n(al);
+    const array = new Uint8Array(al);
     for (let ai = 0, hi = 0; ai < al; ai++, hi += 2) {
         // treat each char as ASCII
         const n1 = _ch(hex.charCodeAt(hi)); // parse first char, multiply it by 16
@@ -133,7 +126,7 @@ const concatBytes = (...arrs) => {
     let len = 0;
     for (const a of arrs)
         len += abytes(a).length;
-    const r = u8n(len); // create u8a of summed length
+    const r = new Uint8Array(len); // create u8a of summed length
     let pad = 0; // walk through each array,
     arrs.forEach(a => { r.set(a, pad); pad += a.length; }); // ensure they have proper type
     return r;
@@ -141,12 +134,12 @@ const concatBytes = (...arrs) => {
 /** WebCrypto OS-level CSPRNG (random number generator). Absence still fails later via `cr()`. */
 const randomBytes = (len = L) => {
     const c = cr();
-    return c.getRandomValues(u8n(len));
+    return c.getRandomValues(new Uint8Array(len));
 };
 const big = BigInt;
 /** Inclusive-lower, exclusive-upper bigint range assertion. */
 const assertRange = (n, min, max, msg = 'bad number: out of range') => {
-    if (!isBig(n))
+    if (typeof n !== 'bigint')
         throw new TypeError(msg);
     if (min <= n && n < max)
         return n;
@@ -263,7 +256,7 @@ class Point {
     static fromBytes(hex, zip215 = false) {
         const d = _d;
         // Copy array to not mess it up.
-        const normed = u8fr(abytes(hex, L));
+        const normed = Uint8Array.from(abytes(hex, L));
         // adjust first LE byte = last BE byte
         const lastByte = hex[31];
         normed[31] = lastByte & ~0x80;
@@ -471,7 +464,7 @@ Point.ZERO = I;
 const numTo32bLE = (num) => hexToBytes(padh(assertRange(num, 0n, B256), 64)).reverse();
 // Caller-enforced width: some sites require 32-byte RFC encodings, while others intentionally feed
 // wider SHA-512 output chunks through the same little-endian parser.
-const bytesToNumberLE = (b) => big('0x' + bytesToHex(u8fr(abytes(b)).reverse()));
+const bytesToNumberLE = (b) => big('0x' + bytesToHex(Uint8Array.from(abytes(b)).reverse()));
 const pow2 = (x, power) => {
     // pow2(x, 4) == x^(2^4)
     // Negative `power` values are not rejected here and currently leave `x` unchanged.
@@ -531,7 +524,7 @@ const sha512s = (...m) => checkDigest(callHash('sha512')(concatBytes(...m)));
 // RFC8032 5.1.5. Split the 64-byte hashed seed into the clamped scalar half and nonce prefix.
 const hash2extK = (hashed) => {
     // slice creates a copy, unlike subarray
-    const copy = u8fr(hashed);
+    const copy = Uint8Array.from(hashed);
     const head = copy.slice(0, 32);
     head[0] &= 248; // Clamp bits: 0b1111_1000
     head[31] &= 127; // 0b0111_1111
@@ -796,7 +789,7 @@ const hashes = {
     sha512Async: async (message) => {
         const s = subtle();
         const m = concatBytes(message);
-        return u8n(await s.digest('SHA-512', m.buffer));
+        return new Uint8Array(await s.digest('SHA-512', m.buffer));
     },
     sha512: undefined,
 };
@@ -948,4 +941,4 @@ const wNAF = (n) => {
     return { p, f }; // callers only need `p`; `f` is kept for zero-digit mitigation symmetry
 };
 // !! Remove the export to easily use in REPL / browser console
-export { etc, getPublicKey, getPublicKeyAsync, hash, hashes, keygen, keygenAsync, Point, sign, signAsync, utils, verify, verifyAsync, };
+export { etc, getPublicKey, getPublicKeyAsync, hash, hashes, keygen, keygenAsync, Point, sign, signAsync, utils, verify, verifyAsync };

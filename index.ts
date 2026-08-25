@@ -179,8 +179,6 @@ const err = (message = ''): never => {
   captureTrace(e, err);
   throw e;
 };
-const isBig = (n: unknown): n is bigint => typeof n === 'bigint'; // is big integer
-const isStr = (s: unknown): s is string => typeof s === 'string'; // is string
 // Plain `instanceof Uint8Array` is too strict for some Buffer / proxy / cross-realm cases. The
 // fallback still requires a real ArrayBuffer view so plain JSON-deserialized `{ constructor: ... }`
 // spoofing is rejected, and `BYTES_PER_ELEMENT === 1` keeps the fallback on byte-oriented views.
@@ -207,36 +205,33 @@ const abytes = (value: TArg<Bytes>, length?: number, title: string = ''): TRet<B
   }
   return value as TRet<Bytes>;
 };
-/** create Uint8Array */
-const u8n = (len: number): TRet<Bytes> => new Uint8Array(len) as TRet<Bytes>;
-// Clone helper used before in-place byte edits such as sign-bit clearing or endian reversal.
-const u8fr = (buf: ArrayLike<number>): TRet<Bytes> => Uint8Array.from(buf) as TRet<Bytes>;
 // Signing hashes the message twice. Take one owned snapshot so caller mutation cannot make nonce
 // derivation and challenge derivation observe different messages.
 const snapshotBytes = (value: TArg<Bytes>, title: string): TRet<Bytes> =>
-  u8fr(abytes(value, undefined, title));
-// Left-pad hex to a caller-chosen width. Width enforcement/truncation policy stays with callers.
+  Uint8Array.from(abytes(value, undefined, title));
+// Callers keep values non-negative and within the requested width; padStart() won't truncate over-wide inputs.
 const padh = (n: number | bigint, pad: number) => n.toString(16).padStart(pad, '0');
-// Lowercase hex serializer.
-const bytesToHex = (b: TArg<Bytes>): string =>
-  Array.from(abytes(b))
-    .map((e) => padh(e, 2))
-    .join('');
-const C = { _0: 48, _9: 57, A: 65, F: 70, a: 97, f: 102 } as const; // ASCII characters
-const _ch = (ch: number): number | undefined => {
-  if (ch >= C._0 && ch <= C._9) return ch - C._0; // '2' => 50-48
-  if (ch >= C.A && ch <= C.F) return ch - (C.A - 10); // 'B' => 66-(65-10)
-  if (ch >= C.a && ch <= C.f) return ch - (C.a - 10); // 'b' => 98-(97-10)
-  return;
+/** Render bytes as lowercase hex. */
+const bytesToHex = (b: TArg<Bytes>): string => {
+  let hex = '';
+  for (const e of abytes(b)) hex += padh(e, 2);
+  return hex;
 };
-// Accepts both uppercase and lowercase hex; all parse failures intentionally collapse to `hex invalid`.
+// Strict ASCII nibble parser: non-ASCII hex lookalikes are rejected as undefined.
+// ASCII codes: '0'..'9' = 48..57, 'A'..'F' = 65..70, 'a'..'f' = 97..102.
+// prettier-ignore
+const _ch = (ch: number): number | undefined =>
+  ch >= 48 && ch <= 57 ? ch - 48 // '2' => 50-48
+  : ch >= 65 && ch <= 70 ? ch - (65 - 10) // 'B' => 66-(65-10)
+  : ch >= 97 && ch <= 102 ? ch - (97 - 10) // 'b' => 98-(97-10)
+  : undefined;
 const hexToBytes = (hex: string): TRet<Bytes> => {
-  const e = 'hex invalid';
-  if (!isStr(hex)) return err(e);
+  const e = 'hex invalid'; // Strict ASCII hex only, with one generic error for type and parse failures.
+  if (typeof hex !== 'string') return err(e);
   const hl = hex.length;
   const al = hl / 2;
   if (hl % 2) return err(e);
-  const array = u8n(al);
+  const array = new Uint8Array(al);
   for (let ai = 0, hi = 0; ai < al; ai++, hi += 2) {
     // treat each char as ASCII
     const n1 = _ch(hex.charCodeAt(hi)); // parse first char, multiply it by 16
@@ -256,7 +251,7 @@ const concatBytes = (...arrs: TArg<Bytes[]>): TRet<Bytes> => {
   // intentionally reuses `abytes(...)` without making defensive copies of the source chunks.
   let len = 0;
   for (const a of arrs) len += abytes(a).length;
-  const r = u8n(len); // create u8a of summed length
+  const r = new Uint8Array(len); // create u8a of summed length
   let pad = 0; // walk through each array,
   arrs.forEach(a => { r.set(a, pad); pad += a.length; }); // ensure they have proper type
   return r as TRet<Bytes>;
@@ -264,7 +259,7 @@ const concatBytes = (...arrs: TArg<Bytes[]>): TRet<Bytes> => {
 /** WebCrypto OS-level CSPRNG (random number generator). Absence still fails later via `cr()`. */
 const randomBytes = (len: number = L): TRet<Bytes> => {
   const c = cr();
-  return c.getRandomValues(u8n(len)) as TRet<Bytes>;
+  return c.getRandomValues(new Uint8Array(len)) as TRet<Bytes>;
 };
 const big = BigInt;
 /** Inclusive-lower, exclusive-upper bigint range assertion. */
@@ -274,7 +269,7 @@ const assertRange = (
   max: bigint,
   msg = 'bad number: out of range'
 ): bigint => {
-  if (!isBig(n)) throw new TypeError(msg);
+  if (typeof n !== 'bigint') throw new TypeError(msg);
   if (min <= n && n < max) return n;
   throw new RangeError(msg);
 };
@@ -395,7 +390,7 @@ class Point {
   static fromBytes(hex: TArg<Bytes>, zip215 = false): Point {
     const d = _d;
     // Copy array to not mess it up.
-    const normed = u8fr(abytes(hex, L));
+    const normed = Uint8Array.from(abytes(hex, L));
     // adjust first LE byte = last BE byte
     const lastByte = hex[31];
     normed[31] = lastByte & ~0x80;
@@ -593,7 +588,7 @@ const numTo32bLE = (num: bigint): TRet<Bytes> =>
 // Caller-enforced width: some sites require 32-byte RFC encodings, while others intentionally feed
 // wider SHA-512 output chunks through the same little-endian parser.
 const bytesToNumberLE = (b: TArg<Bytes>): bigint =>
-  big('0x' + bytesToHex(u8fr(abytes(b)).reverse()));
+  big('0x' + bytesToHex(Uint8Array.from(abytes(b)).reverse()));
 
 const pow2 = (x: bigint, power: bigint): bigint => {
   // pow2(x, 4) == x^(2^4)
@@ -656,7 +651,7 @@ type ExtK = { head: Bytes; prefix: Bytes; scalar: bigint; point: Point; pointByt
 // RFC8032 5.1.5. Split the 64-byte hashed seed into the clamped scalar half and nonce prefix.
 const hash2extK = (hashed: TArg<Bytes>): TRet<ExtK> => {
   // slice creates a copy, unlike subarray
-  const copy = u8fr(hashed);
+  const copy = Uint8Array.from(hashed);
   const head = copy.slice(0, 32);
   head[0] &= 248; // Clamp bits: 0b1111_1000
   head[31] &= 127; // 0b0111_1111
@@ -969,7 +964,7 @@ const hashes = {
   sha512Async: async (message: TArg<Bytes>): Promise<TRet<Bytes>> => {
     const s = subtle();
     const m = concatBytes(message);
-    return u8n(await s.digest('SHA-512', m.buffer)) as TRet<Bytes>;
+    return new Uint8Array(await s.digest('SHA-512', m.buffer)) as TRet<Bytes>;
   },
   sha512: undefined as undefined | ((message: TArg<Bytes>) => TRet<Bytes>),
 };
@@ -1144,5 +1139,6 @@ export {
   signAsync,
   utils,
   verify,
-  verifyAsync,
+  verifyAsync
 };
+
