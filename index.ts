@@ -168,113 +168,116 @@ export type EdwardsOpts = Readonly<{
 
 // ## Helpers
 // ----------
-// @ts-ignore
-const captureTrace = (...args: Parameters<typeof Error.captureStackTrace>): void => {
-  if ('captureStackTrace' in Error && typeof Error.captureStackTrace === 'function') {
-    Error.captureStackTrace(...args);
-  }
+/** Checks if something is Uint8Array. Be careful: nodejs Buffer will return true. */
+const isBytes = (a: unknown): a is Uint8Array => {
+  // Plain `instanceof Uint8Array` is too strict for some Buffer / proxy / cross-realm cases.
+  // The fallback still requires a real ArrayBuffer view, so plain
+  // JSON-deserialized `{ constructor: ... }` spoofing is rejected, and
+  // `BYTES_PER_ELEMENT === 1` keeps the fallback on byte-oriented views.
+  return (
+    a instanceof Uint8Array ||
+    (ArrayBuffer.isView(a) &&
+      a.constructor.name === 'Uint8Array' &&
+      'BYTES_PER_ELEMENT' in a &&
+      a.BYTES_PER_ELEMENT === 1)
+  );
 };
-const err = (message = ''): never => {
-  const e = new Error(message);
-  captureTrace(e, err);
-  throw e;
-};
-// Plain `instanceof Uint8Array` is too strict for some Buffer / proxy / cross-realm cases. The
-// fallback still requires a real ArrayBuffer view so plain JSON-deserialized `{ constructor: ... }`
-// spoofing is rejected, and `BYTES_PER_ELEMENT === 1` keeps the fallback on byte-oriented views.
-const isBytes = (a: unknown): a is Bytes =>
-  a instanceof Uint8Array ||
-  (ArrayBuffer.isView(a) &&
-    a.constructor.name === 'Uint8Array' &&
-    'BYTES_PER_ELEMENT' in a &&
-    a.BYTES_PER_ELEMENT === 1);
-/**
- * Asserts something is Bytes, optionally enforces exact length,
- * and returns the same reference.
- */
-const abytes = (value: TArg<Bytes>, length?: number, title: string = ''): TRet<Bytes> => {
+/** Asserts something is Bytes. */
+const abytes = (value: TArg<Uint8Array>, length?: number, title: string = ''): TRet<Uint8Array> => {
+  // Success path first: this runs at the start of every update() / digestInto(), and the
+  // common `abytes(data)` form must not pay for length handling it does not use.
+  if (isBytes(value) && (length === undefined || value.length === length))
+    return value as TRet<Uint8Array>;
+  // Error path: recompute freely to build the exact message.
   const bytes = isBytes(value);
-  const len = value?.length;
-  const needsLen = length !== undefined;
-  if (!bytes || (needsLen && len !== length)) {
-    const prefix = title && `"${title}" `;
-    const ofLen = needsLen ? ` of length ${length}` : '';
-    const got = bytes ? `length=${len}` : `type=${typeof value}`;
-    const msg = prefix + 'expected Uint8Array' + ofLen + ', got ' + got;
-    throw bytes ? new RangeError(msg) : new TypeError(msg);
-  }
-  return value as TRet<Bytes>;
+  const ofLen = length !== undefined ? ` of length ${length}` : '';
+  const got = bytes ? `length=${value.length}` : `type=${typeof value}`;
+  const message = (title ? `"${title}" ` : '') + 'expected Uint8Array' + ofLen + ', got ' + got;
+  if (!bytes) throw new TypeError(message);
+  throw new RangeError(message);
 };
 // Signing hashes the message twice. Take one owned snapshot so caller mutation cannot make nonce
 // derivation and challenge derivation observe different messages.
-const snapshotBytes = (value: TArg<Bytes>, title: string): TRet<Bytes> =>
+const snapshotBytes = (value: TArg<Uint8Array>, title: string): TRet<Uint8Array> =>
   Uint8Array.from(abytes(value, undefined, title));
 // Callers keep values non-negative and within the requested width; padStart() won't truncate over-wide inputs.
 const padh = (n: number | bigint, pad: number) => n.toString(16).padStart(pad, '0');
-/** Render bytes as lowercase hex. */
-const bytesToHex = (b: TArg<Bytes>): string => {
+/** Convert byte array to hex string. */
+const bytesToHex = (bytes: TArg<Uint8Array>): string => {
+  abytes(bytes);
   let hex = '';
-  for (const e of abytes(b)) hex += padh(e, 2);
+  for (let i = 0; i < bytes.length; i++) {
+    hex += padh(bytes[i], 2);
+  }
   return hex;
 };
 // Strict ASCII nibble parser: non-ASCII hex lookalikes are rejected as undefined.
 // ASCII codes: '0'..'9' = 48..57, 'A'..'F' = 65..70, 'a'..'f' = 97..102.
 // prettier-ignore
-const _ch = (ch: number): number | undefined =>
-  ch >= 48 && ch <= 57 ? ch - 48 // '2' => 50-48
+const asciiToBase16 = (ch: number): number | undefined => {
+  return ch >= 48 && ch <= 57 ? ch - 48 // '2' => 50-48
   : ch >= 65 && ch <= 70 ? ch - (65 - 10) // 'B' => 66-(65-10)
   : ch >= 97 && ch <= 102 ? ch - (97 - 10) // 'b' => 98-(97-10)
   : undefined;
-const hexToBytes = (hex: string): TRet<Bytes> => {
-  const e = 'hex invalid'; // Strict ASCII hex only, with one generic error for type and parse failures.
-  if (typeof hex !== 'string') return err(e);
+};
+/** Convert hex string to byte array. */
+const hexToBytes = (hex: string): TRet<Uint8Array> => {
+  const e = 'hex invalid'; // Strict ASCII hex only, with one generic error for parse failures.
+  if (typeof hex !== 'string') throw new TypeError(e);
   const hl = hex.length;
   const al = hl / 2;
-  if (hl % 2) return err(e);
+  if (hl % 2) throw new RangeError(e);
   const array = new Uint8Array(al);
   for (let ai = 0, hi = 0; ai < al; ai++, hi += 2) {
-    // treat each char as ASCII
-    const n1 = _ch(hex.charCodeAt(hi)); // parse first char, multiply it by 16
-    const n2 = _ch(hex.charCodeAt(hi + 1)); // parse second char
-    if (n1 === undefined || n2 === undefined) return err(e);
+    const n1 = asciiToBase16(hex.charCodeAt(hi)); // parse first char, multiply it by 16
+    const n2 = asciiToBase16(hex.charCodeAt(hi + 1)); // parse second char
+    if (n1 === undefined || n2 === undefined) throw new RangeError(e);
     array[ai] = n1 * 16 + n2; // example: 'A9' => 10*16 + 9
   }
   return array;
 };
 declare const globalThis: Record<string, any> | undefined; // Typescript symbol present in browsers
-const cr = () => globalThis?.crypto; // Optional WebCrypto lookup; sync code still handles absence.
-// Async-path capability helper for WebCrypto-backed APIs.
-const subtle = () => cr()?.subtle ?? err('crypto.subtle must be defined, consider polyfill');
-// prettier-ignore
-const concatBytes = (...arrs: TArg<Bytes[]>): TRet<Bytes> => {
-  // Argument order is transcript-significant for hash/signature callers, and input validation here
-  // intentionally reuses `abytes(...)` without making defensive copies of the source chunks.
-  let len = 0;
-  for (const a of arrs) len += abytes(a).length;
-  const r = new Uint8Array(len); // create u8a of summed length
-  let pad = 0; // walk through each array,
-  arrs.forEach(a => { r.set(a, pad); pad += a.length; }); // ensure they have proper type
-  return r as TRet<Bytes>;
+// WebCrypto is available in all modern environments
+const subtle = () => {
+  const s = globalThis?.crypto?.subtle;
+  if (s) return s;
+  throw new Error('crypto.subtle must be defined, consider polyfill');
 };
-/** WebCrypto OS-level CSPRNG (random number generator). Absence still fails later via `cr()`. */
-const randomBytes = (len: number = L): TRet<Bytes> => {
-  const c = cr();
-  return c.getRandomValues(new Uint8Array(len)) as TRet<Bytes>;
+/** Copies several Uint8Arrays into one. */
+const concatBytes = (...arrays: TArg<Uint8Array[]>): TRet<Uint8Array> => {
+  let sum = 0;
+  for (let i = 0; i < arrays.length; i++) {
+    const a = arrays[i];
+    abytes(a);
+    sum += a.length;
+  }
+  const res = new Uint8Array(sum);
+  for (let i = 0, pad = 0; i < arrays.length; i++) {
+    const a = arrays[i];
+    res.set(a, pad);
+    pad += a.length;
+  }
+  return res;
+};
+/**
+ * WebCrypto OS-level CSPRNG (random number generator).
+ * Will throw when not available; large-request ceilings are delegated to getRandomValues().
+ */
+const randomBytes = (len: number = L): TRet<Uint8Array> => {
+  const c = globalThis?.crypto;
+  if (typeof c?.getRandomValues !== 'function')
+    throw new Error('crypto.getRandomValues must be defined, consider polyfill');
+  return c.getRandomValues(new Uint8Array(len)) as TRet<Uint8Array>;
 };
 const big = BigInt;
 /** Inclusive-lower, exclusive-upper bigint range assertion. */
-const assertRange = (
-  n: bigint,
-  min: bigint,
-  max: bigint,
-  msg = 'bad number: out of range'
-): bigint => {
+const arange = (n: bigint, min: bigint, max: bigint, msg = 'bad number: out of range'): bigint => {
   if (typeof n !== 'bigint') throw new TypeError(msg);
   if (min <= n && n < max) return n;
   throw new RangeError(msg);
 };
-/** Canonical modular reduction into `[0, b)`. */
-const M = (a: bigint, b: bigint = P): bigint => {
+/** Canonical modular reduction. Callers must provide a positive modulus. */
+const M = (a: bigint, b: bigint = P) => {
   const r = a % b;
   return r >= 0n ? r : b + r;
 };
@@ -284,38 +287,52 @@ const P_MASK = (1n << 255n) - 1n;
 // generic fallback would simply be `M(num, P)`.
 const modP = (num: bigint): bigint => {
   // return M(num, P);
-  if (num < 0n) err('negative coordinate');
+  if (num < 0n) throw new RangeError('negative coordinate');
   let r = (num >> 255n) * 19n + (num & P_MASK);
   r = (r >> 255n) * 19n + (r & P_MASK);
   return r % P;
 };
 // Reduce modulo the subgroup order stored in implementation constant `N` (RFC 8032's `L`).
 const modN = (a: bigint) => M(a, N);
-/** Modular inversion using Euclidean GCD (non-CT) instead of the RFC's `x^(p-2)` formulation.
- * This still sits on secret-dependent paths like point normalization during keygen/signing. */
-// prettier-ignore
-const invert = (num: bigint, md: bigint): bigint => {
-  if (num === 0n || md <= 0n) err('no inverse n=' + num + ' mod=' + md);
-  let a = M(num, md), b = md, x = 0n, y = 1n, u = 1n, v = 0n;
+/** Modular inversion using extended euclidean GCD. Variable-time (non-CT). */
+const invert = (number: bigint, modulo: bigint): bigint => {
+  if (number === 0n) throw new Error('invert: expected non-zero number');
+  // modulo = 1 is the zero ring: gcd(x, 1) = 1 makes the loop below "succeed" and return the
+  // useless inverse 0. Reject it like pow() and invertCt() do.
+  if (modulo <= 1n) throw new Error('invert: expected modulus > 1, got ' + modulo);
+  // This is variable-time: the loop count depends on `number`.
+  let a = M(number, modulo);
+  let b = modulo;
+  // Only the Bézout coefficient of `number` (x/u chain) is tracked; the coefficient of `modulo`
+  // never affects the output, so it is not computed.
+  // prettier-ignore
+  let x = 0n, u = 1n;
   while (a !== 0n) {
-    const q = b / a, r = b % a;
-    const m = x - u * q, n = y - v * q;
-    b = a, a = r, x = u, y = v, u = m, v = n;
+    const q = b / a;
+    const r = b - a * q;
+    const m = x - u * q;
+    // prettier-ignore
+    b = a, a = r, x = u, u = m;
   }
-  return b === 1n ? M(x, md) : err('no inverse'); // b is gcd at this point
+  const gcd = b;
+  if (gcd !== 1n) throw new Error('invert: does not exist');
+  return M(x, modulo);
 };
 // Dynamic lookup keeps sync/async hash providers configurable at runtime. Both exported slots are
 // caller-owned and may be unset; wrapper helpers use this lookup first and then enforce the digest
 // contract instead of trusting provider output.
-const callHash = (name: string) => {
+const _hash = (name: string) => {
   // @ts-ignore
   const fn = hashes[name];
-  if (typeof fn !== 'function') err('hashes.' + name + ' not set');
+  if (typeof fn !== 'function') throw new Error('hashes.' + name + ' not set');
   return fn;
 };
-// Both provider slots are configurable API surface and may return arbitrary values, so callers must
-// enforce the promised 64-byte SHA-512 digest contract here instead of trusting provider output.
-const checkDigest = (value: TArg<Bytes>): TRet<Bytes> => abytes(value, 64, 'digest');
+// All exported provider slots are caller-configurable and may be unset or return arbitrary values,
+// so wrapper helpers must enforce the exact 64-byte SHA-512 digest contract instead of trusting providers.
+const callHash = (name: string, ...m: TArg<Uint8Array[]>): TRet<Uint8Array> =>
+  abytes(_hash(name)(concatBytes(...m)), 64, 'digest');
+const callHashAsync = (name: string, ...m: TArg<Uint8Array[]>): Promise<TRet<Uint8Array>> =>
+  Promise.resolve(_hash(name)(concatBytes(...m))).then((r) => abytes(r, 64, 'digest'));
 /**
  * SHA-512 helper used by the synchronous API.
  * @param msg - Message bytes to hash.
@@ -332,12 +349,15 @@ const checkDigest = (value: TArg<Bytes>): TRet<Bytes> => abytes(value, 64, 'dige
  * ```
  */
 // Public helper validates the message boundary explicitly; the configured provider is still looked
-// up dynamically and its output is checked with `checkDigest(...)`.
-const hash = (msg: TArg<Bytes>): TRet<Bytes> =>
-  checkDigest(callHash('sha512')(abytes(msg, undefined, 'message')));
+// up dynamically and its output is checked with `callHash(...)`.
+const hash = (msg: TArg<Uint8Array>): TRet<Uint8Array> =>
+  callHash('sha512', abytes(msg, undefined, 'message'));
 // Runtime class guard: this is `instanceof Point`, so cross-realm / duplicate-bundle Point objects
 // are rejected even if they are structurally identical.
-const apoint = (p: unknown) => (p instanceof Point ? p : err('Point expected'));
+const apoint = (p: unknown) => {
+  if (p instanceof Point) return p;
+  throw new TypeError('Point expected');
+};
 /** Point in 2d xy affine coordinates. */
 export type AffinePoint = {
   /** Affine x coordinate. */
@@ -374,10 +394,10 @@ class Point {
   // on-curve or that T matches X*Y/Z.
   constructor(X: bigint, Y: bigint, Z: bigint, T: bigint) {
     const max = B256;
-    this.X = assertRange(X, 0n, max);
-    this.Y = assertRange(Y, 0n, max);
-    this.Z = assertRange(Z, 1n, max);
-    this.T = assertRange(T, 0n, max);
+    this.X = arange(X, 0n, max);
+    this.Y = arange(Y, 0n, max);
+    this.Z = arange(Z, 1n, max);
+    this.T = arange(T, 0n, max);
     Object.freeze(this);
   }
   static CURVE(): EdwardsOpts {
@@ -386,8 +406,8 @@ class Point {
   static fromAffine(p: AffinePoint): Point {
     return new Point(p.x, p.y, 1n, modP(p.x * p.y));
   }
-  /** RFC8032 5.1.3: Bytes to Point. */
-  static fromBytes(hex: TArg<Bytes>, zip215 = false): Point {
+  /** RFC8032 5.1.3: Uint8Array to Point. */
+  static fromBytes(hex: TArg<Uint8Array>, zip215 = false): Point {
     const d = _d;
     // Copy array to not mess it up.
     const normed = Uint8Array.from(abytes(hex, L));
@@ -398,18 +418,18 @@ class Point {
     // After clearing the sign bit, parsed `y` is always < 2^255. ZIP-215 still accepts the full
     // post-mask range here, while strict RFC8032 decoding further requires `y < p`.
     const max = zip215 ? B256 : P;
-    assertRange(y, 0n, max);
+    arange(y, 0n, max);
 
     const y2 = modP(y * y); // y²
     const u = M(y2 - 1n); // u=y²-1
     const v = modP(d * y2 + 1n); // v=dy²+1
     let { isValid, value: x } = uvRatio(u, v); // (uv³)(uv⁷)^(p-5)/8; square root
-    if (!isValid) err('bad point: y not sqrt'); // not square root: bad point
+    if (!isValid) throw new Error('bad point: y not sqrt'); // not square root: bad point
     const isXOdd = (x & 1n) === 1n; // adjust sign of x coordinate
     const isLastByteOdd = (lastByte & 0x80) !== 0; // x_0, last bit
     // ZIP-215-compatible decoding keeps the x=0 / sign-bit=1 encoding accepted; strict RFC 8032
     // rejects it, but the vendored ZIP-215 compliance vectors include this form in A/R bytes.
-    if (!zip215 && x === 0n && isLastByteOdd) err('bad point: x==0, isLastByteOdd'); // x=0, x_0=1
+    if (!zip215 && x === 0n && isLastByteOdd) throw new Error('bad point: x==0, isLastByteOdd'); // x=0, x_0=1
     if (isLastByteOdd !== isXOdd) x = M(-x);
     return new Point(x, y, 1n, modP(x * y)); // Z=1, T=xy
   }
@@ -429,7 +449,7 @@ class Point {
     const p = this;
     // Intentional stricter-than-on-curve policy: reject ZERO by default because many protocols
     // require a non-zero point, and silently accepting identity points is a common caller mistake.
-    if (p.is0()) return err('bad point: ZERO'); // TODO: optimize, with vars below?
+    if (p.is0()) throw new Error('bad point: ZERO'); // TODO: optimize, with vars below?
     // Equation in affine coordinates: ax² + y² = 1 + dx²y²
     // Equation in projective coordinates (X/Z, Y/Z, Z):  (aX² + Y²)Z² = Z⁴ + dX²Y²
     const { X, Y, Z, T } = p;
@@ -440,11 +460,11 @@ class Point {
     const aX2 = modP(X2 * a); // aX²
     const left = modP(Z2 * (aX2 + Y2)); // (aX² + Y²)Z²
     const right = M(Z4 + modP(d * modP(X2 * Y2))); // Z⁴ + dX²Y²
-    if (left !== right) return err('bad point: equation left != right (1)');
+    if (left !== right) throw new Error('bad point: equation left != right (1)');
     // In Extended coordinates we also have T, which is x*y=T/Z: check X*Y == Z*T
     const XY = modP(X * Y);
     const ZT = modP(Z * T);
-    if (XY !== ZT) return err('bad point: equation left != right (2)');
+    if (XY !== ZT) throw new Error('bad point: equation left != right (2)');
     return this;
   }
   /** Equality check: compare points P&Q. */
@@ -484,13 +504,13 @@ class Point {
     const Z3 = modP(F * G);
     return new Point(X3, Y3, Z3, T3);
   }
-  /** Point addition. Complete formula. Cost: `8M + 1*k + 8add + 1*2`. */
+  /** Point addition. Complete formula. Cost: `9M + 1*a + 1*d + 7add`. */
   add(other: Point): Point {
     const { X: X1, Y: Y1, Z: Z1, T: T1 } = this;
     const { X: X2, Y: Y2, Z: Z2, T: T2 } = apoint(other); // doesn't check if other on-curve
     const a = _a;
     const d = _d;
-    // https://hyperelliptic.org/EFD/g1p/auto-twisted-extended-1.html#addition-add-2008-hwcd-3
+    // https://hyperelliptic.org/EFD/g1p/auto-twisted-extended.html#addition-add-2008-hwcd
     const A = modP(X1 * X2);
     const B = modP(Y1 * Y2);
     const C = modP(modP(T1 * d) * T2);
@@ -520,7 +540,7 @@ class Point {
     // Mirror noble-curves: unsafe mode still validates scalar range first, but intentionally keeps
     // `n = 0` as the one extra accepted case used by verification-style callers.
     if (!safe && n === 0n) return I;
-    assertRange(n, 1n, N);
+    arange(n, 1n, N);
     if (!safe && this.is0()) return I;
     if (n === 1n) return this;
     if (this.equals(G)) return wNAF(n).p;
@@ -545,13 +565,13 @@ class Point {
     if (this.equals(I)) return { x: 0n, y: 1n };
     const iz = invert(Z, P);
     // (Z * Z^-1) must be 1, otherwise bad math
-    if (modP(Z * iz) !== 1n) err('invalid inverse');
+    if (modP(Z * iz) !== 1n) throw new Error('invalid inverse');
     // x = X*Z^-1; y = Y*Z^-1
     const x = modP(X * iz);
     const y = modP(Y * iz);
     return { x, y };
   }
-  toBytes(): TRet<Bytes> {
+  toBytes(): TRet<Uint8Array> {
     const { x, y } = this.toAffine();
     const b = numTo32bLE(y);
     // store sign in first LE byte
@@ -583,11 +603,11 @@ const I: Point = new Point(0n, 1n, 1n, 0n);
 Point.BASE = G;
 Point.ZERO = I;
 
-const numTo32bLE = (num: bigint): TRet<Bytes> =>
-  hexToBytes(padh(assertRange(num, 0n, B256), 64)).reverse() as TRet<Bytes>;
+const numTo32bLE = (num: bigint): TRet<Uint8Array> =>
+  hexToBytes(padh(arange(num, 0n, B256), 64)).reverse() as TRet<Uint8Array>;
 // Caller-enforced width: some sites require 32-byte RFC encodings, while others intentionally feed
 // wider SHA-512 output chunks through the same little-endian parser.
-const bytesToNumberLE = (b: TArg<Bytes>): bigint =>
+const bytesToNumberLE = (b: TArg<Uint8Array>): bigint =>
   big('0x' + bytesToHex(Uint8Array.from(abytes(b)).reverse()));
 
 const pow2 = (x: bigint, power: bigint): bigint => {
@@ -639,17 +659,17 @@ const uvRatio = (u: bigint, v: bigint): { isValid: boolean, value: bigint } => {
 // Implementation `N` is the subgroup order; `L` is only the shared 32-byte encoded width constant.
 // Reduce any little-endian byte string modulo the subgroup order; the `hash` name reflects the
 // common caller shape, not an input restriction.
-const modL_LE = (hash: TArg<Bytes>): bigint => modN(bytesToNumberLE(hash)); // modulo L; but little-endian
-// Both sync and async SHA-512 slots are exported/configurable; use `callHash(...)` for both so
-// missing async overrides fail explicitly, then validate the returned digest type/length.
-const sha512a = (...m: TArg<Bytes[]>): Promise<TRet<Bytes>> =>
-  Promise.resolve(callHash('sha512Async')(concatBytes(...m))).then(checkDigest);
-const sha512s = (...m: TArg<Bytes[]>): TRet<Bytes> =>
-  checkDigest(callHash('sha512')(concatBytes(...m)));
-type ExtK = { head: Bytes; prefix: Bytes; scalar: bigint; point: Point; pointBytes: Bytes };
+const modL_LE = (hash: TArg<Uint8Array>): bigint => modN(bytesToNumberLE(hash)); // modulo L; but little-endian
+type ExtK = {
+  head: Uint8Array;
+  prefix: Uint8Array;
+  scalar: bigint;
+  point: Point;
+  pointBytes: Uint8Array;
+};
 
 // RFC8032 5.1.5. Split the 64-byte hashed seed into the clamped scalar half and nonce prefix.
-const hash2extK = (hashed: TArg<Bytes>): TRet<ExtK> => {
+const hash2extK = (hashed: TArg<Uint8Array>): TRet<ExtK> => {
   // slice creates a copy, unlike subarray
   const copy = Uint8Array.from(hashed);
   const head = copy.slice(0, 32);
@@ -666,10 +686,10 @@ const hash2extK = (hashed: TArg<Bytes>): TRet<ExtK> => {
 };
 
 // RFC8032 5.1.5; getPublicKey async, sync. Hash priv key and extract point.
-const getExtendedPublicKeyAsync = (secretKey: TArg<Bytes>): Promise<TRet<ExtK>> =>
-  sha512a(abytes(secretKey, L)).then(hash2extK);
-const getExtendedPublicKey = (secretKey: TArg<Bytes>): TRet<ExtK> =>
-  hash2extK(sha512s(abytes(secretKey, L)));
+const getExtendedPublicKeyAsync = (secretKey: TArg<Uint8Array>): Promise<TRet<ExtK>> =>
+  callHashAsync('sha512Async', abytes(secretKey, L)).then(hash2extK);
+const getExtendedPublicKey = (secretKey: TArg<Uint8Array>): TRet<ExtK> =>
+  hash2extK(callHash('sha512', abytes(secretKey, L)));
 /**
  * Creates a 32-byte Ed25519 public key from the RFC 8032 32-byte secret-key seed. Async.
  * @param secretKey - 32-byte RFC 8032 secret-key seed, not a 64-byte expanded secret key.
@@ -686,8 +706,8 @@ const getExtendedPublicKey = (secretKey: TArg<Bytes>): TRet<ExtK> =>
  * const publicKey = await ed.getPublicKeyAsync(secretKey);
  * ```
  */
-const getPublicKeyAsync = (secretKey: TArg<Bytes>): Promise<TRet<Bytes>> =>
-  getExtendedPublicKeyAsync(secretKey).then((p) => p.pointBytes as TRet<Bytes>);
+const getPublicKeyAsync = (secretKey: TArg<Uint8Array>): Promise<TRet<Uint8Array>> =>
+  getExtendedPublicKeyAsync(secretKey).then((p) => p.pointBytes as TRet<Uint8Array>);
 /**
  * Creates a 32-byte Ed25519 public key from the RFC 8032 32-byte secret-key seed.
  * To use, set `hashes.sha512` first.
@@ -708,23 +728,26 @@ const getPublicKeyAsync = (secretKey: TArg<Bytes>): Promise<TRet<Bytes>> =>
  * const publicKey = ed.getPublicKey(secretKey);
  * ```
  */
-const getPublicKey = (priv: TArg<Bytes>): TRet<Bytes> => getExtendedPublicKey(priv).pointBytes;
+const getPublicKey = (priv: TArg<Uint8Array>): TRet<Uint8Array> =>
+  getExtendedPublicKey(priv).pointBytes;
 type Finishable<T> = {
   // Shared between sync/async sign() and verify(): hash `hashable` with SHA-512, then hand the
   // resulting 64-byte digest to `finish(...)`.
-  hashable: Bytes;
-  finish: (hashed: Bytes) => T;
+  hashable: Uint8Array;
+  finish: (hashed: Uint8Array) => T;
 };
 const hashFinishA = <T>(res: TArg<Finishable<T>>): Promise<TRet<T>> =>
-  sha512a((res as Finishable<T>).hashable).then((res as Finishable<T>).finish) as Promise<TRet<T>>;
+  callHashAsync('sha512Async', (res as Finishable<T>).hashable).then(
+    (res as Finishable<T>).finish
+  ) as Promise<TRet<T>>;
 const hashFinishS = <T>(res: TArg<Finishable<T>>): TRet<T> =>
-  (res as Finishable<T>).finish(sha512s((res as Finishable<T>).hashable)) as TRet<T>;
+  (res as Finishable<T>).finish(callHash('sha512', (res as Finishable<T>).hashable)) as TRet<T>;
 // Code, shared between sync & async sign
 const _sign = (
-  e: TArg<{ pointBytes: Bytes; scalar: bigint }>,
-  rBytes: TArg<Bytes>,
-  msg: TArg<Bytes>
-): TRet<Finishable<Bytes>> => {
+  e: TArg<{ pointBytes: Uint8Array; scalar: bigint }>,
+  rBytes: TArg<Uint8Array>,
+  msg: TArg<Uint8Array>
+): TRet<Finishable<Uint8Array>> => {
   const { pointBytes: P, scalar: s } = e;
   const r = modL_LE(rBytes); // r was created outside, reduce it modulo L
   // RFC 8032 5.1.6 allows r mod L = 0, and SUPERCOP ref10 accepts the resulting identity-point
@@ -733,12 +756,12 @@ const _sign = (
   // fails loudly instead of silently producing a degenerate signature.
   const R = G.multiply(r).toBytes(); // R = [r]B
   const hashable = concatBytes(R, P, msg); // dom2(F, C) || R || A || PH(M)
-  const finish = (hashed: TArg<Bytes>): TRet<Bytes> => {
+  const finish = (hashed: TArg<Uint8Array>): TRet<Uint8Array> => {
     // k = SHA512(dom2(F, C) || R || A || PH(M))
     const S = modN(r + modL_LE(hashed) * s); // S = (r + k * s) mod L; 0 <= s < l
     return abytes(concatBytes(R, numTo32bLE(S)), 64); // 64-byte sig: 32-byte encoded R point || 32-byte LE(S)
   };
-  return { hashable, finish } as TRet<Finishable<Bytes>>;
+  return { hashable, finish } as TRet<Finishable<Uint8Array>>;
 };
 /**
  * Signs message using secret key. Async.
@@ -759,10 +782,13 @@ const _sign = (
  * const signature = await ed.signAsync(message, secretKey);
  * ```
  */
-const signAsync = async (message: TArg<Bytes>, secretKey: TArg<Bytes>): Promise<TRet<Bytes>> => {
+const signAsync = async (
+  message: TArg<Uint8Array>,
+  secretKey: TArg<Uint8Array>
+): Promise<TRet<Uint8Array>> => {
   const m = snapshotBytes(message, 'message');
   const e = await getExtendedPublicKeyAsync(secretKey);
-  const rBytes = await sha512a(e.prefix, m); // r = SHA512(dom2(F, C) || prefix || PH(M))
+  const rBytes = await callHashAsync('sha512Async', e.prefix, m); // r = SHA512(dom2(F, C) || prefix || PH(M))
   return hashFinishA(_sign(e, rBytes, m)); // gen R, k, S, then 64-byte signature
 };
 /**
@@ -786,10 +812,10 @@ const signAsync = async (message: TArg<Bytes>, secretKey: TArg<Bytes>): Promise<
  * const signature = ed.sign(new Uint8Array([1, 2, 3]), secretKey);
  * ```
  */
-const sign = (message: TArg<Bytes>, secretKey: TArg<Bytes>): TRet<Bytes> => {
+const sign = (message: TArg<Uint8Array>, secretKey: TArg<Uint8Array>): TRet<Uint8Array> => {
   const m = snapshotBytes(message, 'message');
   const e = getExtendedPublicKey(secretKey);
-  const rBytes = sha512s(e.prefix, m); // r = SHA512(dom2(F, C) || prefix || PH(M))
+  const rBytes = callHash('sha512', e.prefix, m); // r = SHA512(dom2(F, C) || prefix || PH(M))
   return hashFinishS(_sign(e, rBytes, m)); // gen R, k, S, then 64-byte signature
 };
 /**
@@ -805,9 +831,9 @@ export type EdDSAVerifyOpts = {
 // branch with `{ zip215: false }`.
 const defaultVerifyOpts: EdDSAVerifyOpts = { zip215: true };
 const _verify = (
-  sig: TArg<Bytes>,
-  msg: TArg<Bytes>,
-  publicKey: TArg<Bytes>,
+  sig: TArg<Uint8Array>,
+  msg: TArg<Uint8Array>,
+  publicKey: TArg<Uint8Array>,
   options: TArg<EdDSAVerifyOpts> = defaultVerifyOpts
 ): TRet<Finishable<boolean>> => {
   sig = abytes(sig, 64); // Signature hex str/Bytes, must be 64 bytes
@@ -817,14 +843,14 @@ const _verify = (
   // hashing and rejects small-order public keys earlier than pure RFC8032 text would require.
   // Preserve the exported ZIP-215 default for `{}` / `{ zip215: undefined }`, not just omitted opts.
   if (options === null || typeof options !== 'object') {
-    err('expected valid options object');
+    throw new TypeError('expected valid options object');
   }
   const { zip215 = true } = options;
 
   const r = sig.subarray(0, L);
   const s = bytesToNumberLE(sig.subarray(L, L * 2)); // Decode second half as an integer S;
   let A: Point, R: Point, SB: Point;
-  let hashable: Bytes = Uint8Array.of();
+  let hashable: Uint8Array = Uint8Array.of();
   let finished = false;
   try {
     // zip215=true is good for consensus-critical apps. =false follows RFC8032 / NIST186-5.
@@ -838,7 +864,7 @@ const _verify = (
     hashable = concatBytes(r, publicKey, msg); // dom2(F, C) || R || A || PH(M)
     finished = true;
   } catch (error) {}
-  const finish = (hashed: TArg<Bytes>): boolean => {
+  const finish = (hashed: TArg<Uint8Array>): boolean => {
     if (!finished) return false;
     // Policy: strict mode intentionally rejects all small-order public keys, even though the raw RFC
     // equation text is looser here. This matches libsodium and avoids weak / ambiguous verification
@@ -880,9 +906,9 @@ const _verify = (
  * ```
  */
 const verifyAsync = async (
-  signature: TArg<Bytes>,
-  message: TArg<Bytes>,
-  publicKey: TArg<Bytes>,
+  signature: TArg<Uint8Array>,
+  message: TArg<Uint8Array>,
+  publicKey: TArg<Uint8Array>,
   opts: TArg<EdDSAVerifyOpts> = defaultVerifyOpts
 ): Promise<boolean> => hashFinishA(_verify(signature, message, publicKey, opts));
 /**
@@ -913,9 +939,9 @@ const verifyAsync = async (
  * ```
  */
 const verify = (
-  signature: TArg<Bytes>,
-  message: TArg<Bytes>,
-  publicKey: TArg<Bytes>,
+  signature: TArg<Uint8Array>,
+  message: TArg<Uint8Array>,
+  publicKey: TArg<Uint8Array>,
   opts: TArg<EdDSAVerifyOpts> = defaultVerifyOpts
 ): boolean => hashFinishS(_verify(signature, message, publicKey, opts));
 
@@ -931,17 +957,17 @@ const verify = (
  * ```
  */
 const etc: {
-  bytesToHex: (bytes: TArg<Bytes>) => string;
-  hexToBytes: (hex: string) => TRet<Bytes>;
-  concatBytes: (...arrs: TArg<Bytes[]>) => TRet<Bytes>;
-  mod: typeof M;
+  bytesToHex: (bytes: TArg<Uint8Array>) => string;
+  hexToBytes: (hex: string) => TRet<Uint8Array>;
+  concatBytes: (...arrs: TArg<Uint8Array[]>) => TRet<Uint8Array>;
+  mod: (a: bigint, md?: bigint) => bigint;
   invert: typeof invert;
-  randomBytes: (len?: number) => TRet<Bytes>;
+  randomBytes: (len?: number) => TRet<Uint8Array>;
 } = /* @__PURE__ */ Object.freeze({
   bytesToHex,
   hexToBytes,
   concatBytes,
-  mod: M as typeof M,
+  mod: M as (a: bigint, md?: bigint) => bigint,
   invert: invert as typeof invert,
   randomBytes,
 });
@@ -961,22 +987,22 @@ const etc: {
  * ```
  */
 const hashes = {
-  sha512Async: async (message: TArg<Bytes>): Promise<TRet<Bytes>> => {
+  sha512Async: async (message: TArg<Uint8Array>): Promise<TRet<Uint8Array>> => {
     const s = subtle();
     const m = concatBytes(message);
-    return new Uint8Array(await s.digest('SHA-512', m.buffer)) as TRet<Bytes>;
+    return new Uint8Array(await s.digest('SHA-512', m.buffer)) as TRet<Uint8Array>;
   },
-  sha512: undefined as undefined | ((message: TArg<Bytes>) => TRet<Bytes>),
+  sha512: undefined as undefined | ((message: TArg<Uint8Array>) => TRet<Uint8Array>),
 };
 
 // Returns the final 32-byte Ed25519 secret-key seed verbatim, generating fresh random bytes only
 // when omitted.
-const randomSecretKey = (seed?: TArg<Bytes>): TRet<Bytes> => {
+const randomSecretKey = (seed?: TArg<Uint8Array>): TRet<Uint8Array> => {
   seed = seed === undefined ? randomBytes(L) : seed;
   return abytes(seed, L);
 };
 
-type KeysSecPub = { secretKey: Bytes; publicKey: Bytes };
+type KeysSecPub = { secretKey: Uint8Array; publicKey: Uint8Array };
 /**
  * Generates a secret/public keypair.
  * @param seed - Optional 32-byte Ed25519 secret-key seed, returned verbatim as `secretKey`.
@@ -995,7 +1021,7 @@ type KeysSecPub = { secretKey: Bytes; publicKey: Bytes };
  * const { secretKey, publicKey } = ed.keygen();
  * ```
  */
-const keygen = (seed?: TArg<Bytes>): TRet<KeysSecPub> => {
+const keygen = (seed?: TArg<Uint8Array>): TRet<KeysSecPub> => {
   const secretKey = randomSecretKey(seed);
   const publicKey = getPublicKey(secretKey);
   return { secretKey, publicKey } as TRet<KeysSecPub>;
@@ -1015,7 +1041,7 @@ const keygen = (seed?: TArg<Bytes>): TRet<KeysSecPub> => {
  * const { secretKey, publicKey } = await ed.keygenAsync();
  * ```
  */
-const keygenAsync = async (seed?: TArg<Bytes>): Promise<TRet<KeysSecPub>> => {
+const keygenAsync = async (seed?: TArg<Uint8Array>): Promise<TRet<KeysSecPub>> => {
   const secretKey = randomSecretKey(seed);
   const publicKey = await getPublicKeyAsync(secretKey);
   return { secretKey, publicKey } as TRet<KeysSecPub>;
@@ -1112,17 +1138,17 @@ const wNAF = (n: bigint): TRet<{ p: Point; f: Point }> => {
     const off = w * pwindowSize;
     const offF = off; // offsets, evaluate both
     const offP = off + Math.abs(wbits) - 1;
-    const isEven = w % 2 !== 0; // conditions, evaluate both
+    const isOddW = w % 2 !== 0; // conditions, evaluate both; alternates fake-add sign per window
     const isNeg = wbits < 0;
     if (wbits === 0) {
       // off == I: can't add it. Adding random offF instead.
-      f = f.add(ctneg(isEven, comp[offF])); // bits are 0: add garbage to fake point
+      f = f.add(ctneg(isOddW, comp[offF])); // bits are 0: add garbage to fake point
     } else {
       p = p.add(ctneg(isNeg, comp[offP])); // bits are 1: add to result point
     }
   }
-  if (n !== 0n) err('invalid wnaf');
-  return { p, f } as TRet<{ p: Point; f: Point }>; // callers only need `p`; `f` is kept for zero-digit mitigation symmetry
+  if (n !== 0n) throw new Error('invalid wnaf');
+  return { p, f } as TRet<{ p: Point; f: Point }>; // return both real and fake points for JIT/leakage-shape symmetry
 };
 
 // !! Remove the export to easily use in REPL / browser console
@@ -1139,6 +1165,5 @@ export {
   signAsync,
   utils,
   verify,
-  verifyAsync
+  verifyAsync,
 };
-
