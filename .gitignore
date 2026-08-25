@@ -3,6 +3,7 @@ node_modules
 /*.js
 *.js.map
 *.d.ts
+!/test/vectors/acvp-vectors/utils.d.ts
 *.d.ts.map
 /test/build
 /test/compiled

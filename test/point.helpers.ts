@@ -29,4 +29,5 @@ export function getOtherCurve(_currCurveName) {
 
 export const pippenger = undefined;
 export const precomputeMSMUnsafe = undefined;
+export const wNAF = undefined;
 export { hex, hexToBytes, invert, mod };

@@ -20,8 +20,10 @@ export function json(path) {
   }
 }
 
+import { jsonGZ as readJsonGZ } from './vectors/acvp-vectors/utils.js';
+
 export function jsonGZ(path) {
-  return JSON.parse(gunzipSync(readRel(path)).toString('utf8'));
+  return readJsonGZ(joinPath(_dirname, path));
 }
 
 function readUtf8(path) {
