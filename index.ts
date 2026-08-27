@@ -110,30 +110,19 @@ const bytesToHex = (bytes: TArg<Uint8Array>): string => {
   for (const byte of abytes(bytes)) hex += padh(byte, 2);
   return hex;
 };
-// Strict ASCII nibble parser: non-ASCII hex lookalikes are rejected as undefined.
-// ASCII codes: '0'..'9' = 48..57, 'A'..'F' = 65..70, 'a'..'f' = 97..102.
-// prettier-ignore
-const asciiToBase16 = (ch: number): number | undefined => {
-  return ch >= 48 && ch <= 57 ? ch - 48 // '2' => 50-48
-  : ch >= 65 && ch <= 70 ? ch - (65 - 10) // 'B' => 66-(65-10)
-  : ch >= 97 && ch <= 102 ? ch - (97 - 10) // 'b' => 98-(97-10)
-  : undefined;
-};
 /** Convert hex string to byte array. */
 const hexToBytes = (hex: string): TRet<Uint8Array> => {
   const e = 'hex invalid'; // Strict ASCII hex only, with one generic error for parse failures.
   if (typeof hex !== 'string') throw new TypeError(e);
-  const hl = hex.length;
-  const al = hl / 2;
-  if (hl % 2) throw new RangeError(e);
-  const array = new Uint8Array(al);
-  for (let ai = 0, hi = 0; ai < al; ai++, hi += 2) {
-    const n1 = asciiToBase16(hex.charCodeAt(hi)); // parse first char, multiply it by 16
-    const n2 = asciiToBase16(hex.charCodeAt(hi + 1)); // parse second char
-    if (n1 === undefined || n2 === undefined) throw new RangeError(e);
-    array[ai] = n1 * 16 + n2; // example: 'A9' => 10*16 + 9
+  if (hex.length % 2 || !/^[\da-f]*$/i.test(hex)) throw new RangeError(e);
+  const array = new Uint8Array(hex.length / 2);
+  for (let ai = 0, hi = 0; ai < array.length; ai++, hi += 2) {
+    const n1 = hex.charCodeAt(hi);
+    const n2 = hex.charCodeAt(hi + 1);
+    // Regex guarantees ASCII. For 0..9/A..F/a..f, this maps char codes to 0..15.
+    array[ai] = ((n1 & 15) + (n1 >> 6) * 9) * 16 + (n2 & 15) + (n2 >> 6) * 9;
   }
-  return array;
+  return array as TRet<Uint8Array>;
 };
 declare const globalThis: Record<string, any> | undefined; // Typescript symbol present in browsers
 // WebCrypto is available in all modern environments
@@ -159,13 +148,11 @@ const randomBytes = (len: number = LEN): TRet<Uint8Array> => {
     throw new Error('crypto.getRandomValues must be defined, consider polyfill');
   return c.getRandomValues(new Uint8Array(len)) as TRet<Uint8Array>;
 };
-const big = BigInt;
 /** Inclusive-lower, exclusive-upper bigint range assertion. */
-const arange = (n: bigint, min: bigint, max: bigint, title: string = ''): bigint => {
-  if (typeof n === 'bigint' && min <= n && n < max) return n;
-  const message = (title ? `"${title}" ` : '') + 'bad number: out of range';
-  if (typeof n !== 'bigint') throw new TypeError(message);
-  throw new RangeError(message);
+const arange = (n: bigint, min: bigint, max: bigint, msg = 'bad number: out of range'): bigint => {
+  if (typeof n !== 'bigint') throw new TypeError(msg);
+  if (min <= n && n < max) return n;
+  throw new RangeError(msg);
 };
 /** Canonical modular reduction. Callers must provide a positive modulus. */
 const mod = (a: bigint, b: bigint = P) => ((a %= b) >= 0n ? a : b + a);
@@ -281,10 +268,10 @@ class Point {
   // on-curve or that T matches X*Y/Z.
   constructor(X: bigint, Y: bigint, Z: bigint, T: bigint) {
     const max = B256;
-    this.X = arange(X, 0n, max, 'X');
-    this.Y = arange(Y, 0n, max, 'Y');
-    this.Z = arange(Z, 1n, max, 'Z');
-    this.T = arange(T, 0n, max, 'T');
+    this.X = arange(X, 0n, max);
+    this.Y = arange(Y, 0n, max);
+    this.Z = arange(Z, 1n, max);
+    this.T = arange(T, 0n, max);
     freeze(this);
   }
   static CURVE(): EdwardsOpts {
@@ -295,7 +282,6 @@ class Point {
   }
   /** RFC8032 5.1.3: Uint8Array to Point. */
   static fromBytes(bytes: TArg<Uint8Array>, zip215 = false): Point {
-    const d = _d;
     const normed = snapshotBytes(bytes, 'point', LEN); // owned copy: sign-bit mask below mutates it
     // adjust first LE byte = last BE byte
     const lastByte = normed[31];
@@ -303,20 +289,18 @@ class Point {
     const y = bytesToNumberLE(normed);
     // After clearing the sign bit, parsed `y` is always < 2^255. ZIP-215 still accepts the full
     // post-mask range here, while strict RFC8032 decoding further requires `y < p`.
-    const max = zip215 ? B256 : P;
-    arange(y, 0n, max, 'y coordinate');
+    if (!zip215) arange(y, 0n, P);
 
     const y2 = modP(y * y); // y²
     const u = mod(y2 - 1n); // u=y²-1
-    const v = modP(d * y2 + 1n); // v=dy²+1
+    const v = modP(_d * y2 + 1n); // v=dy²+1
     let { isValid, value: x } = uvRatio(u, v); // (uv³)(uv⁷)^(p-5)/8; square root
     if (!isValid) throw new Error('bad point: y not sqrt'); // not square root: bad point
-    const isXOdd = (x & 1n) === 1n; // adjust sign of x coordinate
-    const isLastByteOdd = (lastByte & 0x80) !== 0; // x_0, last bit
+    const isLastByteOdd = !!(lastByte & 0x80); // x_0, last bit
     // ZIP-215-compatible decoding keeps the x=0 / sign-bit=1 encoding accepted; strict RFC 8032
     // rejects it, but the vendored ZIP-215 compliance vectors include this form in A/R bytes.
     if (!zip215 && x === 0n && isLastByteOdd) throw new Error('bad point: x==0, isLastByteOdd'); // x=0, x_0=1
-    if (isLastByteOdd !== isXOdd) x = mod(-x);
+    if (isLastByteOdd !== !!(x & 1n)) x = mod(-x); // adjust sign of x coordinate
     return new Point(x, y, 1n, modP(x * y)); // Z=1, T=xy
   }
   static fromHex(hex: string, zip215?: boolean): Point {
@@ -422,7 +406,7 @@ class Point {
     // Mirror noble-curves: unsafe mode still validates scalar range first, but intentionally keeps
     // `n = 0` as the one extra accepted case used by verification-style callers.
     if (!safe && n === 0n) return I;
-    arange(n, 1n, N, 'scalar');
+    arange(n, 1n, N);
     if (!safe && this.is0()) return I;
     if (n === 1n) return this;
     if (this.equals(G)) return wNAF(n).p;
@@ -469,10 +453,12 @@ class Point {
     return this.clearCofactor().is0();
   }
   isTorsionFree(): boolean {
-    // Multiply by big number N. We can't `mul(N)` because of checks. Instead, we `mul(N/2)*2+1`
-    let p = this.multiply(N / 2n, false).double();
-    if (N % 2n) p = p.add(this);
-    return p.is0();
+    // Multiply by big number N. We can't `mul(N)` because of checks. Instead, we `mul(N/2)*2+1`;
+    // N is odd, so N/2 truncates and the final `add(this)` is always needed.
+    return this.multiply(N / 2n, false)
+      .double()
+      .add(this)
+      .is0();
   }
 }
 /** Generator / base point */
@@ -484,11 +470,11 @@ Point.BASE = G;
 Point.ZERO = I;
 
 const numTo32bLE = (num: bigint): TRet<Uint8Array> =>
-  hexToBytes(padh(arange(num, 0n, B256, 'num'), 64)).reverse() as TRet<Uint8Array>;
+  hexToBytes(padh(arange(num, 0n, B256), 64)).reverse() as TRet<Uint8Array>;
 // Caller-enforced width: some sites require 32-byte RFC encodings, while others intentionally feed
 // wider SHA-512 output chunks through the same little-endian parser.
 const bytesToNumberLE = (b: Uint8Array): bigint =>
-  big('0x' + bytesToHex(Uint8Array.from(abytes(b)).reverse()));
+  BigInt('0x' + bytesToHex(Uint8Array.from(abytes(b)).reverse()));
 
 const pow2 = (x: bigint, power: number): bigint => {
   // pow2(x, 4) == x^(2^4)
@@ -608,15 +594,15 @@ const getPublicKeyAsync = (secretKey: TArg<Uint8Array>): Promise<TRet<Uint8Array
  */
 const getPublicKey = (secretKey: TArg<Uint8Array>): TRet<Uint8Array> =>
   getExtendedPublicKey(secretKey).pointBytes;
-type Finishable<T> = {
+type Finishable<T> = readonly [
   // Shared between sync/async sign() and verify(): hash `hashable` with SHA-512, then hand the
   // resulting 64-byte digest to `finish(...)`.
-  hashable: Uint8Array;
-  finish: (hashed: Uint8Array) => T;
-};
-const hashFinishAsync = <T>(res: Finishable<T>): Promise<T> =>
-  callHashAsync('sha512Async', res.hashable).then(res.finish);
-const hashFinishSync = <T>(res: Finishable<T>): T => res.finish(callHash('sha512', res.hashable));
+  Uint8Array,
+  (hashed: Uint8Array) => T,
+];
+const hashFinishAsync = async <T>(res: Finishable<T>): Promise<T> =>
+  res[1](await callHashAsync('sha512Async', res[0]));
+const hashFinishSync = <T>(res: Finishable<T>): T => res[1](callHash('sha512', res[0]));
 // Code, shared between sync & async sign
 const _sign = (
   e: { pointBytes: Uint8Array; scalar: bigint },
@@ -636,7 +622,7 @@ const _sign = (
     const S = modN(r + modL_LE(hashed) * s); // S = (r + k * s) mod L; 0 <= s < l
     return abytes(concatBytes(R, numTo32bLE(S)), 64); // 64-byte sig: 32-byte encoded R point || 32-byte LE(S)
   };
-  return { hashable, finish };
+  return [hashable, finish];
 };
 /**
  * Signs message using secret key. Async.
@@ -704,26 +690,26 @@ export type EdDSAVerifyOpts = {
 };
 // Exported defaults favor ZIP-215 interoperability semantics; callers must opt into the stricter
 // branch with `{ zip215: false }`.
-const defaultVerifyOpts: EdDSAVerifyOpts = { zip215: true };
+// Preserves the exported ZIP-215 default for `{}` / `{ zip215: undefined }`, not just omitted opts.
+const getZip215 = (options: TArg<EdDSAVerifyOpts>): boolean => {
+  if (options === null || typeof options !== 'object')
+    throw new TypeError('expected valid options object');
+  return options.zip215 ?? true;
+};
 const _verify = (
   sig: Uint8Array,
   msg: Uint8Array,
   publicKey: Uint8Array,
-  options: EdDSAVerifyOpts = defaultVerifyOpts
+  options: TArg<EdDSAVerifyOpts>
 ): Finishable<boolean> => {
   sig = abytes(sig, 64, 'signature'); // Signature hex str/Bytes, must be 64 bytes
   msg = abytes(msg, undefined, 'message'); // Message hex str/Bytes
   publicKey = abytes(publicKey, LEN, 'publicKey');
+  const zip215 = getZip215(options);
   // zip215=false keeps the library's stricter branch, which still canonicalizes `R` / `A` before
   // hashing and rejects small-order public keys earlier than pure RFC8032 text would require.
-  // Preserve the exported ZIP-215 default for `{}` / `{ zip215: undefined }`, not just omitted opts.
-  if (options === null || typeof options !== 'object') {
-    throw new TypeError('expected valid options object');
-  }
-  const { zip215 = true } = options;
-
   const r = sig.subarray(0, LEN);
-  const s = bytesToNumberLE(sig.subarray(LEN, LEN * 2)); // Decode second half as an integer S;
+  const s = bytesToNumberLE(sig.subarray(LEN, 64)); // Decode second half as an integer S;
   let A: Point, R: Point, SB: Point;
   let hashable: Uint8Array = Uint8Array.of();
   let finished = false;
@@ -753,7 +739,7 @@ const _verify = (
     // [8][S]B = [8]R + [8][k]A'
     return RkA.subtract(SB).clearCofactor().is0();
   };
-  return { hashable, finish };
+  return [hashable, finish];
 };
 
 /**
@@ -784,7 +770,7 @@ const verifyAsync = async (
   signature: TArg<Uint8Array>,
   message: TArg<Uint8Array>,
   publicKey: TArg<Uint8Array>,
-  opts: TArg<EdDSAVerifyOpts> = defaultVerifyOpts
+  opts: TArg<EdDSAVerifyOpts> = {}
 ): Promise<boolean> => hashFinishAsync(_verify(signature, message, publicKey, opts));
 /**
  * Verifies a signature on message and public key using the synchronous hash path.
@@ -817,7 +803,7 @@ const verify = (
   signature: TArg<Uint8Array>,
   message: TArg<Uint8Array>,
   publicKey: TArg<Uint8Array>,
-  opts: TArg<EdDSAVerifyOpts> = defaultVerifyOpts
+  opts: TArg<EdDSAVerifyOpts> = {}
 ): boolean => hashFinishSync(_verify(signature, message, publicKey, opts));
 
 /**
@@ -948,20 +934,17 @@ const utils: {
 // ## Precomputes
 // --------------
 
-const W = 8; // W is window size
-const scalarBits = 256;
-const pwindows = Math.ceil(scalarBits / W) + 1; // 33 for W=8, NOT 32 - see wNAF loop
-const pwindowSize = 2 ** (W - 1); // 128 for W=8
+// Fixed W=8 window: 33 windows (ceil(256/8) + 1, NOT 32 - see wNAF loop), 128 points per window.
 // Layout is grouped by window: each block stores the positive multiples `1*base .. 128*base` for
-// that window, and the extra `+1` window in `pwindows` absorbs carries from signed-digit recoding.
+// that window, and the extra `+1` window absorbs carries from signed-digit recoding.
 const precompute = () => {
   const points: Point[] = [];
   let p = G;
-  let b = p;
-  for (let w = 0; w < pwindows; w++) {
+  let b: Point;
+  for (let w = 0; w < 33; w++) {
     b = p;
     points.push(b);
-    for (let i = 1; i < pwindowSize; i++) {
+    for (let i = 1; i < 128; i++) {
       b = b.add(p);
       points.push(b);
     } // i=1, bc we skip 0
@@ -993,22 +976,19 @@ const wNAF = (n: bigint): { p: Point; f: Point } => {
   const comp = Gpows || (Gpows = precompute());
   let p = I;
   let f = G; // f must be G, or could become I in the end
-  const pow_2_w = 2 ** W; // 256 for W=8
-  const mask = big(pow_2_w - 1); // 255 for W=8 == mask 0b11111111
-  const shiftBy = big(W); // 8 for W=8
-  for (let w = 0; w < pwindows; w++) {
-    let wbits = Number(n & mask); // extract W bits.
-    n >>= shiftBy; // shift number by W bits.
+  for (let w = 0; w < 33; w++) {
+    let wbits = Number(n & 255n); // extract W=8 bits.
+    n >>= 8n; // shift number by W=8 bits.
     // We use negative indexes to reduce size of precomputed table by 2x.
     // Instead of needing precomputes 0..256, we only calculate them for 0..128.
     // If an index > 128 is found, we do (256-index) - where 256 is next window.
     // Naive: index +127 => 127, +224 => 224
     // Optimized: index +127 => 127, +224 => 256-32
-    if (wbits > pwindowSize) {
-      wbits -= pow_2_w;
+    if (wbits > 128) {
+      wbits -= 256;
       n += 1n;
     }
-    const off = w * pwindowSize; // offset of this window's block; also the fake-add index
+    const off = w * 128; // offset of this window's block; also the fake-add index
     const offP = off + Math.abs(wbits) - 1; // real-add index; both offsets always evaluated
     const isOddW = w % 2 !== 0; // conditions, evaluate both; alternates fake-add sign per window
     const isNeg = wbits < 0;
