@@ -28,16 +28,22 @@ import * as ed from '@noble/ed25519';
  * Mirror noble-curves: Point.CURVE() exposes shared params, but callers must not be able to mutate
  * that shared view and desynchronize it from the arithmetic constants captured below.
  */
-const ed25519_CURVE: EdwardsOpts = Object.freeze({
-  p: 0x7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffedn,
-  n: 0x1000000000000000000000000000000014def9dea2f79cd65812631a5cf5d3edn,
+const freeze = Object.freeze;
+const P = 0x7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffedn;
+const N = 0x1000000000000000000000000000000014def9dea2f79cd65812631a5cf5d3edn;
+const _d = 0x52036cee2b6ffe738cc740797779e89800700a4d4141d8ab75eb4dca135978a3n;
+const Gx = 0x216936d3cd6e53fec0a4e231fdd6dc5c692cc7609525a7b2c9562d608f25d51an;
+const Gy = 0x6666666666666666666666666666666666666666666666666666666666666658n;
+const _a = P - 1n; // field-element encoding of RFC `a = -1`
+const ed25519_CURVE: EdwardsOpts = freeze({
+  p: P,
+  n: N,
   h: 8n,
-  a: 0x7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffecn,
-  d: 0x52036cee2b6ffe738cc740797779e89800700a4d4141d8ab75eb4dca135978a3n,
-  Gx: 0x216936d3cd6e53fec0a4e231fdd6dc5c692cc7609525a7b2c9562d608f25d51an,
-  Gy: 0x6666666666666666666666666666666666666666666666666666666666666658n,
+  a: _a,
+  d: _d,
+  Gx,
+  Gy,
 });
-const { p: P, n: N, Gx, Gy, a: _a, d: _d, h } = ed25519_CURVE;
 // Shared 32-byte encoded width for Ed25519 points, scalars, signatures/2, and keys. Named LEN
 // rather than RFC 8032's `L`, which names the group order (stored here as `N`).
 const LEN = 32;
@@ -75,8 +81,7 @@ const isBytes = (a: unknown): a is Uint8Array => {
     a instanceof Uint8Array ||
     (ArrayBuffer.isView(a) &&
       a.constructor.name === 'Uint8Array' &&
-      'BYTES_PER_ELEMENT' in a &&
-      a.BYTES_PER_ELEMENT === 1)
+      (a as Uint8Array).BYTES_PER_ELEMENT === 1)
   );
 };
 /** Asserts something is Bytes. */
@@ -101,11 +106,8 @@ const snapshotBytes = (value: unknown, title: string = '', length?: number): TRe
 const padh = (n: number | bigint, pad: number) => n.toString(16).padStart(pad, '0');
 /** Convert byte array to hex string. */
 const bytesToHex = (bytes: TArg<Uint8Array>): string => {
-  abytes(bytes);
   let hex = '';
-  for (let i = 0; i < bytes.length; i++) {
-    hex += padh(bytes[i], 2);
-  }
+  for (const byte of abytes(bytes)) hex += padh(byte, 2);
   return hex;
 };
 // Strict ASCII nibble parser: non-ASCII hex lookalikes are rejected as undefined.
@@ -135,22 +137,13 @@ const hexToBytes = (hex: string): TRet<Uint8Array> => {
 };
 declare const globalThis: Record<string, any> | undefined; // Typescript symbol present in browsers
 // WebCrypto is available in all modern environments
-const subtle = () => {
-  const s = globalThis?.crypto?.subtle;
-  if (s) return s;
-  throw new Error('crypto.subtle must be defined, consider polyfill');
-};
 /** Copies several Uint8Arrays into one. */
 const concatBytes = (...arrays: TArg<Uint8Array[]>): TRet<Uint8Array> => {
   let sum = 0;
-  for (let i = 0; i < arrays.length; i++) {
-    const a = arrays[i];
-    abytes(a);
-    sum += a.length;
-  }
+  for (const a of arrays) sum += abytes(a).length;
   const res = new Uint8Array(sum);
-  for (let i = 0, pad = 0; i < arrays.length; i++) {
-    const a = arrays[i];
+  let pad = 0;
+  for (const a of arrays) {
     res.set(a, pad);
     pad += a.length;
   }
@@ -175,10 +168,7 @@ const arange = (n: bigint, min: bigint, max: bigint, title: string = ''): bigint
   throw new RangeError(message);
 };
 /** Canonical modular reduction. Callers must provide a positive modulus. */
-const mod = (a: bigint, b: bigint = P) => {
-  const r = a % b;
-  return r >= 0n ? r : b + r;
-};
+const mod = (a: bigint, b: bigint = P) => ((a %= b) >= 0n ? a : b + a);
 // Low-255-bit mask used by the `2^255 - 19` fast reduction in `modP(...)`.
 const P_MASK = (1n << 255n) - 1n;
 // Fast reduction for the special prime `2^255 - 19`. This path assumes nonnegative inputs; the
@@ -228,8 +218,8 @@ const _hash = (name: string) => {
 // so wrapper helpers must enforce the exact 64-byte SHA-512 digest contract instead of trusting providers.
 const callHash = (name: string, ...m: Uint8Array[]): TRet<Uint8Array> =>
   abytes(_hash(name)(concatBytes(...m)), 64, 'digest');
-const callHashAsync = (name: string, ...m: Uint8Array[]): Promise<TRet<Uint8Array>> =>
-  Promise.resolve(_hash(name)(concatBytes(...m))).then((r) => abytes(r, 64, 'digest'));
+const callHashAsync = async (name: string, ...m: Uint8Array[]): Promise<TRet<Uint8Array>> =>
+  abytes(await _hash(name)(concatBytes(...m)), 64, 'digest');
 /**
  * SHA-512 helper used by the synchronous API.
  * @param msg - Message bytes to hash.
@@ -295,7 +285,7 @@ class Point {
     this.Y = arange(Y, 0n, max, 'Y');
     this.Z = arange(Z, 1n, max, 'Z');
     this.T = arange(T, 0n, max, 'T');
-    Object.freeze(this);
+    freeze(this);
   }
   static CURVE(): EdwardsOpts {
     return ed25519_CURVE;
@@ -367,11 +357,7 @@ class Point {
   equals(other: Point): boolean {
     const { X: X1, Y: Y1, Z: Z1 } = this;
     const { X: X2, Y: Y2, Z: Z2 } = apoint(other); // checks class equality
-    const X1Z2 = modP(X1 * Z2);
-    const X2Z1 = modP(X2 * Z1);
-    const Y1Z2 = modP(Y1 * Z2);
-    const Y2Z1 = modP(Y2 * Z1);
-    return X1Z2 === X2Z1 && Y1Z2 === Y2Z1;
+    return modP(X1 * Z2) === modP(X2 * Z1) && modP(Y1 * Z2) === modP(Y2 * Z1);
   }
   is0(): boolean {
     return this.equals(I);
@@ -463,9 +449,7 @@ class Point {
     // (Z * Z^-1) must be 1, otherwise bad math
     if (modP(Z * iz) !== 1n) throw new Error('invalid inverse');
     // x = X*Z^-1; y = Y*Z^-1
-    const x = modP(X * iz);
-    const y = modP(Y * iz);
-    return { x, y };
+    return { x: modP(X * iz), y: modP(Y * iz) };
   }
   toBytes(): TRet<Uint8Array> {
     const { x, y } = this.toAffine();
@@ -479,7 +463,7 @@ class Point {
   }
 
   clearCofactor(): Point {
-    return this.multiply(big(h), false);
+    return this.multiply(8n, false); // h = 8
   }
   isSmallOrder(): boolean {
     return this.clearCofactor().is0();
@@ -506,11 +490,11 @@ const numTo32bLE = (num: bigint): TRet<Uint8Array> =>
 const bytesToNumberLE = (b: Uint8Array): bigint =>
   big('0x' + bytesToHex(Uint8Array.from(abytes(b)).reverse()));
 
-const pow2 = (x: bigint, power: bigint): bigint => {
+const pow2 = (x: bigint, power: number): bigint => {
   // pow2(x, 4) == x^(2^4)
   // Negative `power` values are not rejected here and currently leave `x` unchanged.
   let r = x;
-  while (power-- > 0n) {
+  while (power-- > 0) {
     r = modP(r * r);
   }
   return r;
@@ -520,17 +504,16 @@ const pow2 = (x: bigint, power: bigint): bigint => {
 const pow_2_252_3 = (x: bigint) => {                    // x^(2^252-3) unrolled util for square root
   const x2 = modP(x * x);                               // x^2,       bits 1
   const b2 = modP(x2 * x);                              // x^3,       bits 11
-  const b4 = modP(pow2(b2, 2n) * b2);                   // x^(2^4-1), bits 1111
-  const b5 = modP(pow2(b4, 1n) * x);                    // x^(2^5-1), bits 11111
-  const b10 = modP(pow2(b5, 5n) * b5);                  // x^(2^10-1)
-  const b20 = modP(pow2(b10, 10n) * b10);               // x^(2^20-1)
-  const b40 = modP(pow2(b20, 20n) * b20);               // x^(2^40-1)
-  const b80 = modP(pow2(b40, 40n) * b40);               // x^(2^80-1)
-  const b160 = modP(pow2(b80, 80n) * b80);              // x^(2^160-1)
-  const b240 = modP(pow2(b160, 80n) * b80);             // x^(2^240-1)
-  const b250 = modP(pow2(b240, 10n) * b10);             // x^(2^250-1)
-  const pow_p_5_8 = modP(pow2(b250, 2n) * x);           // x^((p-5)/8), used by RFC8032 point decode
-  return { pow_p_5_8, b2 };
+  const b4 = modP(pow2(b2, 2) * b2);                    // x^(2^4-1), bits 1111
+  const b5 = modP(pow2(b4, 1) * x);                     // x^(2^5-1), bits 11111
+  const b10 = modP(pow2(b5, 5) * b5);                   // x^(2^10-1)
+  const b20 = modP(pow2(b10, 10) * b10);                // x^(2^20-1)
+  const b40 = modP(pow2(b20, 20) * b20);                // x^(2^40-1)
+  const b80 = modP(pow2(b40, 40) * b40);                // x^(2^80-1)
+  const b160 = modP(pow2(b80, 80) * b80);               // x^(2^160-1)
+  const b240 = modP(pow2(b160, 80) * b80);              // x^(2^240-1)
+  const b250 = modP(pow2(b240, 10) * b10);              // x^(2^250-1)
+  return modP(pow2(b250, 2) * x);                       // x^((p-5)/8), used by RFC8032 point decode
 };
 const RM1 = 0x2b8324804fc1df0b2b4d00993dfbd7a72f431806ad2fe478c4ee1b274a0ea0b0n; // 2^((p-1)/4) = sqrt(-1)
 // RFC8032 §5.1.3 square-root helper for point decompression. `value` is only meaningful when
@@ -539,7 +522,7 @@ const RM1 = 0x2b8324804fc1df0b2b4d00993dfbd7a72f431806ad2fe478c4ee1b274a0ea0b0n;
 const uvRatio = (u: bigint, v: bigint): { isValid: boolean, value: bigint } => {
   const v3 = modP(v * modP(v * v));                              // v³
   const v7 = modP(modP(v3 * v3) * v);                            // v⁷
-  const pow = pow_2_252_3(modP(u * v7)).pow_p_5_8;            // (uv⁷)^(p-5)/8
+  const pow = pow_2_252_3(modP(u * v7));                         // (uv⁷)^(p-5)/8
   let x = modP(u * modP(v3 * pow));                              // (uv³)(uv⁷)^(p-5)/8
   const vx2 = modP(v * modP(x * x));                             // vx²
   const root1 = x;                                      // First root candidate
@@ -571,7 +554,7 @@ const hashedToExtK = (hashed: Uint8Array): TRet<ExtK> => {
   head[0] &= 248; // Clamp bits: 0b1111_1000
   head[31] &= 127; // 0b0111_1111
   head[31] |= 64; // 0b0100_0000
-  const prefix = copy.slice(32, 64); // secret key "prefix"
+  const prefix = copy.slice(32); // secret key "prefix"
   // RFC words this as `[s]B`; reducing the clamped little-endian scalar modulo `N` is equivalent
   // for base-point multiplication because `G` already has subgroup order `N`.
   const scalar = modL_LE(head);
@@ -680,8 +663,8 @@ const signAsync = async (
 ): Promise<TRet<Uint8Array>> => {
   const m = snapshotBytes(message, 'message');
   const e = await getExtendedPublicKeyAsync(secretKey);
-  const rBytes = await callHashAsync('sha512Async', e.prefix, m); // r = SHA512(dom2(F, C) || prefix || PH(M))
-  return hashFinishAsync(_sign(e, rBytes, m)); // gen R, k, S, then 64-byte signature
+  // r = SHA512(dom2(F, C) || prefix || PH(M)); then generate R, k, S and the signature.
+  return hashFinishAsync(_sign(e, await callHashAsync('sha512Async', e.prefix, m), m));
 };
 /**
  * Signs message using secret key. To use, set `hashes.sha512` first.
@@ -707,8 +690,8 @@ const signAsync = async (
 const sign = (message: TArg<Uint8Array>, secretKey: TArg<Uint8Array>): TRet<Uint8Array> => {
   const m = snapshotBytes(message, 'message');
   const e = getExtendedPublicKey(secretKey);
-  const rBytes = callHash('sha512', e.prefix, m); // r = SHA512(dom2(F, C) || prefix || PH(M))
-  return hashFinishSync(_sign(e, rBytes, m)); // gen R, k, S, then 64-byte signature
+  // r = SHA512(dom2(F, C) || prefix || PH(M)); then generate R, k, S and the signature.
+  return hashFinishSync(_sign(e, callHash('sha512', e.prefix, m), m));
 };
 /**
  * Verification options. zip215: true (default) follows ZIP215 spec. false would follow RFC8032.
@@ -855,7 +838,7 @@ const etc: {
   mod: (a: bigint, md?: bigint) => bigint;
   invert: typeof invert;
   randomBytes: (len?: number) => TRet<Uint8Array>;
-} = /* @__PURE__ */ Object.freeze({
+} = /* @__PURE__ */ freeze({
   bytesToHex,
   hexToBytes,
   concatBytes,
@@ -880,9 +863,9 @@ const etc: {
  */
 const hashes = {
   sha512Async: async (message: TArg<Uint8Array>): Promise<TRet<Uint8Array>> => {
-    const s = subtle();
-    const m = concatBytes(message);
-    return new Uint8Array(await s.digest('SHA-512', m.buffer)) as TRet<Uint8Array>;
+    const s = globalThis?.crypto?.subtle;
+    if (!s) throw new Error('crypto.subtle must be defined, consider polyfill');
+    return new Uint8Array(await s.digest('SHA-512', concatBytes(message))) as TRet<Uint8Array>;
   },
   sha512: undefined as undefined | ((message: TArg<Uint8Array>) => TRet<Uint8Array>),
 };
@@ -890,8 +873,7 @@ const hashes = {
 // Returns the final 32-byte Ed25519 secret-key seed verbatim, generating fresh random bytes only
 // when omitted.
 const randomSecretKey = (seed?: TArg<Uint8Array>): TRet<Uint8Array> => {
-  seed = seed === undefined ? randomBytes(LEN) : seed;
-  return abytes(seed, LEN, 'seed');
+  return abytes(seed === undefined ? randomBytes() : seed, LEN, 'seed');
 };
 
 type KeysSecPub = { secretKey: Uint8Array; publicKey: Uint8Array };
@@ -957,7 +939,7 @@ const utils: {
   getExtendedPublicKeyAsync: typeof getExtendedPublicKeyAsync;
   getExtendedPublicKey: typeof getExtendedPublicKey;
   randomSecretKey: typeof randomSecretKey;
-} = /* @__PURE__ */ Object.freeze({
+} = /* @__PURE__ */ freeze({
   getExtendedPublicKeyAsync,
   getExtendedPublicKey,
   randomSecretKey,
