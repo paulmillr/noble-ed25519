@@ -6,11 +6,7 @@
 - verify, verifyAsync: reject null options
 - Standardize utils with other noble packages
 - Added an actionable error when WebCrypto randomness is unavailable, centralized configurable SHA-512 backend validation, and hardened the public `etc.invert()` helper to reject modulus one as well as zero and non-invertible values.
-
-### Implementation and performance
-
-- Refactored byte/hex conversion, concatenation, hash dispatch, modular arithmetic, point operations, and TypeScript compatibility plumbing to align with noble-curves and noble-secp256k1 while reducing runtime and allocation overhead.
-- Removed generated `index.js` and `index.d.ts` artifacts from source control; release builds continue to generate the JavaScript and declarations included in the published package.
+- Reduce code size by ~10%, rewrite some utils for this purpose
 
 ## 3.1.0 (2026-04-11)
 
