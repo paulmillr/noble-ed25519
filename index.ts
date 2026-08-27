@@ -413,11 +413,16 @@ class Point {
     // init result point & fake point
     let p = I;
     let f = G;
-    for (let d: Point = this; n > 0n; d = d.double(), n >>= 1n) {
+    let d: Point = this;
+    // Safe mode always runs 256 iterations so ladder length can't leak the scalar's
+    // leading zero bits; unsafe mode stops at the top set bit for speed.
+    for (let i = 0; safe ? i < 256 : n > 0n; i++) {
       // if bit is present, add to point
       // if not present, add to fake, for timing safety
       if (n & 1n) p = p.add(d);
       else if (safe) f = f.add(d);
+      d = d.double();
+      n >>= 1n;
     }
     return p;
   }
