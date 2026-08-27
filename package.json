@@ -1,6 +1,6 @@
 {
   "name": "@noble/ed25519",
-  "version": "3.1.0",
+  "version": "3.2.0",
   "description": "Fastest 5KB JS implementation of ed25519 EDDSA signatures compliant with RFC8032, FIPS 186-5 & ZIP215",
   "files": [
     "index.js",
@@ -11,7 +11,7 @@
     "@noble/hashes": "2.2.0",
     "@paulmillr/jsbt": "0.7.1",
     "bismar": "0.1.8",
-    "@types/node": "26.2.0",
+    "@types/node": "26.3.0",
     "fast-check": "4.2.0",
     "prettier": "3.9.6",
     "typescript": "6.0.3"
