@@ -7,7 +7,7 @@ Fastest 5KB JS implementation of ed25519 signatures.
 - 🪢 Consensus-friendly, compliant with [ZIP215](https://zips.z.cash/zip-0215)
 - 🔖 SUF-CMA (strong unforgeability under chosen message attacks) and
   SBS (non-repudiation / exclusive ownership)
-- 🪶 3.9KB (gzipped)
+- 🪶 3.7KB (gzipped)
 
 The module is a sister project of [noble-curves](https://github.com/paulmillr/noble-curves).
 Use noble-ed25519 if you need smaller attack surface & better auditability.
