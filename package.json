@@ -16,10 +16,10 @@
     "typescript": "7.0.2"
   },
   "scripts": {
-    "benchmark:size": "bismar -bsm",
+    "benchmark": "node test/benchmark.ts",
+    "benchmark:size": "bismar -bsm index.js/getPublicKeyAsync index.js/signAsync index.js/verifyAsync index.js/utils",
     "build": "tsc",
     "check": "jsbt-check",
-    "benchmark": "node test/benchmark.ts",
     "format": "prettier --write 'index.ts' 'test/**/*.{js,ts}'",
     "test": "node test/index.ts"
   },
